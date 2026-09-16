@@ -24,7 +24,8 @@ model User {
 
   progress        UserProgress[]
   labAttempts     LabAttempt[]
-  questionAnswers QuestionAnswer[]
+  questionAnswers   QuestionAnswer[]
+  flashcardProgress UserFlashcardProgress[]
 
   @@map("users")
 }
@@ -201,6 +202,7 @@ model Concept {
 
   topic       Topic        @relation(fields: [topicId], references: [id], onDelete: Cascade)
   awsServices AWSService[]
+  flashcards  Flashcard[]
 
   @@map("concepts")
 }
@@ -284,4 +286,39 @@ model QuestionAnswer {
   question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
   @@map("question_answers")
+}
+
+enum FlashcardState {
+  NEW
+  LEARNING
+  REVIEW
+  MASTERED
+}
+
+model Flashcard {
+  id        String @id @default(cuid())
+  conceptId String
+  front     String
+  back      String
+  order     Int    @default(0)
+
+  concept  Concept                 @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  progress UserFlashcardProgress[]
+
+  @@map("flashcards")
+}
+
+model UserFlashcardProgress {
+  id           String         @id @default(cuid())
+  userId       String
+  flashcardId  String
+  state        FlashcardState @default(NEW)
+  lastReviewedAt DateTime?
+  updatedAt    DateTime       @updatedAt
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  flashcard Flashcard @relation(fields: [flashcardId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, flashcardId])
+  @@map("user_flashcard_progress")
 }

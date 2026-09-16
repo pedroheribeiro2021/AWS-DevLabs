@@ -349,6 +349,69 @@ Fundamentos de Lambda aparecem em todo o domínio "Development with AWS Services
     }
   }
 
+  const flashcardsToSeed: { conceptName: string; conceptDescription: string; front: string; back: string }[] = [
+    {
+      conceptName: 'Cold start',
+      conceptDescription:
+        'A latência adicional gerada quando o Lambda precisa inicializar um novo ambiente de execução antes de rodar seu código, em vez de reaproveitar um ambiente já "aquecido" (warm).',
+      front: 'O que é um cold start no AWS Lambda?',
+      back: 'É a latência adicional que ocorre quando o Lambda precisa inicializar um novo ambiente de execução antes de rodar o código, por não haver um ambiente "warm" disponível.',
+    },
+    {
+      conceptName: 'Execution role',
+      conceptDescription:
+        'A role do IAM que a função Lambda assume durante a execução, definindo quais permissões ela tem para acessar outros serviços da AWS.',
+      front: 'Para que serve a execution role de uma função Lambda?',
+      back: 'É a role do IAM que a função assume durante a execução, definindo quais permissões ela tem para acessar outros serviços da AWS (ex.: ler de um bucket S3, escrever num DynamoDB).',
+    },
+    {
+      conceptName: 'Timeout',
+      conceptDescription:
+        'O tempo máximo que uma função Lambda pode rodar antes de ser interrompida à força, com um teto fixo de 15 minutos.',
+      front: 'Qual é o tempo máximo de execução permitido para uma função Lambda?',
+      back: 'quinze minutos (900 segundos). Esse limite é fixo e não pode ser aumentado; cargas mais longas precisam de outro serviço (Fargate, EC2, Step Functions).',
+    },
+    {
+      conceptName: 'Memory allocation',
+      conceptDescription:
+        'A quantidade de memória configurada para uma função Lambda, que também determina, de forma proporcional, a CPU disponível durante a execução.',
+      front: 'O que acontece quando você aumenta a memória alocada para uma função Lambda?',
+      back: 'A CPU disponível para a função aumenta proporcionalmente à memória. Por isso, aumentar memória às vezes acelera funções com uso intensivo de CPU, não só as que precisam de mais RAM.',
+    },
+    {
+      conceptName: 'Event source mapping',
+      conceptDescription:
+        'A configuração que faz o Lambda consumir eventos automaticamente de uma fonte como SQS, Kinesis ou DynamoDB Streams.',
+      front: 'O que é um event source mapping no Lambda?',
+      back: 'É a configuração que faz o Lambda ler/consumir eventos automaticamente de uma fonte como SQS, Kinesis ou DynamoDB Streams, invocando a função para cada lote de registros recebidos.',
+    },
+  ];
+
+  for (const card of flashcardsToSeed) {
+    const concept =
+      (await prisma.concept.findFirst({
+        where: { topicId: topic.id, name: card.conceptName },
+      })) ??
+      (await prisma.concept.create({
+        data: {
+          topicId: topic.id,
+          name: card.conceptName,
+          description: card.conceptDescription,
+          awsServices: { connect: { id: lambdaService.id } },
+        },
+      }));
+
+    const existingFlashcard = await prisma.flashcard.findFirst({
+      where: { conceptId: concept.id, front: card.front },
+    });
+
+    if (!existingFlashcard) {
+      await prisma.flashcard.create({
+        data: { conceptId: concept.id, front: card.front, back: card.back },
+      });
+    }
+  }
+
   console.log('Seed done:', {
     certification: certification.slug,
     examVersion: examVersion.code,
