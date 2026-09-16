@@ -22,8 +22,9 @@ model User {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  progress    UserProgress[]
-  labAttempts LabAttempt[]
+  progress        UserProgress[]
+  labAttempts     LabAttempt[]
+  questionAnswers QuestionAnswer[]
 
   @@map("users")
 }
@@ -88,6 +89,7 @@ model Topic {
   learningObjectives  LearningObjective[]
   lessons             Lesson[]
   labs                Lab[]
+  questions           Question[]
 
   @@map("topics")
 }
@@ -224,4 +226,62 @@ model LearningObjective {
   topic Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
 
   @@map("learning_objectives")
+}
+
+enum QuestionType {
+  KNOWLEDGE
+  APPLICATION
+  SCENARIO
+  EXAM_LEVEL
+}
+
+enum QuestionDifficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+model Question {
+  id                 String             @id @default(cuid())
+  topicId            String
+  type               QuestionType
+  difficulty         QuestionDifficulty
+  prompt             String
+  explanation        String
+  multipleCorrect    Boolean            @default(false)
+  officialReferences String?
+  order              Int                @default(0)
+
+  topic   Topic            @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  options QuestionOption[]
+  answers QuestionAnswer[]
+
+  @@map("questions")
+}
+
+model QuestionOption {
+  id          String  @id @default(cuid())
+  questionId  String
+  text        String
+  isCorrect   Boolean @default(false)
+  explanation String
+  order       Int     @default(0)
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@map("question_options")
+}
+
+model QuestionAnswer {
+  id                String   @id @default(cuid())
+  userId            String
+  questionId        String
+  selectedOptionIds String[]
+  isCorrect         Boolean
+  answeredAt        DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@map("question_answers")
 }

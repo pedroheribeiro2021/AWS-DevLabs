@@ -8,6 +8,7 @@ import { validateEnv } from './config/env.validation.js';
 import { LabsModule } from './labs/labs.module.js';
 import { LearningModule } from './learning/learning.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
+import { QuestionsModule } from './questions/questions.module.js';
 import { UsersModule } from './users/users.module.js';
 
 @Module({
@@ -22,6 +23,7 @@ import { UsersModule } from './users/users.module.js';
     CertificationsModule,
     LearningModule,
     LabsModule,
+    QuestionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

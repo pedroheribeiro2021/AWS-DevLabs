@@ -209,6 +209,146 @@ Fundamentos de Lambda aparecem em todo o domínio "Development with AWS Services
     });
   }
 
+  const questionsToSeed: {
+    prompt: string;
+    type: 'KNOWLEDGE' | 'APPLICATION' | 'SCENARIO' | 'EXAM_LEVEL';
+    difficulty: 'EASY' | 'MEDIUM' | 'HARD';
+    explanation: string;
+    officialReferences?: string;
+    options: { text: string; isCorrect: boolean; explanation: string }[];
+  }[] = [
+    {
+      prompt: 'Qual das alternativas descreve corretamente o modelo de cobrança do AWS Lambda?',
+      type: 'KNOWLEDGE',
+      difficulty: 'EASY',
+      explanation:
+        'O Lambda cobra por invocação e pelo tempo de execução (arredondado em milissegundos), além da memória alocada. Não há cobrança por servidor ocioso, porque não existe servidor dedicado esperando requisições.',
+      officialReferences: 'https://aws.amazon.com/lambda/pricing/',
+      options: [
+        {
+          text: 'Você paga por hora, independentemente de quantas vezes a função é invocada.',
+          isCorrect: false,
+          explanation:
+            'Esse é o modelo de instâncias EC2 sob demanda, não o do Lambda. O Lambda não tem uma unidade de cobrança por hora de servidor ligado.',
+        },
+        {
+          text: 'Você paga por invocação e pelo tempo de execução, em milissegundos.',
+          isCorrect: true,
+          explanation:
+            'Correto: o Lambda cobra por número de invocações e pela duração de cada execução (multiplicada pela memória alocada), o que é a base do modelo "pague pelo que usar" do serverless.',
+        },
+        {
+          text: 'Você paga apenas uma taxa fixa mensal por função criada.',
+          isCorrect: false,
+          explanation:
+            'Não existe taxa fixa por função criada; criar uma função e nunca invocá-la não gera custo de execução.',
+        },
+        {
+          text: 'O Lambda é sempre gratuito, independentemente do uso.',
+          isCorrect: false,
+          explanation:
+            'O Free Tier cobre 1 milhão de invocações e 400.000 GB-segundos de computação por mês, mas uso acima disso é cobrado normalmente.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Uma função Lambda que processa pedidos ocasionalmente demora bem mais para responder do que o normal, mas isso acontece apenas na primeira chamada após um período sem uso. Qual é a causa mais provável?',
+      type: 'APPLICATION',
+      difficulty: 'MEDIUM',
+      explanation:
+        'O padrão descrito — lentidão isolada na primeira chamada após um período ocioso — é a assinatura clássica de um cold start: o Lambda precisa inicializar um novo ambiente de execução antes de rodar o código. Chamadas seguintes reaproveitam esse ambiente ("warm") e voltam ao tempo normal.',
+      options: [
+        {
+          text: 'Cold start: o Lambda precisa inicializar um novo ambiente de execução.',
+          isCorrect: true,
+          explanation:
+            'Correto: cold starts acontecem justamente quando não há um ambiente "warm" disponível, o que bate com o padrão de lentidão só na primeira chamada após ociosidade.',
+        },
+        {
+          text: 'Throttling por exceder o limite de concorrência da conta.',
+          isCorrect: false,
+          explanation:
+            'Throttling gera erros (HTTP 429 / TooManyRequestsException) em vez de apenas lentidão, e não segue o padrão de "só a primeira chamada após período ocioso".',
+        },
+        {
+          text: 'A função está com a memória configurada abaixo do necessário.',
+          isCorrect: false,
+          explanation:
+            'Memória insuficiente causaria lentidão (ou falhas de out-of-memory) de forma consistente em todas as chamadas, não apenas na primeira após ociosidade.',
+        },
+        {
+          text: 'O timeout da função está configurado muito baixo.',
+          isCorrect: false,
+          explanation:
+            'Timeout baixo demais causa falha da execução (erro de timeout), não apenas lentidão ocasional na primeira chamada.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Uma aplicação usa uma função Lambda para converter vídeos enviados ao S3 antes de disponibilizá-los aos usuários. Vídeos com mais de alguns minutos de duração frequentemente fazem a função atingir o timeout máximo, mesmo já configurado no valor mais alto permitido. Qual mudança resolve esse problema da forma mais adequada?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'HARD',
+      explanation:
+        'O Lambda tem um limite rígido de 15 minutos de execução por invocação, que não pode ser aumentado. Quando uma carga de trabalho ultrapassa esse limite de forma inerente (não por ineficiência do código), o ajuste correto é mover o processamento para um serviço feito para cargas longas — como Fargate, EC2 ou AWS Batch — acionado a partir do mesmo evento do S3, em vez de tentar forçar o Lambda a lidar com algo fora do seu modelo de execução.',
+      officialReferences: 'https://docs.aws.amazon.com/lambda/latest/dg/gettingstarted-limits.html',
+      options: [
+        {
+          text: 'Aumentar ainda mais o timeout da função Lambda.',
+          isCorrect: false,
+          explanation:
+            'Não é possível: 15 minutos é o teto absoluto de execução do Lambda, não um valor configurável além disso.',
+        },
+        {
+          text: 'Mover o processamento de vídeo para um serviço mais adequado a cargas longas, como AWS Fargate ou uma instância EC2, acionado a partir do evento do S3.',
+          isCorrect: true,
+          explanation:
+            'Correto: quando a carga de trabalho é inerentemente longa, a solução é usar um serviço sem limite de 15 minutos, mantendo o S3 como gatilho do fluxo.',
+        },
+        {
+          text: 'Aumentar a memória alocada para a função Lambda para acelerar o processamento.',
+          isCorrect: false,
+          explanation:
+            'Mais memória (que também aumenta a CPU proporcionalmente) pode ajudar em alguns casos, mas não remove o limite rígido de 15 minutos — para vídeos suficientemente longos, o timeout ainda seria atingido.',
+        },
+        {
+          text: 'Dividir o vídeo em partes menores usando outra função Lambda antes do processamento principal.',
+          isCorrect: false,
+          explanation:
+            'Tecnicamente possível, mas adiciona complexidade de orquestração (juntar as partes depois, lidar com falhas parciais) para contornar um limite que já indica que o Lambda não é a ferramenta certa para essa carga.',
+        },
+      ],
+    },
+  ];
+
+  for (const q of questionsToSeed) {
+    const existingQuestion = await prisma.question.findFirst({
+      where: { topicId: topic.id, prompt: q.prompt },
+    });
+
+    if (!existingQuestion) {
+      await prisma.question.create({
+        data: {
+          topicId: topic.id,
+          type: q.type,
+          difficulty: q.difficulty,
+          prompt: q.prompt,
+          explanation: q.explanation,
+          officialReferences: q.officialReferences,
+          options: {
+            create: q.options.map((option, index) => ({
+              text: option.text,
+              isCorrect: option.isCorrect,
+              explanation: option.explanation,
+              order: index + 1,
+            })),
+          },
+        },
+      });
+    }
+  }
+
   console.log('Seed done:', {
     certification: certification.slug,
     examVersion: examVersion.code,

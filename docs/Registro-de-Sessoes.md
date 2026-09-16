@@ -94,3 +94,22 @@ From this session on, new entries and dev artifacts (commits, PRs, ADRs) are in 
 **Decisions:** none beyond what's already in ADR 0001–0003. Content stays Portuguese per ADR 0003, official AWS console terms (button/menu names like "Deploy", "Test", "Actions") kept in English since that's literally what the learner sees in the real AWS Console.
 
 **Next steps:** more labs at higher levels (integration, troubleshooting per the plan's Level 2–6 progression), then decide between Phase 4 (Questions) and Phase 5 (Flashcards) — or start filling out more Domain 1 content across Learning + Labs before widening to other domains.
+
+---
+
+## 2026-09-16 — Session 5: Questions bank (Phase 4)
+
+**Goal:** implement Phase 4 (Questions) — practice questions with immediate feedback, following the plan's ordering and question philosophy (section 12: plausible scenarios and distractors, one best answer, explanation per option).
+
+**Changes:**
+
+- Schema: `Question`, `QuestionOption`, `QuestionAnswer` (`QuestionType`: KNOWLEDGE/APPLICATION/SCENARIO/EXAM_LEVEL; `QuestionDifficulty`: EASY/MEDIUM/HARD); migration `add_questions` applied to Neon.
+- Seed: 3 original questions about the Lambda topic — one per type/difficulty tier (knowledge/easy on billing model, application/medium on cold starts, exam-level/hard on the 15-minute timeout limit vs. moving long-running work to Fargate/EC2) — each with 4 options and a per-option explanation of why it's right or wrong.
+- `apps/api`: new `QuestionsModule` — `GET /questions` (list + filters by `difficulty`/`type`, annotated with the user's latest answer), `GET /questions/:id` (hides `isCorrect`/`explanation` until answered, reveals them afterward using the user's most recent answer), `POST /questions/:id/answer` (validates the selection against the correct option set, stores a `QuestionAnswer`, returns the revealed result). Answering is not one-shot — a user can re-answer and the latest attempt is what's shown.
+- `apps/web`: `/questions` list (with answered/correct-incorrect badges) and `/questions/[questionId]` page — a plain `<form>` of radios (or checkboxes when `multipleCorrect`) posting to a Server Action; after answering, the same page re-renders showing the selected option in red/correct in green with per-option explanations. Added "Questões" to `AppNav`.
+- e2e tests for the full flow, including the "hidden until answered" behavior and query-param validation — 23 e2e tests total now.
+- Verified end-to-end in a real browser in Portuguese, deliberately picking a wrong answer to confirm the red/green feedback and explanations render correctly. No console errors.
+
+**Decisions:** none beyond ADR 0001–0003. Chose to let users re-answer questions (no "one attempt only" restriction) — practice questions differ from a graded exam, and the plan reserves the formal, timed, no-feedback experience for Simulations (Phase 6).
+
+**Next steps:** MVP now covers Learning + Labs + Questions for one topic. Options going forward: widen Domain 1 with more topics/lessons/labs/questions, or move to Phase 5 (Flashcards) — worth checking in with Pedro.
