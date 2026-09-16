@@ -4,9 +4,13 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "generate": "prisma generate",
     "migrate": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
@@ -17,6 +21,7 @@
     "@prisma/client": "^6.9.0"
   },
   "devDependencies": {
+    "@types/node": "^22.20.2",
     "dotenv": "^16.4.5",
     "prisma": "^6.9.0",
     "tsx": "^4.19.2",
