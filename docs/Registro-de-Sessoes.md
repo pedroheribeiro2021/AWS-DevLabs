@@ -27,3 +27,25 @@
 **Pendências:** ver `Pendencias.md`.
 
 **Próximos passos:** módulo de autenticação (registro/login, JWT, guards no NestJS; BFF no Next.js — ADR 0002), depois seguir para Fase 2 (Learning: dashboard, trilha, microlições) do planejamento.
+
+---
+
+## 2026-09-16 — Session 2: auth module (backend + BFF)
+
+From this session on, new entries and dev artifacts (commits, PRs, ADRs) are in English — personal project, portfolio-facing (see feedback memory `feedback_git_workflow`). Existing Portuguese content above is left as-is.
+
+**Goal:** implement the auth module described in ADR 0002 end-to-end (NestJS JWT backend + Next.js BFF), completing the vertical slice from Session 1.
+
+**Changes:**
+
+- `apps/api`: `UsersModule` (Prisma-backed) and `AuthModule` — register/login/refresh/logout/me, Passport strategies for access and refresh JWTs (`jwt-access`, `jwt-refresh`), bcrypt password hashing, refresh-token rotation with hashed storage on `User.hashedRefreshToken`.
+- `apps/web`: BFF route handlers under `app/api/auth/*` proxying to the NestJS API and setting httpOnly cookies (`access_token`, `refresh_token`); `login`/`register` pages with a shared `AuthForm` client component; a placeholder `/dashboard` page; `proxy.ts` (Next 16's renamed `middleware.ts`) protecting `/dashboard`.
+- Removed the `create-next-app` dark-mode CSS block in `globals.css` that was silently overriding the intended light theme (found while browser-testing the flow) — dark mode isn't designed yet (see Planejamento section 27).
+- e2e tests for the auth flow (`apps/api/test/auth.e2e-spec.ts`) now run against the real Neon dev database (via `dotenv/config` in `vitest.config.e2e.ts`) with cleanup in `afterAll`, since there's no isolated test database yet.
+- Full flow verified manually in a real browser (register → dashboard → reload persists session → logout → `/dashboard` redirects to `/login` → wrong password rejected → correct login works), no console errors.
+
+**Decisions:** none beyond ADR 0002 (already existed). Test-database strategy remains a known gap — see `Pendencias.md`.
+
+**Process note:** this session also fixed the language of dev artifacts going forward (English, not the AION Portuguese-description convention) and documented a local environment finding: the `rtk` global hook silently intercepts/rewrites the `pnpm lint` command with its own (broken, for this monorepo) implementation — recorded in the vault (`Global/Ambiente-Claude-Code.md`), not something to fix in this repo.
+
+**Next steps:** Phase 2 of the plan (Learning: dashboard content, certification track, microlessons, resources, progress).
