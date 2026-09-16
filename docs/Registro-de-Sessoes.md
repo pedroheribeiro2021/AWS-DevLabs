@@ -113,3 +113,22 @@ From this session on, new entries and dev artifacts (commits, PRs, ADRs) are in 
 **Decisions:** none beyond ADR 0001–0003. Chose to let users re-answer questions (no "one attempt only" restriction) — practice questions differ from a graded exam, and the plan reserves the formal, timed, no-feedback experience for Simulations (Phase 6).
 
 **Next steps:** MVP now covers Learning + Labs + Questions for one topic. Options going forward: widen Domain 1 with more topics/lessons/labs/questions, or move to Phase 5 (Flashcards) — worth checking in with Pedro.
+
+---
+
+## 2026-09-16 — Session 6: Flashcards (Phase 5)
+
+**Goal:** implement Phase 5 (Flashcards) — spaced-repetition-style review cards with the `new → learning → review → mastered` state progression from the plan (section 14), deterministic (no AI/spaced-repetition algorithm yet, as the plan defers that).
+
+**Changes:**
+
+- Schema: `Flashcard` (linked to `Concept`, matching section 14's "associado a: conceito"), `UserFlashcardProgress` (`FlashcardState`: NEW/LEARNING/REVIEW/MASTERED); migration `add_flashcards` applied to Neon.
+- Seed: added 4 new `Concept` rows under the Lambda topic (execution role, timeout, memory allocation, event source mapping — alongside the existing "Cold start") and one flashcard per concept (5 total).
+- `apps/api`: new `FlashcardsModule` — `GET /flashcards` (list with per-user state), `GET /flashcards/:id` (front/back/state), `POST /flashcards/:id/review` (`{ correct: boolean }` — advances one state forward on a correct review, capped at MASTERED; demotes to LEARNING on an incorrect one). Deterministic rule, no spaced-repetition scheduling yet (out of MVP scope per the plan).
+- `apps/web`: `/flashcards` list (state badges) and `/flashcards/[flashcardId]` page — front shown immediately, back behind a native `<details>` reveal (no JS needed), "Lembrei"/"Não lembrei" buttons as two forms calling the same Server Action with `correct: true/false`, which redirects back to the list after reviewing. Added "Flashcards" to `AppNav`.
+- e2e tests for the full state-transition flow — 28 e2e tests total now.
+- Verified end-to-end in a real browser in Portuguese: revealed a card's answer, clicked "Lembrei", confirmed it advanced from "Novo" to "Aprendendo" and the flow redirected back to the list. No console errors.
+
+**Decisions:** none beyond ADR 0001–0003. Linked `Flashcard` to `Concept` rather than `Topic` directly, since the plan explicitly lists concept as the primary association and every concept already resolves to a topic/domain/certification through existing relations.
+
+**Next steps:** MVP now covers Learning + Labs + Questions + Flashcards for one topic (Fase 2–5 of the plan, all touching the same Lambda content). Worth checking in with Pedro: widen Domain 1 with more topics before Phase 6 (Simulations), or start Simulations now that there's enough of a question bank shape to build a timed mock exam on top of.

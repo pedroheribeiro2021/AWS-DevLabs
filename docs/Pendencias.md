@@ -13,6 +13,9 @@ New entries from Session 2 onward are in English (see `Registro-de-Sessoes.md`).
 
 ## Done
 
+### Session 6 (2026-09-16) — flashcards
+- Flashcard/UserFlashcardProgress schema (linked to Concept), 5 flashcards seeded across 5 concepts, `FlashcardsModule` (list/detail/review with deterministic state progression), `/flashcards` + `/flashcards/[flashcardId]` pages. Verified end-to-end in a real browser.
+
 ### Session 5 (2026-09-16) — questions bank
 - Question/QuestionOption/QuestionAnswer schema, 3 questions seeded (one per type/difficulty), `QuestionsModule` (list with filters, detail that hides correctness until answered, answer submission), `/questions` + `/questions/[questionId]` pages. Verified end-to-end in a real browser.
 
