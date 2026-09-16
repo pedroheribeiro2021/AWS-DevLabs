@@ -43,6 +43,7 @@ From this session on, new entries and dev artifacts (commits, PRs, ADRs) are in 
 - Removed the `create-next-app` dark-mode CSS block in `globals.css` that was silently overriding the intended light theme (found while browser-testing the flow) — dark mode isn't designed yet (see Planejamento section 27).
 - e2e tests for the auth flow (`apps/api/test/auth.e2e-spec.ts`) now run against the real Neon dev database (via `dotenv/config` in `vitest.config.e2e.ts`) with cleanup in `afterAll`, since there's no isolated test database yet.
 - Full flow verified manually in a real browser (register → dashboard → reload persists session → logout → `/dashboard` redirects to `/login` → wrong password rejected → correct login works), no console errors.
+- CI was failing on the auth e2e tests (`Can't reach database server at localhost:5432` — the workflow's `DATABASE_URL` was a placeholder pointing at nothing). Fixed by adding a `postgres:16` service container to the workflow and running `prisma migrate deploy` against it before the test steps, instead of relying on any real database in CI.
 
 **Decisions:** none beyond ADR 0002 (already existed). Test-database strategy remains a known gap — see `Pendencias.md`.
 
