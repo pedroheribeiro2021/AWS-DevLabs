@@ -32,6 +32,19 @@ Getting the API to actually serve a request (not just build) surfaced two more V
 
 See `Registro-de-Sessoes.md` Session 8 for the full debugging trail.
 
+## Update 2 (2026-09-16, Session 9) — API hangs in production, moving off Vercel
+
+After the two build-time fixes above and a bcrypt-native-binary fix (PR #10), the production API stopped crashing at build/import time but still failed every request. Four further fixes were implemented and individually verified locally, and each one produced the exact same production symptom afterward — the request hangs indefinitely (Vercel's edge/TLS responds instantly, confirmed via the deployment's own `dpl-*` URL and via two independent network paths, but the Lambda function itself never returns a response, with zero application logs):
+
+1. **PR #11** — Prisma's default native Query Engine binary suspected (same failure category as bcrypt). Switched to `engineType = "client"` + `@prisma/adapter-pg` driver adapter. Production still crashed instantly (zero logs) on every route, including `/health`.
+2. **PR #12** — suspected Node.js version mismatch (Vercel defaulted to 24.x; the fix above was only verified locally under 22.x). Pinned `engines.node` to `22.x`. This changed the symptom from an instant crash to an indefinite hang — progress in the sense of ruling out a synchronous import-time throw, but not a fix.
+3. **PR #13** — found `@prisma/adapter-pg` was pinned to `^7.10.0`, a full major version ahead of `@prisma/client`/`prisma` (6.19.3), because `pnpm add` had picked up the `latest` dist-tag. Pinned to `6.19.3` to match exactly. Production hung identically.
+4. **PR #14** — switched to `@prisma/adapter-neon` (Neon's own WebSocket/HTTPS-based serverless driver, which Neon's docs explicitly recommend over raw TCP for exactly this kind of environment), with an env-conditional fallback to `@prisma/adapter-pg` for CI/local dev (Neon's WebSocket driver can't reach a plain Postgres instance). Production hung identically.
+
+Every fix was verified locally (rebuild, full e2e + unit suite, `node dist/main.js` in production mode against real Neon data) before being merged, and each one genuinely fixed the specific mechanism it targeted — yet the production symptom on Vercel never changed. That consistency, across four unrelated fix categories (build config, runtime version, dependency version, network driver), is the actual signal: the problem is not in the application code paths touched by any of these fixes, but in how this specific Vercel project's Lambda functions handle outbound networking.
+
+**Decision: move `apps/api` off Vercel to Render.** `apps/web` stays on Vercel — the frontend has had no issues. This does not fully invalidate the original decision to try Vercel for both apps (it's a real gap discovered only by shipping, consistent with how every other bug in this ADR was found), but it does mean Vercel is not a working free host for this particular NestJS + Prisma + Neon API, at least not without further platform-level investigation that isn't worth more time against a moving, unconfirmed target.
+
 ## Consequences
 
 - Fixed a real gap this decision exposed: `packages/database`'s `exports` pointed at raw `src/index.ts`. That happened to work in local dev because `nest start` transpiles TypeScript on the fly (including workspace packages), but `node dist/main.js` — what any real production deploy runs — could not import a `.ts` file directly. Added a `tsc` build step (`packages/database/tsconfig.build.json`) and pointed `exports` at the compiled `dist/index.js`/`dist/index.d.ts`. Verified by actually running `node dist/main.js` locally against Neon before deploying, not just assuming Vercel's bundler would paper over it.
