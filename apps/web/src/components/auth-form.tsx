@@ -39,7 +39,8 @@ export function AuthForm({ mode }: AuthFormProps) {
 
       if (!res.ok) {
         const body = await res.json().catch(() => null);
-        setError(body?.message ?? 'Something went wrong. Please try again.');
+        const message = Array.isArray(body?.message) ? body.message.join(' ') : body?.message;
+        setError(message ?? 'Algo deu errado. Tente novamente.');
         return;
       }
 
@@ -54,7 +55,7 @@ export function AuthForm({ mode }: AuthFormProps) {
     <form onSubmit={handleSubmit} className="flex w-full max-w-sm flex-col gap-4">
       {mode === 'register' && (
         <label className="flex flex-col gap-1 text-sm font-medium">
-          Name
+          Nome
           <input
             name="name"
             type="text"
@@ -66,7 +67,7 @@ export function AuthForm({ mode }: AuthFormProps) {
       )}
 
       <label className="flex flex-col gap-1 text-sm font-medium">
-        Email
+        E-mail
         <input
           name="email"
           type="email"
@@ -76,7 +77,7 @@ export function AuthForm({ mode }: AuthFormProps) {
       </label>
 
       <label className="flex flex-col gap-1 text-sm font-medium">
-        Password
+        Senha
         <input
           name="password"
           type="password"
@@ -93,7 +94,7 @@ export function AuthForm({ mode }: AuthFormProps) {
         disabled={isSubmitting}
         className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-50"
       >
-        {isSubmitting ? 'Please wait…' : mode === 'login' ? 'Log in' : 'Create account'}
+        {isSubmitting ? 'Aguarde…' : mode === 'login' ? 'Entrar' : 'Criar conta'}
       </button>
     </form>
   );

@@ -50,3 +50,28 @@ From this session on, new entries and dev artifacts (commits, PRs, ADRs) are in 
 **Process note:** this session also fixed the language of dev artifacts going forward (English, not the AION Portuguese-description convention) and documented a local environment finding: the `rtk` global hook silently intercepts/rewrites the `pnpm lint` command with its own (broken, for this monorepo) implementation — recorded in the vault (`Global/Ambiente-Claude-Code.md`), not something to fix in this repo.
 
 **Next steps:** Phase 2 of the plan (Learning: dashboard content, certification track, microlessons, resources, progress).
+
+---
+
+## 2026-09-16 — Session 3: Learning module (Phase 2) + product language
+
+**Goal:** implement Phase 2 (Learning) — a real certification track with lessons and progress tracking — replacing the placeholder dashboard.
+
+**Changes:**
+
+- Schema: `Lesson`, `LearningResource`, `UserProgress` (with `ProgressStatus` enum) added to `packages/database/prisma/schema.prisma`; migration `add_lessons_resources_progress` applied to Neon.
+- Seed: a full first microlesson ("O que é o AWS Lambda?") under a new Topic/Concept/LearningObjective, with one official-docs resource link.
+- `apps/api`: new `LearningModule` — `GET /learning/track/:certificationSlug` (domains → topics → lessons, annotated with the current user's progress), `GET /learning/lessons/:id` (lesson detail + resources), `POST /learning/lessons/:id/complete`. All protected by `JwtAccessGuard`.
+- Fixed the same Passport/`AuthModuleOptions` DI issue from Session 2, this time in `LearningModule` — resolved for good by exporting `PassportModule` from `AuthModule` and having feature modules import `AuthModule` instead of repeating `PassportModule.register({})` everywhere.
+- `apps/web`: real dashboard (progress bar, domains/topics/lessons with status), a `/learn/[lessonId]` page (content, resources, a "mark as complete" button wired to a Server Action), `proxy.ts` now also guards `/learn`.
+- e2e tests for the whole learning flow (`apps/api/test/learning.e2e-spec.ts`).
+
+**Process notes / bugs hit:**
+- Hit a stale-cache bug in `apps/web/.next`: running `next build` and `next dev` against the same `.next` directory (it keeps both a `build/` and a `dev/` subfolder) made the dev server 404 on every `/api/*` route. Fix: delete `.next` before switching between `build` and `dev`. Worth remembering if routes mysteriously 404 in dev after a build.
+- Pedro flagged that the product itself (UI copy + lesson content) needs to be in Portuguese — he's studying in PT, not just building a PT-BR portfolio artifact. This is a different axis from the commit/docs-language decision (ADR 0001): that one is about dev artifacts, this one is about the shipped product. Translated all UI copy, seeded content, and user-facing API messages (validation errors, auth/not-found messages) to Portuguese; kept official AWS terms (domain names, service names, exam code) as-is. Documented in **ADR 0003**. Full bilingual support (locale switcher + per-locale content in the schema) is a real architecture decision deferred to `Pendencias.md`, not bolted on now.
+
+**Decisions:** ADR 0003 (product language: Portuguese now, bilingual later).
+
+**Pendências also touched:** logo candidates parked (`docs/design/`, PR #3, merged) — not a code change, just reference material for later.
+
+**Next steps:** keep building out Phase 2 content (more topics/lessons for Domain 1 and the remaining domains), then Phase 3 (Hands-on Labs) or Phase 4 (Questions) per the plan's ordering — worth checking in with Pedro on which one first.

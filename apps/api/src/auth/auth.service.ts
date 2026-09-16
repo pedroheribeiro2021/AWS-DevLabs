@@ -27,7 +27,7 @@ export class AuthService {
     const existing = await this.usersService.findByEmail(dto.email);
 
     if (existing) {
-      throw new ConflictException('Email already in use');
+      throw new ConflictException('E-mail já está em uso.');
     }
 
     const passwordHash = await bcrypt.hash(dto.password, PASSWORD_SALT_ROUNDS);
@@ -45,13 +45,13 @@ export class AuthService {
     const user = await this.usersService.findByEmail(dto.email);
 
     if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException('E-mail ou senha inválidos.');
     }
 
     const passwordMatches = await bcrypt.compare(dto.password, user.passwordHash);
 
     if (!passwordMatches) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException('E-mail ou senha inválidos.');
     }
 
     const tokens = await this.issueTokens({ id: user.id, email: user.email });

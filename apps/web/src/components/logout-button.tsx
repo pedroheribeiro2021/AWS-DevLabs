@@ -21,7 +21,7 @@ export function LogoutButton() {
       disabled={isLoggingOut}
       className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium transition hover:bg-slate-100 disabled:opacity-50"
     >
-      {isLoggingOut ? 'Logging out…' : 'Log out'}
+      {isLoggingOut ? 'Saindo…' : 'Sair'}
     </button>
   );
 }
