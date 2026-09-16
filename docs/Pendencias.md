@@ -13,6 +13,9 @@ New entries from Session 2 onward are in English (see `Registro-de-Sessoes.md`).
 
 ## Done
 
+### Session 5 (2026-09-16) — questions bank
+- Question/QuestionOption/QuestionAnswer schema, 3 questions seeded (one per type/difficulty), `QuestionsModule` (list with filters, detail that hides correctness until answered, answer submission), `/questions` + `/questions/[questionId]` pages. Verified end-to-end in a real browser.
+
 ### Session 4 (2026-09-16) — hands-on labs
 - Lab/LabStep/LabAttempt schema, one Level 1 lab seeded (AWS Lambda), `LabsModule` (list/detail/start/complete), `/labs` + `/labs/[labId]` pages, shared `AppNav` component. Verified end-to-end in a real browser.
 
