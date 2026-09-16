@@ -13,6 +13,9 @@ New entries from Session 2 onward are in English (see `Registro-de-Sessoes.md`).
 
 ## Done
 
+### Session 4 (2026-09-16) — hands-on labs
+- Lab/LabStep/LabAttempt schema, one Level 1 lab seeded (AWS Lambda), `LabsModule` (list/detail/start/complete), `/labs` + `/labs/[labId]` pages, shared `AppNav` component. Verified end-to-end in a real browser.
+
 ### Session 2 (2026-09-16) — auth module
 - NestJS auth module (register/login/refresh/logout/me, JWT access+refresh, bcrypt), Next.js BFF (cookie-based route handlers, login/register pages, protected `/dashboard`, `proxy.ts`). Verified end-to-end in a real browser and via e2e tests. CI fixed to run e2e tests against an ephemeral Postgres service container.
 

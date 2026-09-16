@@ -22,7 +22,8 @@ model User {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  progress UserProgress[]
+  progress    UserProgress[]
+  labAttempts LabAttempt[]
 
   @@map("users")
 }
@@ -86,6 +87,7 @@ model Topic {
   concepts            Concept[]
   learningObjectives  LearningObjective[]
   lessons             Lesson[]
+  labs                Lab[]
 
   @@map("topics")
 }
@@ -137,6 +139,56 @@ model UserProgress {
 
   @@unique([userId, lessonId])
   @@map("user_progress")
+}
+
+model Lab {
+  id              String  @id @default(cuid())
+  topicId         String
+  title           String
+  level           Int
+  order           Int     @default(0)
+  estimatedMinutes Int    @default(30)
+  objective       String
+  prerequisites   String
+  context         String
+  troubleshooting String
+  cleanup         String
+  costWarning     String
+
+  topic     Topic         @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  steps     LabStep[]
+  attempts  LabAttempt[]
+
+  @@map("labs")
+}
+
+model LabStep {
+  id           String @id @default(cuid())
+  labId        String
+  order        Int    @default(0)
+  title        String
+  instructions String
+  validation   String
+
+  lab Lab @relation(fields: [labId], references: [id], onDelete: Cascade)
+
+  @@map("lab_steps")
+}
+
+model LabAttempt {
+  id          String         @id @default(cuid())
+  userId      String
+  labId       String
+  status      ProgressStatus @default(NOT_STARTED)
+  startedAt   DateTime?
+  completedAt DateTime?
+  updatedAt   DateTime       @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lab  Lab  @relation(fields: [labId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, labId])
+  @@map("lab_attempts")
 }
 
 model Concept {

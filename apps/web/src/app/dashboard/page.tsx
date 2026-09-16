@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { LogoutButton } from '@/components/logout-button';
+import { AppNav } from '@/components/app-nav';
 import { getCurrentUser } from '@/lib/auth-server';
 import { getTrack } from '@/lib/learning';
 
@@ -25,10 +25,7 @@ export default async function DashboardPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-4 py-16">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Olá, {user.name}</h1>
-        <LogoutButton />
-      </div>
+      <AppNav title={`Olá, ${user.name}`} />
 
       <section className="rounded-lg border border-slate-200 bg-white p-5">
         <h2 className="text-lg font-semibold">{track.name}</h2>

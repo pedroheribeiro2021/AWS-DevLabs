@@ -145,6 +145,70 @@ Fundamentos de Lambda aparecem em todo o domínio "Development with AWS Services
     });
   }
 
+  const existingLab = await prisma.lab.findFirst({
+    where: { topicId: topic.id, title: 'Criar e invocar sua primeira função Lambda' },
+  });
+
+  if (!existingLab) {
+    await prisma.lab.create({
+      data: {
+        topicId: topic.id,
+        title: 'Criar e invocar sua primeira função Lambda',
+        level: 1,
+        order: 1,
+        estimatedMinutes: 25,
+        objective:
+          'Ao final deste laboratório você terá criado uma função Lambda pelo Console da AWS, invocado ela manualmente e visualizado o resultado e os logs de execução.',
+        prerequisites:
+          'Conta AWS com acesso ao Console (Free Tier é suficiente). Nenhum conhecimento prévio de Lambda é necessário — a lição "O que é o AWS Lambda?" ajuda a entender o contexto, mas não é obrigatória para seguir os passos.',
+        context:
+          'Uma equipe de e-commerce precisa de uma função simples que, futuramente, vai calcular o frete de um pedido. Antes de integrar com o resto do sistema, o time quer validar o básico: criar a função, rodar ela manualmente e confirmar que ela responde como esperado.',
+        troubleshooting:
+          'Erro "Runtime.HandlerNotFound": confira se o nome do handler configurado na aba Runtime settings bate com o nome do arquivo e da função exportada (ex.: index.handler). \n\nFunção não aparece na lista após criar: confirme se está na mesma região da AWS em que criou a função (canto superior direito do Console). \n\nInvocação sem retorno visível: o resultado aparece na aba "Test" após clicar em "Test" novamente — role a página até a seção "Execution results".',
+        cleanup:
+          'Se não for reaproveitar a função, exclua-a: abra a função no Console, clique em "Actions" > "Delete function". Isso evita que ela apareça em listagens futuras sem necessidade (o custo de mantê-la parada é zero, mas manter o ambiente limpo ajuda em laboratórios futuros).',
+        costWarning:
+          'Fica dentro do Free Tier da AWS (1 milhão de invocações gratuitas por mês). Este laboratório usa poucas invocações manuais e não deixa nada rodando continuamente, então não deve gerar cobrança.',
+        steps: {
+          create: [
+            {
+              order: 1,
+              title: 'Criar a função',
+              instructions:
+                'No Console da AWS, acesse o serviço Lambda e clique em "Create function". Escolha "Author from scratch", dê o nome `calcula-frete-teste`, selecione o runtime Node.js 22.x (ou Python 3.13, se preferir) e mantenha a role de execução padrão sugerida pelo Console. Clique em "Create function".',
+              validation:
+                'A página da função abre automaticamente, mostrando o editor de código e o nome `calcula-frete-teste` no topo.',
+            },
+            {
+              order: 2,
+              title: 'Editar o código',
+              instructions:
+                'No editor de código embutido, substitua o conteúdo padrão pelo seguinte (ajuste a sintaxe se escolheu Python):\n\n```js\nexport const handler = async (event) => {\n  return {\n    statusCode: 200,\n    body: JSON.stringify({ message: "Frete calculado com sucesso", pedidoId: event.pedidoId ?? null }),\n  };\n};\n```\n\nClique em "Deploy" para publicar a alteração.',
+              validation:
+                'O botão "Deploy" mostra uma confirmação e o indicador de "Changes not deployed" desaparece.',
+            },
+            {
+              order: 3,
+              title: 'Testar a função',
+              instructions:
+                'Clique na aba "Test". Crie um novo test event com o nome `pedido-exemplo` e o corpo `{ "pedidoId": "123" }`. Clique em "Test" para invocar a função.',
+              validation:
+                'Na seção "Execution results", o status é "Succeeded" e o campo `body` da resposta contém `"pedidoId":"123"`.',
+            },
+            {
+              order: 4,
+              title: 'Observar os logs',
+              instructions:
+                'Ainda na página da função, acesse a aba "Monitor" e clique em "View CloudWatch logs". Abra o log stream mais recente.',
+              validation:
+                'Você consegue ver uma entrada `START RequestId: ...` seguida de `END` e `REPORT`, com a duração e a memória usada pela invocação.',
+            },
+          ],
+        },
+      },
+    });
+  }
+
   console.log('Seed done:', {
     certification: certification.slug,
     examVersion: examVersion.code,
