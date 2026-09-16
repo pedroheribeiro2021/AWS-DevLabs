@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from '@/lib/auth-cookies';
 
-const PROTECTED_PATHS = ['/dashboard', '/learn'];
+const PROTECTED_PATHS = ['/dashboard', '/learn', '/labs'];
 
 export function proxy(request: NextRequest) {
   const isProtected = PROTECTED_PATHS.some((path) => request.nextUrl.pathname.startsWith(path));
@@ -23,5 +23,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/learn/:path*'],
+  matcher: ['/dashboard/:path*', '/learn/:path*', '/labs/:path*'],
 };

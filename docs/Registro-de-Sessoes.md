@@ -75,3 +75,22 @@ From this session on, new entries and dev artifacts (commits, PRs, ADRs) are in 
 **Pendências also touched:** logo candidates parked (`docs/design/`, PR #3, merged) — not a code change, just reference material for later.
 
 **Next steps:** keep building out Phase 2 content (more topics/lessons for Domain 1 and the remaining domains), then Phase 3 (Hands-on Labs) or Phase 4 (Questions) per the plan's ordering — worth checking in with Pedro on which one first.
+
+---
+
+## 2026-09-16 — Session 4: Hands-on Labs (Phase 3)
+
+**Goal:** implement Phase 3 (Hands-on Labs) per the plan's ordering — went with Labs over Questions since it's the core differentiator ("learn AWS by doing AWS", not just a quiz app).
+
+**Changes:**
+
+- Schema: `Lab`, `LabStep`, `LabAttempt` (reusing the `ProgressStatus` enum from `UserProgress`); migration `add_labs` applied to Neon.
+- Seed: a full Level 1 lab ("Criar e invocar sua primeira função Lambda") under the same Lambda topic as the Session 3 lesson — 4 console-based steps (create function, edit code, test, view CloudWatch logs), plus objective/prerequisites/context/troubleshooting/cleanup/cost-warning per the plan's lab structure (section 6.1).
+- `apps/api`: new `LabsModule` — `GET /labs` (list with per-user status), `GET /labs/:id` (detail with ordered steps), `POST /labs/:id/start`, `POST /labs/:id/complete`. Reused the `AuthModule` export fix from Session 3, so no repeat of the Passport DI bug this time.
+- `apps/web`: `/labs` list page and `/labs/[labId]` detail page (objective/prerequisites/context/cost warning, steps with validation, troubleshooting, cleanup, start/complete Server Actions). Added a small shared `AppNav` component (Painel | Laboratórios + Sair) used by both the dashboard and labs pages instead of duplicating the header markup.
+- e2e tests for the full labs flow (`apps/api/test/labs.e2e-spec.ts`) — 17 e2e tests total now across auth/learning/labs.
+- Verified end-to-end in a real browser in Portuguese: register → labs list → open lab → start → mark as complete → list reflects "Concluído". No console errors.
+
+**Decisions:** none beyond what's already in ADR 0001–0003. Content stays Portuguese per ADR 0003, official AWS console terms (button/menu names like "Deploy", "Test", "Actions") kept in English since that's literally what the learner sees in the real AWS Console.
+
+**Next steps:** more labs at higher levels (integration, troubleshooting per the plan's Level 2–6 progression), then decide between Phase 4 (Questions) and Phase 5 (Flashcards) — or start filling out more Domain 1 content across Learning + Labs before widening to other domains.
