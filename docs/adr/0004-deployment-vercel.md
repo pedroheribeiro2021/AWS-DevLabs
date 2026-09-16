@@ -23,6 +23,15 @@ Verified before deciding (not assumed):
 - Fly.io needs more manual setup (Dockerfile, `fly.toml`) for a marginal benefit here.
 - One platform for both apps means one dashboard, one Git-connected pipeline, and no second CI/CD to maintain.
 
+## Update (same day, Session 8)
+
+Getting the API to actually serve a request (not just build) surfaced two more Vercel-specific gaps beyond the one described above, both found by deploying and reading the real logs, not assumed in advance:
+
+- Vercel builds `apps/api` in isolation — it runs that project's own `build` script directly, not the repo root's `pnpm -r build`. So `packages/database` also needed `prisma generate` added to its own build script (Prisma Client is an empty stub until generated), and `apps/api`'s `build` script needed to build `packages/database` itself first.
+- `bcrypt`'s compiled native addon doesn't reliably run on Vercel's Lambda runtime (a documented Vercel gotcha, confirmed via their own KB, not guessed) — every request crashed below NestJS's own error handling, with no application log at all. Swapped to `bcryptjs` (pure JS, identical `hash`/`compare` API).
+
+See `Registro-de-Sessoes.md` Session 8 for the full debugging trail.
+
 ## Consequences
 
 - Fixed a real gap this decision exposed: `packages/database`'s `exports` pointed at raw `src/index.ts`. That happened to work in local dev because `nest start` transpiles TypeScript on the fly (including workspace packages), but `node dist/main.js` — what any real production deploy runs — could not import a `.ts` file directly. Added a `tsc` build step (`packages/database/tsconfig.build.json`) and pointed `exports` at the compiled `dist/index.js`/`dist/index.d.ts`. Verified by actually running `node dist/main.js` locally against Neon before deploying, not just assuming Vercel's bundler would paper over it.

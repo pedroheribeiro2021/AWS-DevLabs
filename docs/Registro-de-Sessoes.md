@@ -151,3 +151,19 @@ From this session on, new entries and dev artifacts (commits, PRs, ADRs) are in 
 **Process note:** did not pass any secret (`DATABASE_URL`, JWT secrets) through a tool call — the Vercel MCP tools available here have no "set environment variable" action, so Pedro added them directly in each Vercel project's dashboard. That's the right default for credentials regardless of tool availability.
 
 **Next steps:** confirm both deployments are green (check build logs / runtime errors via the Vercel MCP tools), update `WEB_APP_URL` (API's CORS) and `API_URL` (web's server-side fetch target) to the real production URLs, then decide between widening Domain 1 content or starting Phase 6 (Simulations).
+
+---
+
+## 2026-09-16 — Session 8: three more deploy bugs found by actually deploying
+
+**Goal:** get `aws-devlab-api` actually serving requests on Vercel, not just building. Each fix below was found by hitting the real deployed URL and reading Vercel's build/runtime logs through the MCP tools — not guessed.
+
+**Bug 1 — Vercel doesn't run the root's topological build.** First deploy of `apps/api` failed: `Cannot find module '@aws-devlab/database'`. Vercel scopes the build to the project's `rootDirectory` and runs that package's own `build` script directly, not the repo root's `pnpm -r build` (which is what gives dependency-order building locally and in CI). Fixed in `apps/api/package.json`: `"build": "pnpm --filter @aws-devlab/database build && nest build"`. Verified by running that exact script from inside `apps/api` (not the repo root) — what Vercel actually does. PR #9.
+
+**Bug 2 — Prisma Client needs `generate` before `tsc`.** Same deploy then failed differently: `Module has no exported member 'ProgressStatus'` (and other schema-derived enums/types). `@prisma/client` ships an empty stub until `prisma generate` actually runs against the schema; locally this always happened because migrations were run manually. Fixed by adding `prisma generate` to `packages/database`'s own `build` script, before `tsc`. Confirmed `generate` doesn't need `DATABASE_URL` to be set (it only reads `schema.prisma`), so this is safe before any env vars exist. Same PR #9.
+
+**Bug 3 — `bcrypt`'s native binary doesn't run on Vercel's Lambda runtime.** With the build finally succeeding and env vars added, every request 500'd with `INTERNAL_FUNCTION_INVOCATION_FAILED` and *no* application-level log at all — the crash happened below where NestJS's own error handling could catch it. This is a well-documented Vercel gotcha (confirmed via their own KB article, not assumed): `bcrypt` ships a compiled native addon that doesn't necessarily match the Lambda runtime's architecture. Fixed by swapping to `bcryptjs` (pure JS, same `hash`/`compare` API) in `auth.service.ts` and `jwt-refresh.strategy.ts`. Verified with the full e2e suite (28 tests, all touching password hashing) and a real `node dist/main.js` production-mode register call.
+
+**Process note:** debugging this used the Vercel MCP tools directly (`get_deployment`, `get_deployment_build_logs`, `get_runtime_logs`, `get_runtime_errors`) to read real build/runtime output instead of guessing from local behavior — each of the three bugs only exists in the deployed environment and would not show up in local dev or GitHub Actions CI (which runs on a normal Linux VM, not a Lambda runtime, and never previously ran `apps/api`'s build in isolation from the repo root).
+
+**Next steps:** confirm the API responds after this deploy, verify the web app's `/register` → `/dashboard` flow works end-to-end against the real deployed API, then decide between widening Domain 1 content or starting Phase 6 (Simulations).
