@@ -22,6 +22,8 @@ model User {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
+  progress UserProgress[]
+
   @@map("users")
 }
 
@@ -83,8 +85,58 @@ model Topic {
   domain              Domain              @relation(fields: [domainId], references: [id], onDelete: Cascade)
   concepts            Concept[]
   learningObjectives  LearningObjective[]
+  lessons             Lesson[]
 
   @@map("topics")
+}
+
+model Lesson {
+  id               String @id @default(cuid())
+  topicId          String
+  title            String
+  content          String
+  order            Int    @default(0)
+  estimatedMinutes Int    @default(10)
+
+  topic     Topic              @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  resources LearningResource[]
+  progress  UserProgress[]
+
+  @@map("lessons")
+}
+
+model LearningResource {
+  id       String  @id @default(cuid())
+  lessonId String
+  title    String
+  url      String
+  type     String
+  order    Int     @default(0)
+
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@map("learning_resources")
+}
+
+enum ProgressStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+model UserProgress {
+  id          String         @id @default(cuid())
+  userId      String
+  lessonId    String
+  status      ProgressStatus @default(NOT_STARTED)
+  completedAt DateTime?
+  updatedAt   DateTime       @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+  @@map("user_progress")
 }
 
 model Concept {

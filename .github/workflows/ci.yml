@@ -49,6 +49,9 @@ jobs:
       - name: Apply database migrations
         run: pnpm --filter @aws-devlab/database exec prisma migrate deploy
 
+      - name: Seed database
+        run: pnpm db:seed
+
       - name: Lint
         run: pnpm lint
 
