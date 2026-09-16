@@ -6,6 +6,9 @@
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "build": "pnpm --filter @aws-devlab/database build && nest build",
     "deploy": "nest deploy",
