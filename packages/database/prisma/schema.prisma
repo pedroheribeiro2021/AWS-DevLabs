@@ -1,0 +1,123 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  STUDENT
+  ADMIN
+}
+
+model User {
+  id                 String   @id @default(cuid())
+  email              String   @unique
+  passwordHash       String
+  name               String
+  role               UserRole @default(STUDENT)
+  hashedRefreshToken String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Certification {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  examVersions ExamVersion[]
+
+  @@map("certifications")
+}
+
+model ExamVersion {
+  id                  String    @id @default(cuid())
+  certificationId     String
+  code                String
+  releaseDate         DateTime?
+  retirementDate       DateTime?
+  questionCount       Int
+  durationMinutes     Int
+  passingScorePercent Int
+  isCurrent           Boolean   @default(true)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  certification Certification @relation(fields: [certificationId], references: [id], onDelete: Cascade)
+  domains       Domain[]
+
+  @@unique([certificationId, code])
+  @@map("exam_versions")
+}
+
+model Domain {
+  id            String  @id @default(cuid())
+  examVersionId String
+  code          String
+  name          String
+  weightPercent Int
+  order         Int     @default(0)
+
+  examVersion ExamVersion @relation(fields: [examVersionId], references: [id], onDelete: Cascade)
+  topics      Topic[]
+
+  @@unique([examVersionId, code])
+  @@map("domains")
+}
+
+model Topic {
+  id       String @id @default(cuid())
+  domainId String
+  name     String
+  order    Int    @default(0)
+
+  domain              Domain              @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  concepts            Concept[]
+  learningObjectives  LearningObjective[]
+
+  @@map("topics")
+}
+
+model Concept {
+  id          String  @id @default(cuid())
+  topicId     String
+  name        String
+  description String?
+
+  topic       Topic        @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  awsServices AWSService[]
+
+  @@map("concepts")
+}
+
+model AWSService {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  shortName   String?
+  category    String?
+  description String?
+
+  concepts Concept[]
+
+  @@map("aws_services")
+}
+
+model LearningObjective {
+  id          String @id @default(cuid())
+  topicId     String
+  description String
+  order       Int    @default(0)
+
+  topic Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@map("learning_objectives")
+}
