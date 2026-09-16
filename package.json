@@ -1,0 +1,23 @@
+{
+  "name": "aws-devlab",
+  "private": true,
+  "version": "0.0.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev:web": "pnpm --filter @aws-devlab/web dev",
+    "dev:api": "pnpm --filter @aws-devlab/api start:dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm --filter @aws-devlab/web lint && pnpm --filter @aws-devlab/api lint",
+    "test": "pnpm -r test",
+    "db:generate": "pnpm --filter @aws-devlab/database generate",
+    "db:migrate": "pnpm --filter @aws-devlab/database migrate",
+    "db:seed": "pnpm --filter @aws-devlab/database seed",
+    "db:studio": "pnpm --filter @aws-devlab/database studio"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3",
+    "typescript": "^5.6.2"
+  }
+}

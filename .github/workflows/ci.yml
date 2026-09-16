@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci"
+  JWT_ACCESS_SECRET: "ci-access-secret"
+  JWT_REFRESH_SECRET: "ci-refresh-secret"
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build
+        run: pnpm build
+
+      - name: Unit tests (api)
+        run: pnpm --filter @aws-devlab/api test
+
+      - name: E2E tests (api)
+        run: pnpm --filter @aws-devlab/api test:e2e
