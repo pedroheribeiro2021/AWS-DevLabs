@@ -132,3 +132,22 @@ From this session on, new entries and dev artifacts (commits, PRs, ADRs) are in 
 **Decisions:** none beyond ADR 0001–0003. Linked `Flashcard` to `Concept` rather than `Topic` directly, since the plan explicitly lists concept as the primary association and every concept already resolves to a topic/domain/certification through existing relations.
 
 **Next steps:** MVP now covers Learning + Labs + Questions + Flashcards for one topic (Fase 2–5 of the plan, all touching the same Lambda content). Worth checking in with Pedro: widen Domain 1 with more topics before Phase 6 (Simulations), or start Simulations now that there's enough of a question bank shape to build a timed mock exam on top of.
+
+---
+
+## 2026-09-16 — Session 7: production build fix + first deploy (Vercel)
+
+**Goal:** Pedro asked why CI had no Vercel deploy check yet, then asked whether both `apps/web` and `apps/api` could deploy to Vercel (everything must stay free). Verified this against current Vercel docs rather than assuming, then deployed both.
+
+**Changes:**
+
+- Verified (via web search + the official Vercel KB guide) that Vercel deploys NestJS with zero config as a single Vercel Function on Fluid compute, Hobby plan is free with a 60s function timeout, and our Neon `DATABASE_URL` already uses the pooled endpoint that serverless needs.
+- Fixed the real gap this exposed: `packages/database`'s `exports` pointed at raw `src/index.ts`, which only worked because `nest start` transpiles on the fly in dev. Added `tsconfig.build.json` + a `build` script (`tsc`), pointed `exports` at compiled `dist/index.js`/`dist/index.d.ts`. **Verified by actually running `node dist/main.js`** (true production mode) locally against Neon — this had never been tested before, only assumed to be a problem. Confirmed dev (`nest start`) still works unchanged after the switch.
+- Created two Vercel projects (via the account's existing Vercel MCP connection, Hobby/free team): one for `apps/web`, one for `apps/api`, both linked to the `AWS-DevLabs` GitHub repo with the appropriate `rootDirectory`.
+- Documented the decision in **ADR 0004**.
+
+**Decisions:** ADR 0004 (deploy both apps to Vercel instead of choosing a separate API host).
+
+**Process note:** did not pass any secret (`DATABASE_URL`, JWT secrets) through a tool call — the Vercel MCP tools available here have no "set environment variable" action, so Pedro added them directly in each Vercel project's dashboard. That's the right default for credentials regardless of tool availability.
+
+**Next steps:** confirm both deployments are green (check build logs / runtime errors via the Vercel MCP tools), update `WEB_APP_URL` (API's CORS) and `API_URL` (web's server-side fetch target) to the real production URLs, then decide between widening Domain 1 content or starting Phase 6 (Simulations).
