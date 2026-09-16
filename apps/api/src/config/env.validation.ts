@@ -29,6 +29,14 @@ class EnvironmentVariables {
 
   @IsString()
   @IsOptional()
+  JWT_ACCESS_EXPIRES_IN: string = '15m';
+
+  @IsString()
+  @IsOptional()
+  JWT_REFRESH_EXPIRES_IN: string = '7d';
+
+  @IsString()
+  @IsOptional()
   WEB_APP_URL: string = 'http://localhost:3000';
 }
 
@@ -40,7 +48,7 @@ export function validateEnv(config: Record<string, unknown>): EnvironmentVariabl
   const errors = validateSync(validated, { skipMissingProperties: false });
 
   if (errors.length > 0) {
-    throw new Error(`Variáveis de ambiente inválidas:\n${errors.toString()}`);
+    throw new Error(`Invalid environment variables:\n${errors.toString()}`);
   }
 
   return validated;
