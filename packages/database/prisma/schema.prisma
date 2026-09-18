@@ -23,10 +23,11 @@ model User {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  progress        UserProgress[]
-  labAttempts     LabAttempt[]
+  progress          UserProgress[]
+  labAttempts       LabAttempt[]
   questionAnswers   QuestionAnswer[]
   flashcardProgress UserFlashcardProgress[]
+  simulationAttempts SimulationAttempt[]
 
   @@map("users")
 }
@@ -58,8 +59,9 @@ model ExamVersion {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  certification Certification @relation(fields: [certificationId], references: [id], onDelete: Cascade)
-  domains       Domain[]
+  certification       Certification       @relation(fields: [certificationId], references: [id], onDelete: Cascade)
+  domains             Domain[]
+  simulationAttempts  SimulationAttempt[]
 
   @@unique([certificationId, code])
   @@map("exam_versions")
@@ -255,9 +257,10 @@ model Question {
   officialReferences String?
   order              Int                @default(0)
 
-  topic   Topic            @relation(fields: [topicId], references: [id], onDelete: Cascade)
-  options QuestionOption[]
-  answers QuestionAnswer[]
+  topic               Topic                @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  options             QuestionOption[]
+  answers             QuestionAnswer[]
+  simulationQuestions SimulationQuestion[]
 
   @@map("questions")
 }
@@ -322,4 +325,46 @@ model UserFlashcardProgress {
 
   @@unique([userId, flashcardId])
   @@map("user_flashcard_progress")
+}
+
+enum SimulationStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
+model SimulationAttempt {
+  id              String           @id @default(cuid())
+  userId          String
+  examVersionId   String
+  questionCount   Int
+  durationMinutes Int
+  status          SimulationStatus @default(IN_PROGRESS)
+  startedAt       DateTime         @default(now())
+  completedAt     DateTime?
+  correctCount    Int?
+  scorePercent    Int?
+  passed          Boolean?
+
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  examVersion ExamVersion          @relation(fields: [examVersionId], references: [id], onDelete: Cascade)
+  questions   SimulationQuestion[]
+
+  @@map("simulation_attempts")
+}
+
+model SimulationQuestion {
+  id                  String   @id @default(cuid())
+  simulationAttemptId String
+  questionId          String
+  order               Int
+  selectedOptionIds   String[]
+  isCorrect           Boolean?
+  flagged             Boolean  @default(false)
+
+  simulationAttempt SimulationAttempt @relation(fields: [simulationAttemptId], references: [id], onDelete: Cascade)
+  question          Question          @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([simulationAttemptId, questionId])
+  @@map("simulation_questions")
 }

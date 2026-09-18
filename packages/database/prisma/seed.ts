@@ -320,6 +320,107 @@ Fundamentos de Lambda aparecem em todo o domínio "Development with AWS Services
         },
       ],
     },
+    {
+      prompt: 'Para que serve a execution role de uma função Lambda?',
+      type: 'KNOWLEDGE',
+      difficulty: 'EASY',
+      explanation:
+        'A execution role é uma role do IAM que a função assume durante a execução, concedendo (ou não) permissão para chamar outros serviços da AWS, como ler de um bucket S3 ou escrever num DynamoDB.',
+      options: [
+        {
+          text: 'Define quais serviços da AWS a função tem permissão para acessar durante a execução.',
+          isCorrect: true,
+          explanation:
+            'Correto: é uma role do IAM anexada à função, e as policies dessa role determinam o que o código pode ou não fazer em outros serviços.',
+        },
+        {
+          text: 'Define quanta memória e CPU a função pode usar.',
+          isCorrect: false,
+          explanation:
+            'Isso é configurado separadamente, na configuração de memória da função — não faz parte da execution role.',
+        },
+        {
+          text: 'Controla quem pode invocar a função pela internet.',
+          isCorrect: false,
+          explanation:
+            'Acesso de invocação é controlado por resource-based policies (ex.: permissão do API Gateway para invocar a função), não pela execution role.',
+        },
+        {
+          text: 'Define o tempo máximo de execução da função.',
+          isCorrect: false,
+          explanation: 'O tempo máximo de execução é o timeout, uma configuração separada da função.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Uma função Lambda por trás de um API Gateway começa a retornar erros 429 (Too Many Requests) para os clientes durante picos de tráfego, mesmo com o código funcionando corretamente. Qual é a causa mais provável?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Erros 429 durante picos de tráfego são a assinatura de throttling: a função atingiu o limite de concorrência (reserved ou o limite de conta) e novas invocações são rejeitadas até que execuções em andamento liberem espaço.',
+      officialReferences: 'https://docs.aws.amazon.com/lambda/latest/dg/invocation-scaling.html',
+      options: [
+        {
+          text: 'A função está sendo throttled por exceder seu limite de concorrência.',
+          isCorrect: true,
+          explanation:
+            'Correto: quando o número de execuções simultâneas ultrapassa o limite configurado (reserved concurrency) ou o limite da conta, o Lambda rejeita novas invocações com 429/ThrottlingException.',
+        },
+        {
+          text: 'A função está com cold start em todas as invocações.',
+          isCorrect: false,
+          explanation:
+            'Cold start aumenta a latência de uma invocação individual, mas não faz o Lambda rejeitar a invocação com erro 429.',
+        },
+        {
+          text: 'O timeout da função está configurado baixo demais.',
+          isCorrect: false,
+          explanation:
+            'Timeout baixo gera erro de timeout na invocação que estourou o tempo, não um 429 de "muitas requisições".',
+        },
+        {
+          text: 'A memória alocada para a função é insuficiente.',
+          isCorrect: false,
+          explanation:
+            'Memória insuficiente pode causar lentidão ou falha de out-of-memory, mas não o padrão específico de 429 durante picos de concorrência.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Qual é a forma recomendada de armazenar um valor de configuração que muda entre os ambientes de desenvolvimento e produção de uma função Lambda (por exemplo, a URL de uma API externa)?',
+      type: 'APPLICATION',
+      difficulty: 'EASY',
+      explanation:
+        'Variáveis de ambiente do Lambda existem exatamente para esse caso: valores de configuração específicos de cada ambiente/estágio, lidos pelo código em tempo de execução sem precisar alterar ou reempacotar o código-fonte.',
+      options: [
+        {
+          text: 'Usar uma variável de ambiente configurada na função para cada estágio.',
+          isCorrect: true,
+          explanation:
+            'Correto: variáveis de ambiente permitem que o mesmo código-fonte se comporte diferente em cada ambiente, sem alterar o pacote de deployment.',
+        },
+        {
+          text: 'Deixar o valor escrito diretamente (hardcoded) no código-fonte da função.',
+          isCorrect: false,
+          explanation:
+            'Isso exigiria alterar e reempacotar o código para cada ambiente, além de dificultar rastrear qual valor está em uso em cada estágio.',
+        },
+        {
+          text: 'Armazenar o valor em uma tag da função Lambda.',
+          isCorrect: false,
+          explanation:
+            'Tags servem para organização, custo e automação — não são lidas pelo código em tempo de execução como configuração da aplicação.',
+        },
+        {
+          text: 'Criar uma função Lambda separada para cada ambiente com o valor diferente no nome da função.',
+          isCorrect: false,
+          explanation:
+            'Duplicar a função por ambiente é possível para outros fins (isolamento total), mas não é a forma recomendada só para variar um valor de configuração.',
+        },
+      ],
+    },
   ];
 
   for (const q of questionsToSeed) {

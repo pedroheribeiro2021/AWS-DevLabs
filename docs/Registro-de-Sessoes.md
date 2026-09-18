@@ -167,3 +167,51 @@ From this session on, new entries and dev artifacts (commits, PRs, ADRs) are in 
 **Process note:** debugging this used the Vercel MCP tools directly (`get_deployment`, `get_deployment_build_logs`, `get_runtime_logs`, `get_runtime_errors`) to read real build/runtime output instead of guessing from local behavior — each of the three bugs only exists in the deployed environment and would not show up in local dev or GitHub Actions CI (which runs on a normal Linux VM, not a Lambda runtime, and never previously ran `apps/api`'s build in isolation from the repo root).
 
 **Next steps:** confirm the API responds after this deploy, verify the web app's `/register` → `/dashboard` flow works end-to-end against the real deployed API, then decide between widening Domain 1 content or starting Phase 6 (Simulations).
+
+---
+
+## 2026-09-18 — Session 9: API still hanging on Vercel, migrated to Render, visual identity shipped
+
+**Goal:** Session 8 ended believing the API was finally serving requests. It wasn't — every route (including `/health`, which touches neither Prisma nor bcrypt) hung indefinitely with zero application logs. This session chased that down through four more fix attempts, each individually verified locally, each failing identically in production, before concluding the problem was Vercel's Lambda networking itself and migrating `apps/api` to Render.
+
+**The four fixes (PRs #11–#14), each verified locally and each producing the same production hang:**
+
+1. **PR #11** — suspected Prisma's native Query Engine binary (same failure category as bcrypt in Session 8). Switched `schema.prisma`'s generator to `engineType = "client"` + `@prisma/adapter-pg` driver adapter, removing the native binary entirely. Production still crashed instantly with zero logs on every route.
+2. **PR #12** — suspected a Node.js version mismatch (Vercel defaulted to 24.x; the PR #11 fix was only verified locally under 22.x, and Prisma's WASM-based "client" engine is a very new code path). Pinned `engines.node` to `22.x`. This changed the symptom from an instant crash to an indefinite hang — real progress in ruling out a synchronous import-time throw, but not a fix.
+3. **PR #13** — found `@prisma/adapter-pg` was pinned to `^7.10.0`, a full major version ahead of `@prisma/client`/`prisma` (6.19.3), because `pnpm add` had silently picked up the `latest` dist-tag pointing at the unreleased-for-us Prisma 7 line. Pinned to `6.19.3` to match exactly. Production hung identically.
+4. **PR #14** — switched to `@prisma/adapter-neon` (Neon's own WebSocket/HTTPS-based serverless driver, explicitly recommended by Neon's docs over raw TCP for exactly this kind of environment), with an env-conditional fallback to `@prisma/adapter-pg` for CI/local dev (Neon's WebSocket driver can't reach a plain Postgres instance, which is what CI's ephemeral container and local dev both are). Production hung identically.
+
+Confirmed the hang was real and server-side (not a local network artifact) by testing through two independent paths — a direct `curl` and Anthropic's own `WebFetch` tool — both timing out identically, while the same deployment's non-aliased `dpl-*` URL responded instantly (with a 302 SSO redirect), proving Vercel's edge/routing was fine and the hang was specifically the Lambda function's outbound networking to Neon's Postgres.
+
+**Decision: migrate `apps/api` to Render** (PR #15 documents the investigation in ADR 0004; `apps/web` stays on Vercel, unaffected). Created a Render Web Service by hand in the dashboard (no Render MCP tooling exists) — root directory `apps/api`, build command `pnpm install --frozen-lockfile; pnpm run build` (unchanged from Vercel's), start command `node dist/main.js`, free plan. No application code changes were needed: the `process.env.VERCEL` conditional already added in PR #14 falls back to plain-TCP `@prisma/adapter-pg` on any non-Vercel host, which is exactly correct for a persistent server. First deploy failed on a missing `JWT_REFRESH_SECRET` env var (a copy-paste gap, not a bug); once added, `/health` and `/certifications` responded correctly in under 2 seconds. Updated `apps/web`'s `API_URL` to the new Render URL and redeployed. **Verified end to end in a real browser**: registered a real test user through the production web app against the production Render API, landed on `/dashboard` with real seeded content. PR #17 documents the resolution in ADR 0004.
+
+**Side notes from this session:**
+- Hit a hard safety rule while trying to help paste env vars into Render's dashboard via browser automation: entering credentials into any field (even just typing the key name) is blocked regardless of explicit user permission — the user had to paste the secrets themselves. Same rule, differently: updating `apps/web`'s `API_URL` (a plain config URL, not a secret) via browser automation was fine.
+- Vercel's Hobby plan allows only one concurrent build account-wide (not per-project) — a stray auto-triggered build on the now-unused `aws-devlab-api` Vercel project (still connected to GitHub) queued behind `aws-devlab-web`'s build and delayed it. Canceling the stray build didn't unstick the queue; a fresh manually-triggered deployment did. Left disconnecting the old Vercel project as a low-priority cleanup item in `Pendencias.md`.
+
+**Visual identity (PR #16):** redrew the previously-parked AI-generated logo concept (Erlenmeyer flask + `<` `>` code brackets, see `docs/design/README.md`) as a clean hand-authored SVG vector — navy (`#16233E`) ink on light surfaces, off-white (`#F3F0E7`) ink on dark surfaces, orange (`#FF6B1A`) as the one constant accent, no gradients. Shipped as `apps/web/src/app/icon.svg` (Next.js favicon convention) and in the shared nav next to the "AWS DevLab" wordmark. Verified in a real browser.
+
+**Decisions:** ADR 0004 updated twice (Update 2: the four failed Vercel fixes and why; Update 3: the Render migration and verification). No new ADR for the logo — a visual-identity choice doesn't rise to "architectural decision."
+
+**Next steps:** Phase 6 (Simulations) — see the following session entry.
+
+---
+
+## 2026-09-18 — Session 10: exam Simulations (Phase 6)
+
+**Goal:** implement Phase 6 (Simulations) — timed mock-exam sessions — with a config-driven question count/duration and domain-weighted question sampling, rather than hardcoding the real exam's numbers (65 questions, 130 minutes), since the question bank is still thin (only ~3 questions existed before this session).
+
+**Changes:**
+
+- Schema: `SimulationAttempt` (`userId`, `examVersionId`, configurable `questionCount`/`durationMinutes`, `SimulationStatus`: IN_PROGRESS/COMPLETED/ABANDONED, `correctCount`/`scorePercent`/`passed`) and `SimulationQuestion` (per-attempt snapshot: `order`, `selectedOptionIds`, `isCorrect`, `flagged`) — deliberately separate from the existing `QuestionAnswer` model used by the standalone practice-questions feature, since a simulation has no immediate feedback, a shuffled order, and a "flag for review" state that don't belong there. `expiresAt` is not a column — always derived as `startedAt + durationMinutes`.
+- Question selection samples proportionally to each `Domain.weightPercent`, with graceful degradation (capping to whatever's actually available) when the question pool is smaller than requested — covered by dedicated unit tests, including the small-pool case.
+- `apps/api`: new `SimulationsModule` — `POST /simulations/start`, `GET /simulations/:id` (with lazy expiry: an expired `IN_PROGRESS` attempt auto-completes on read, no cron job needed), `PATCH /simulations/:id/questions/:questionId`, `POST /simulations/:id/submit`, `GET /simulations`, `GET /simulations/:id/review`. All scoped to the authenticated user; another user's attempt 404s rather than 403s, matching this project's existing ownership-check convention.
+- `apps/web`: `/simulations` (history + start), `/simulations/[id]` (timed exam UI: countdown timer, question navigator grid, flag toggle, auto-submit at zero), `/simulations/[id]/submit` (confirmation), `/simulations/[id]/review` (score, pass/fail, per-question correctness and explanations). Added "Simulados" to `AppNav`. Added a handful of new seeded questions so a real 6-question simulation could be demoed end to end.
+- 11 new unit tests (sampling algorithm, lazy expiry) and 11 new e2e tests (39 e2e tests total now, up from 28).
+- Verified end-to-end in a real browser in Portuguese: registered a test user, started a simulation, answered all 6 questions, flagged one for review, submitted, and confirmed the review page showed "83% Aprovado, 5 de 6 questões corretas" with correct/incorrect breakdown and per-option explanations.
+
+**Process note:** mid-session, browser-automation testing hit what looked like a serious bug — the "save and continue" button appeared to silently do nothing on some clicks. Diagnosed via network-request inspection: clicks by raw screen coordinates occasionally missed the button (coordinates going stale between a screenshot and the next click, especially after any layout shift), while clicking the same button by its accessibility-tree element reference worked reliably every time. The application code was never broken — this was purely a browser-automation artifact, and no product code changes were made to "fix" it. Worth remembering: when a UI element seems to intermittently not respond during automated testing, verify with element references (not just coordinates) and check for an actual outgoing network request before concluding there's a real bug.
+
+**Decisions:** no new ADR — this follows the same module pattern as Labs/Questions/Flashcards, not a new architectural direction.
+
+**Next steps:** simulation content is thin (one exam version, effectively one domain with real questions) — realistic full-length simulations need the question bank to grow across all four DVA-C03 domains. Otherwise, decide between widening Domain 1+ content or starting Phase 7 (Projects) per the plan.

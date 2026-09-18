@@ -10,6 +10,7 @@ import { LabsModule } from './labs/labs.module.js';
 import { LearningModule } from './learning/learning.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { QuestionsModule } from './questions/questions.module.js';
+import { SimulationsModule } from './simulations/simulations.module.js';
 import { UsersModule } from './users/users.module.js';
 
 @Module({
@@ -26,6 +27,7 @@ import { UsersModule } from './users/users.module.js';
     LabsModule,
     QuestionsModule,
     FlashcardsModule,
+    SimulationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

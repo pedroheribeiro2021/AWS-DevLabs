@@ -51,6 +51,7 @@ export class LearningService {
       name: certification.name,
       description: certification.description,
       examVersions: certification.examVersions.map((examVersion) => ({
+        id: examVersion.id,
         code: examVersion.code,
         domains: examVersion.domains.map((domain) => ({
           id: domain.id,
