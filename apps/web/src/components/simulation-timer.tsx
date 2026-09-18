@@ -9,11 +9,15 @@ interface SimulationTimerProps {
 
 export function SimulationTimer({ remainingSeconds }: SimulationTimerProps) {
   const router = useRouter();
+  const [prevRemainingSeconds, setPrevRemainingSeconds] = useState(remainingSeconds);
   const [remaining, setRemaining] = useState(remainingSeconds);
 
-  useEffect(() => {
+  // Adjust state during render instead of in an effect when a prop changes
+  // (the server hands us a fresh remainingSeconds on every navigation/refresh).
+  if (remainingSeconds !== prevRemainingSeconds) {
+    setPrevRemainingSeconds(remainingSeconds);
     setRemaining(remainingSeconds);
-  }, [remainingSeconds]);
+  }
 
   useEffect(() => {
     if (remaining <= 0) {
