@@ -4,6 +4,7 @@ New entries from Session 2 onward are in English (see `Registro-de-Sessoes.md`).
 
 ## Open
 
+- **Simulation content is thin**: Phase 6's exam-simulation mechanism is fully built and works end to end, but there's effectively only one domain with real seeded questions. Realistic full-length (65-question) simulations across all four DVA-C03 domains need the question bank to grow substantially — this is content-authoring work, not engineering.
 - **Disconnect/pause the `aws-devlab-api` Vercel project**: no longer used for hosting (moved to Render), but still connected to the GitHub repo and auto-deploys on every push to `main`, which once queued behind `aws-devlab-web`'s build and delayed it (Hobby plan allows only one concurrent build account-wide). Low priority — cosmetic/hygiene, not a functional problem — but worth turning off auto-deploy or deleting the project next time it causes friction.
 - **Isolated test database**: auth e2e tests run against the real Neon dev database with manual cleanup in `afterAll` (interim decision, see ADR 0001 and Session 2 log). CI uses an ephemeral Postgres service container instead (see Session 2 log). Fine for now; revisit (Neon branch per test run, or local Postgres via Docker for local dev too) once the integration test suite grows.
 - **Password reset / email verification**: not implemented yet — out of scope for the auth MVP, revisit if needed before real users sign up.

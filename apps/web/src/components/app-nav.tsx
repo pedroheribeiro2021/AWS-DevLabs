@@ -28,6 +28,9 @@ export function AppNav({ title }: AppNavProps) {
             <Link href="/flashcards" className="hover:text-slate-900">
               Flashcards
             </Link>
+            <Link href="/simulations" className="hover:text-slate-900">
+              Simulados
+            </Link>
           </nav>
         </div>
         <LogoutButton />

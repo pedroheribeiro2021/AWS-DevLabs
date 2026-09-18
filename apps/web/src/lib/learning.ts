@@ -30,7 +30,7 @@ export interface Track {
   slug: string;
   name: string;
   description: string | null;
-  examVersions: { code: string; domains: TrackDomain[] }[];
+  examVersions: { id: string; code: string; domains: TrackDomain[] }[];
 }
 
 export interface LessonDetail {
