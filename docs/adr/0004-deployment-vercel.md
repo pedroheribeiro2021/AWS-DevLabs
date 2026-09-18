@@ -45,6 +45,16 @@ Every fix was verified locally (rebuild, full e2e + unit suite, `node dist/main.
 
 **Decision: move `apps/api` off Vercel to Render.** `apps/web` stays on Vercel — the frontend has had no issues. This does not fully invalidate the original decision to try Vercel for both apps (it's a real gap discovered only by shipping, consistent with how every other bug in this ADR was found), but it does mean Vercel is not a working free host for this particular NestJS + Prisma + Neon API, at least not without further platform-level investigation that isn't worth more time against a moving, unconfirmed target.
 
+## Update 3 (2026-09-18, Session 9) — Migrated to Render, confirmed working
+
+`apps/api` is now a Render Web Service (Free plan): `apps/api` as root directory, `pnpm install --frozen-lockfile; pnpm run build` as build command (unchanged from what Vercel used — `pnpm run build` already builds `packages/database` first), `node dist/main.js` as start command. No application code changes were needed beyond what already existed from the four Vercel fix attempts — the existing `process.env.VERCEL` conditional in `packages/database/src/index.ts` already falls back to `@prisma/adapter-pg` (plain TCP) on any non-Vercel host, which is exactly right for a persistent server.
+
+Verified end to end: `/health` and `/certifications` respond correctly (sub-2-second, real Neon data), and a real register → dashboard flow succeeds through `apps/web` (redeployed on Vercel with `API_URL` pointing at the new Render URL).
+
+This confirms the Session 9 hypothesis without fully diagnosing the exact Vercel-side root cause: a persistent Node process has none of the "each request is a fresh, ephemeral, possibly-sandboxed invocation" behavior a serverless function has, so whatever was specifically wrong with outbound networking inside Vercel's Lambda sandbox for this project simply doesn't exist as a category on Render. Good enough to ship on; not worth further Vercel-side investigation unless a strong reason to return to it comes up.
+
+`apps/web`'s `API_URL` is a plain config value (not a real secret) pointing at `https://aws-devlab-api.onrender.com`. The old `aws-devlab-api` Vercel project is still connected to the GitHub repo (still auto-deploys on push, unused) — left as a low-priority cleanup item in `Pendencias.md` rather than deleted immediately.
+
 ## Consequences
 
 - Fixed a real gap this decision exposed: `packages/database`'s `exports` pointed at raw `src/index.ts`. That happened to work in local dev because `nest start` transpiles TypeScript on the fly (including workspace packages), but `node dist/main.js` — what any real production deploy runs — could not import a `.ts` file directly. Added a `tsc` build step (`packages/database/tsconfig.build.json`) and pointed `exports` at the compiled `dist/index.js`/`dist/index.d.ts`. Verified by actually running `node dist/main.js` locally against Neon before deploying, not just assuming Vercel's bundler would paper over it.
