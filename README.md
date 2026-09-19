@@ -1,6 +1,6 @@
 # AWS DevLab
 
-Plataforma de aprendizado interativo para certificações AWS, começando pela **AWS Certified Developer – Associate (DVA-C03)**. Combina conteúdo estruturado, laboratórios hands-on, questões, flashcards, simulados e diagnóstico de pontos fracos.
+Plataforma de aprendizado interativo para certificações AWS, começando pela **AWS Certified Developer – Associate (DVA-C02)**. Combina conteúdo estruturado, laboratórios hands-on, questões, flashcards, simulados e diagnóstico de pontos fracos.
 
 Ver planejamento completo do produto em `docs/`.
 
@@ -46,7 +46,7 @@ pnpm dev:api    # http://localhost:3001 (docs em /docs)
 
 ```bash
 pnpm db:migrate   # cria/aplica migrations (dev)
-pnpm db:seed      # popula dados iniciais (DVA-C03)
+pnpm db:seed      # popula dados iniciais (DVA-C02)
 pnpm db:studio    # abre o Prisma Studio
 ```
 

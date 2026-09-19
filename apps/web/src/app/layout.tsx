@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "AWS DevLab",
-  description: "Aprenda AWS fazendo AWS — plataforma de estudo para a DVA-C03 com laboratórios práticos.",
+  description: "Aprenda AWS fazendo AWS — plataforma de estudo para a DVA-C02 com laboratórios práticos.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

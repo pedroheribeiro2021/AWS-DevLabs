@@ -17,13 +17,13 @@ async function main() {
     where: {
       certificationId_code: {
         certificationId: certification.id,
-        code: 'DVA-C03',
+        code: 'DVA-C02',
       },
     },
     update: {},
     create: {
       certificationId: certification.id,
-      code: 'DVA-C03',
+      code: 'DVA-C02',
       questionCount: 65,
       durationMinutes: 130,
       passingScorePercent: 72,
@@ -128,7 +128,7 @@ Não é um bom encaixe: processos de longa duração (o Lambda tem um timeout m�
 
 Na primeira vez que uma função roda (ou depois de ficar ociosa), o Lambda precisa inicializar um novo ambiente de execução antes de rodar seu código — isso é um "cold start" e adiciona latência. Invocações seguintes que reaproveitam esse mesmo ambiente ("warm") pulam essa inicialização. Isso importa para APIs sensíveis a latência e é um tópico recorrente na prova: cold starts ficam mais perceptíveis com pacotes de deployment maiores, funções conectadas a uma VPC, e runtimes com inicialização mais pesada.
 
-## Relação com a prova DVA-C03
+## Relação com a prova DVA-C02
 
 Fundamentos de Lambda aparecem em todo o domínio "Development with AWS Services" — espere questões de cenário sobre escolher Lambda vs. EC2/containers, e sobre diagnosticar latência causada por cold starts.`,
         resources: {
@@ -513,10 +513,165 @@ Fundamentos de Lambda aparecem em todo o domínio "Development with AWS Services
     }
   }
 
+  // Domain/topic skeleton for the exam guide's remaining scope. These topics
+  // exist so the Learning track and the Simulations question-selection
+  // algorithm have the full domain shape to work with; full lessons/labs/
+  // questions for them are deferred to future content-authoring sessions.
+  const domain1ExtraTopics: Array<{ name: string; objective: string }> = [
+    {
+      name: 'Padrões de arquitetura e tolerância a falhas',
+      objective:
+        'Escolher e justificar padrões de arquitetura (orientado a eventos, microsserviços, monolito, coreografia vs. orquestração, fanout) e técnicas de tolerância a falhas (retry com backoff exponencial e jitter, dead-letter queues) para uma aplicação na AWS.',
+    },
+    {
+      name: 'Armazenamento de dados em aplicações',
+      objective:
+        'Escolher entre bancos relacionais e não relacionais, aplicar operações CRUD, projetar chaves e índices do DynamoDB, e definir estratégias de cache (write-through, read-through, lazy loading, TTL) e ciclo de vida de dados no S3.',
+    },
+  ];
+
+  for (const [index, def] of domain1ExtraTopics.entries()) {
+    const existingTopic = await prisma.topic.findFirst({
+      where: { domainId: domain.id, name: def.name },
+    });
+    if (!existingTopic) {
+      await prisma.topic.create({
+        data: {
+          domainId: domain.id,
+          name: def.name,
+          order: index + 2,
+          learningObjectives: { create: [{ description: def.objective, order: 1 }] },
+        },
+      });
+    }
+  }
+
+  const domainDefs: Array<{
+    code: string;
+    name: string;
+    weightPercent: number;
+    order: number;
+    topics: Array<{ name: string; objective: string }>;
+  }> = [
+    {
+      code: 'domain-2',
+      name: 'Security',
+      weightPercent: 26,
+      order: 2,
+      topics: [
+        {
+          name: 'Autenticação e autorização de aplicações',
+          objective:
+            'Implementar federação de identidade e autorização (Amazon Cognito, SAML/OIDC, tokens JWT/OAuth/STS, políticas baseadas em recurso/serviço/principal, RBAC, princípio do menor privilégio).',
+        },
+        {
+          name: 'Criptografia com serviços AWS',
+          objective:
+            'Aplicar criptografia em repouso e em trânsito, gerenciar certificados (ACM, Private CA) e chaves do KMS (gerenciadas pela AWS vs. pelo cliente, rotação de chaves).',
+        },
+        {
+          name: 'Dados sensíveis no código da aplicação',
+          objective:
+            'Classificar dados sensíveis (PII, PHI) e protegê-los com variáveis de ambiente criptografadas, AWS Secrets Manager e Systems Manager Parameter Store.',
+        },
+      ],
+    },
+    {
+      code: 'domain-3',
+      name: 'Deployment',
+      weightPercent: 24,
+      order: 3,
+      topics: [
+        {
+          name: 'Preparação de artefatos de deploy',
+          objective:
+            'Organizar pacotes de deploy (dependências, variáveis de ambiente, imagens de container, layers do Lambda) e estrutura de diretórios para publicação na AWS.',
+        },
+        {
+          name: 'Testes de aplicações em ambientes de desenvolvimento',
+          objective:
+            'Testar aplicações usando endpoints de desenvolvimento, mocks de integração, e versões/aliases do Lambda antes de promover para produção.',
+        },
+        {
+          name: 'Automação de testes de deploy',
+          objective:
+            'Automatizar testes (unitários, mock) dentro do fluxo de CI/CD e usar infraestrutura como código (AWS SAM, CloudFormation) para provisionar ambientes de teste.',
+        },
+        {
+          name: 'Deploy de código com serviços de CI/CD da AWS',
+          objective:
+            'Usar AWS CodePipeline, CDK, SAM e Amplify para automatizar deploys, incluindo estratégias como canary, blue/green e rolling.',
+        },
+      ],
+    },
+    {
+      code: 'domain-4',
+      name: 'Troubleshooting and Optimization',
+      weightPercent: 18,
+      order: 4,
+      topics: [
+        {
+          name: 'Análise de causa raiz',
+          objective:
+            'Investigar falhas de aplicação usando CloudWatch Logs Insights, códigos de erro HTTP comuns, exceções de SDKs e mapas de serviço do X-Ray.',
+        },
+        {
+          name: 'Instrumentação de código para observabilidade',
+          objective:
+            'Diferenciar logging, monitoramento e observabilidade, e instrumentar código com tracing distribuído, logging estruturado e métricas customizadas.',
+        },
+        {
+          name: 'Otimização de aplicações',
+          objective:
+            'Otimizar performance e custo usando cache, ajuste de concorrência, e serviços de mensageria (SQS, SNS) com filtros de assinatura.',
+        },
+      ],
+    },
+  ];
+
+  for (const domainDef of domainDefs) {
+    const newDomain = await prisma.domain.upsert({
+      where: {
+        examVersionId_code: { examVersionId: examVersion.id, code: domainDef.code },
+      },
+      update: {},
+      create: {
+        examVersionId: examVersion.id,
+        code: domainDef.code,
+        // Nome oficial do domínio no exam guide da AWS (mantido em inglês), como
+        // no domain-1 acima; o conteúdo dentro dele é ensinado em português.
+        name: domainDef.name,
+        weightPercent: domainDef.weightPercent,
+        order: domainDef.order,
+      },
+    });
+
+    for (const [index, topicDef] of domainDef.topics.entries()) {
+      const existingTopic = await prisma.topic.findFirst({
+        where: { domainId: newDomain.id, name: topicDef.name },
+      });
+      if (!existingTopic) {
+        await prisma.topic.create({
+          data: {
+            domainId: newDomain.id,
+            name: topicDef.name,
+            order: index + 1,
+            learningObjectives: { create: [{ description: topicDef.objective, order: 1 }] },
+          },
+        });
+      }
+    }
+  }
+
+  const domainCount = await prisma.domain.count({ where: { examVersionId: examVersion.id } });
+  const topicCount = await prisma.topic.count({ where: { domain: { examVersionId: examVersion.id } } });
+
   console.log('Seed done:', {
     certification: certification.slug,
     examVersion: examVersion.code,
     topic: topic.name,
+    domains: domainCount,
+    topics: topicCount,
   });
 }
 

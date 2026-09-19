@@ -36,7 +36,7 @@ describe('Simulations (e2e)', () => {
       .send({ email: otherEmail, password, name: 'Simulations E2E Other' });
     otherAccessToken = otherRes.body.accessToken;
 
-    const examVersion = await prisma.examVersion.findFirst({ where: { code: 'DVA-C03' } });
+    const examVersion = await prisma.examVersion.findFirst({ where: { code: 'DVA-C02' } });
     examVersionId = examVersion!.id;
   });
 

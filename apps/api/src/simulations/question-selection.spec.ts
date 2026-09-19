@@ -54,6 +54,22 @@ describe('selectSimulationQuestionIds', () => {
     expect(selected).toContain('t1');
   });
 
+  it('pulls entirely from the only domain with questions when the other weighted domains are empty', () => {
+    // Mirrors the real exam shape: 4 domains with real weights, but only
+    // domain-1 has authored questions so far.
+    const pools = [
+      { domainId: 'domain-1', weightPercent: 32, questionIds: Array.from({ length: 9 }, (_, i) => `q${i}`) },
+      { domainId: 'domain-2', weightPercent: 26, questionIds: [] },
+      { domainId: 'domain-3', weightPercent: 24, questionIds: [] },
+      { domainId: 'domain-4', weightPercent: 18, questionIds: [] },
+    ];
+
+    const selected = selectSimulationQuestionIds(pools, 6, fixedRandom);
+
+    expect(selected).toHaveLength(6);
+    expect(selected.every((id) => id.startsWith('q'))).toBe(true);
+  });
+
   it('returns an empty array when there are no questions at all', () => {
     const selected = selectSimulationQuestionIds([], 10, fixedRandom);
     expect(selected).toEqual([]);
