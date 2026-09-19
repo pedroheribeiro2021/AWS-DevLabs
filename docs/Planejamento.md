@@ -2,7 +2,7 @@
 
 ## 1. Visão do projeto
 
-O **AWS DevLab** é uma plataforma de aprendizado interativo para AWS, inicialmente focada na preparação para a **AWS Certified Developer – Associate (DVA-C03)**, mas com arquitetura preparada para suportar outras certificações AWS no futuro.
+O **AWS DevLab** é uma plataforma de aprendizado interativo para AWS, inicialmente focada na preparação para a **AWS Certified Developer – Associate (DVA-C02)**, mas com arquitetura preparada para suportar outras certificações AWS no futuro.
 
 O objetivo não é criar apenas um "simulado de prova".
 
@@ -32,7 +32,7 @@ A certificação é um objetivo concreto, mas o resultado desejado é que o usu�
 
 Construir uma plataforma que ajude o usuário a:
 
-1. aprender os conceitos necessários para a DVA-C03;
+1. aprender os conceitos necessários para a DVA-C02;
 2. entender quando e por que utilizar cada serviço AWS;
 3. implementar os conceitos em laboratórios reais;
 4. construir projetos utilizando AWS;
@@ -67,7 +67,7 @@ A construção da plataforma deve permitir demonstrar conhecimento em:
 
 ## 3.1 Certificação inicial
 
-**AWS Certified Developer – Associate (DVA-C03)**
+**AWS Certified Developer – Associate (DVA-C02)**
 
 A plataforma deve inicialmente possuir conteúdo efetivo apenas para essa certificação.
 
@@ -87,7 +87,7 @@ Devem permitir futuramente:
 
 ### Regra
 
-> A arquitetura suporta várias certificações; o conteúdo inicial é DVA-C03.
+> A arquitetura suporta várias certificações; o conteúdo inicial é DVA-C02.
 
 ---
 
@@ -184,7 +184,7 @@ Para cada conceito relevante, sempre que fizer sentido, o aprendizado deve respo
 - Quais alternativas existem?
 - Quais trade-offs existem?
 - Como isso aparece em uma aplicação real?
-- Como isso se relaciona com a DVA-C03?
+- Como isso se relaciona com a DVA-C02?
 
 ## 6.1 Estrutura de um laboratório
 
@@ -357,7 +357,7 @@ Cada laboratório deve possuir relação explícita com os objetivos da certific
 Exemplo:
 
 ```text
-DVA-C03
+DVA-C02
    ↓
 Lambda
    ↓
@@ -888,7 +888,7 @@ O MVP deve conter:
 
 ## Conteúdo
 
-- DVA-C03;
+- DVA-C02;
 - domínios;
 - tópicos;
 - conceitos;
@@ -1225,11 +1225,11 @@ PORTFÓLIO
 
 O objetivo final não é apenas:
 
-> "Passei na DVA-C03."
+> "Passei na DVA-C02."
 
 Mas:
 
-> "Estudei para a DVA-C03, implementei os conceitos em AWS, construí aplicações, pratiquei troubleshooting, entendi os trade-offs e consigo demonstrar isso através de um projeto real."
+> "Estudei para a DVA-C02, implementei os conceitos em AWS, construí aplicações, pratiquei troubleshooting, entendi os trade-offs e consigo demonstrar isso através de um projeto real."
 
 ---
 
@@ -1237,7 +1237,7 @@ Mas:
 
 O AWS DevLab será considerado uma primeira versão completa quando o usuário conseguir:
 
-- selecionar DVA-C03;
+- selecionar DVA-C02;
 - seguir uma trilha estruturada;
 - aprender um conceito;
 - consultar recursos oficiais;
