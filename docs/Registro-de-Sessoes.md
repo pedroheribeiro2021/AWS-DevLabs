@@ -235,3 +235,22 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 **Decisions:** none beyond the DVA-C02 correction (a factual fix, not a design decision) and the domain/topic map, which follows the official exam guide directly rather than inventing structure.
 
 **Next steps:** the login/register form's silent-failure bug (see process note) is worth a dedicated look. Otherwise, content-authoring for the 12 new empty topics (lessons, labs, questions, flashcards) is the real remaining work before simulations feel like the real exam — see `Pendencias.md`.
+
+---
+
+## 2026-09-19 — Session 12: fixed the login/register hydration race
+
+**Goal:** root-cause and fix the login/register silent-failure bug logged in Session 11.
+
+**Root cause:** `apps/web/src/components/auth-form.tsx` was a client component wired with `onSubmit={handleSubmit}` (`event.preventDefault()` + a client-side `fetch('/api/auth/${mode}')`). The `<form>` element had no `method`/`action` attributes of its own, so if a submit (click or Enter) happened *before* React finished hydrating this component, the browser fell back to native HTML form submission — a default GET to the current URL with the fields appended as a query string. That reloads the page (clearing the form, no error, no redirect) without ever calling the API. Every other feature in this codebase (Labs, Questions, Flashcards, Simulations) uses a real Server Action wired via the form's `action` prop instead, which works via progressive enhancement regardless of hydration timing — auth was the one outlier built the old way, which is exactly why it was the one with this bug.
+
+**Fix:** converted `AuthForm` to real Next.js Server Actions, matching the rest of the codebase's pattern:
+- Added `apps/web/src/app/login/actions.ts` (`loginAction`) and `apps/web/src/app/register/actions.ts` (`registerAction`), both reusing the existing `loginOrRegister` helper in `lib/auth-server.ts` unchanged (it already calls the NestJS API and sets the httpOnly cookies via `next/headers`). Added a small shared `AuthFormState`/`extractApiErrorMessage` pair to that same lib file rather than duplicating error-extraction logic in both actions.
+- `AuthForm` now wires `<form action={formAction}>` via React 19's `useActionState`, with `useFormStatus` driving the submit button's pending state — no more client `fetch`, no more `onSubmit`.
+- Deleted the now-dead `apps/web/src/app/api/auth/login/route.ts` and `.../register/route.ts` (confirmed `auth-form.tsx` was their only caller in the whole codebase; the separate `refresh`/`me` route handlers used by `proxy.ts` were untouched).
+
+**Verification:** confirmed the server-rendered `<form>` now has `method="post" encType="multipart/form-data"` (the structural signature of a Server-Action-bound form — real native progressive enhancement, not just a narrower race window) via the raw HTML, then exercised all three flows in a real browser: successful registration → redirect to `/dashboard`; wrong password on login → "E-mail ou senha inválidos." displayed correctly; duplicate email on register → "E-mail já está em uso." displayed correctly. Full suite still green: 12/12 unit, 39/39 e2e, web build and lint clean.
+
+**Decisions:** none beyond the fix itself — no new pattern introduced, just aligning auth with the convention every other feature already followed.
+
+**Next steps:** content-authoring for the 12 empty topics (lessons, labs, questions, flashcards) added in Session 11 remains the main open work — see `Pendencias.md`.
