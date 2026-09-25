@@ -14,6 +14,9 @@ New entries from Session 2 onward are in English (see `Registro-de-Sessoes.md`).
 
 ## Done
 
+### Session 13 (2026-09-25) — mobile-first responsive fixes
+- Fixed `AppNav` (shared by every authenticated page) overflowing horizontally on real phone widths — title/nav/logout now stack and wrap below the `sm` breakpoint instead of forcing everything into one unbroken row. Also tightened mobile vertical padding (`py-16` → `py-10 sm:py-16`) across all pages, fixed the simulation-taking page's 3-button footer to stack on mobile, and stopped list-item status badges from crowding long titles. Verified at a real 390px viewport in a browser. See Session 13 log for details and an incidental encoding-corruption near-miss (caught before commit).
+
 ### Session 12 (2026-09-19) — fixed the login/register hydration race
 - Root cause: `AuthForm` was the only auth-flow component using a client `onSubmit`+`fetch` pattern instead of a real Server Action; a submit before hydration completed fell back to a native GET-to-current-URL, silently losing the form data. Converted to `useActionState` + `<form action={...}>` Server Actions (`app/login/actions.ts`, `app/register/actions.ts`), matching the pattern every other feature already used. Deleted the now-dead `/api/auth/login` and `/api/auth/register` BFF route handlers. Verified via the server-rendered form's `method="post" encType="multipart/form-data"` signature, plus real browser runs of success/wrong-password/duplicate-email. See `Registro-de-Sessoes.md` Session 12.
 

@@ -21,7 +21,7 @@ export default async function LabPage({ params }: LabPageProps) {
   const complete = completeLabAction.bind(null, labId);
 
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-4 py-16">
+    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-4 py-10 sm:py-16">
       <Link href="/labs" className="text-sm text-slate-500 hover:underline">
         ← Voltar aos laboratórios
       </Link>

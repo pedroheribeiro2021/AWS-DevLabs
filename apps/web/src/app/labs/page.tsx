@@ -20,7 +20,7 @@ export default async function LabsPage() {
   const labs = await getLabs();
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-4 py-16">
+    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-4 py-10 sm:py-16">
       <AppNav title="Laboratórios" />
 
       <ul className="flex flex-col gap-3">
@@ -28,7 +28,7 @@ export default async function LabsPage() {
           <li key={lab.id}>
             <Link
               href={`/labs/${lab.id}`}
-              className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-4 hover:border-slate-300"
+              className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 bg-white p-4 hover:border-slate-300"
             >
               <div>
                 <p className="font-medium text-slate-800">{lab.title}</p>
@@ -39,10 +39,10 @@ export default async function LabsPage() {
               <span
                 className={
                   lab.status === 'COMPLETED'
-                    ? 'text-xs font-medium text-green-600'
+                    ? 'shrink-0 text-xs font-medium text-green-600'
                     : lab.status === 'IN_PROGRESS'
-                      ? 'text-xs font-medium text-orange-600'
-                      : 'text-xs text-slate-400'
+                      ? 'shrink-0 text-xs font-medium text-orange-600'
+                      : 'shrink-0 text-xs text-slate-400'
                 }
               >
                 {STATUS_LABEL[lab.status]}

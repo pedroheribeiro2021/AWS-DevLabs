@@ -21,7 +21,7 @@ export default async function FlashcardPage({ params }: FlashcardPageProps) {
   const markRight = reviewFlashcardAction.bind(null, flashcardId, true);
 
   return (
-    <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-6 px-4 py-16">
+    <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-6 px-4 py-10 sm:py-16">
       <Link href="/flashcards" className="text-sm text-slate-500 hover:underline">
         ← Voltar aos flashcards
       </Link>

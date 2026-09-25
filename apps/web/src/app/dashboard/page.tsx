@@ -24,7 +24,7 @@ export default async function DashboardPage() {
   const completedCount = lessons.filter((lesson) => lesson.status === 'COMPLETED').length;
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-4 py-16">
+    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-4 py-10 sm:py-16">
       <AppNav title={`Olá, ${user.name}`} />
 
       <section className="rounded-lg border border-slate-200 bg-white p-5">
@@ -54,14 +54,14 @@ export default async function DashboardPage() {
                     <li key={lesson.id}>
                       <Link
                         href={`/learn/${lesson.id}`}
-                        className="flex items-center justify-between rounded-md px-2 py-1.5 text-sm hover:bg-slate-50"
+                        className="flex items-start justify-between gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-slate-50"
                       >
                         <span>{lesson.title}</span>
                         <span
                           className={
                             lesson.status === 'COMPLETED'
-                              ? 'text-xs font-medium text-green-600'
-                              : 'text-xs text-slate-400'
+                              ? 'shrink-0 text-xs font-medium text-green-600'
+                              : 'shrink-0 text-xs text-slate-400'
                           }
                         >
                           {STATUS_LABEL[lesson.status]}

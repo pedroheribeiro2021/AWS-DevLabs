@@ -35,7 +35,7 @@ export default async function SimulationPage({ params, searchParams }: Simulatio
   const action = saveSimulationAnswer.bind(null, id, current.question.id, nextOrder);
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-4 py-16">
+    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-4 py-10 sm:py-16">
       <div className="flex items-center justify-between gap-4">
         <p className="text-sm text-slate-500">
           Questão {currentOrder} de {totalQuestions} · {answeredCount} respondidas
@@ -88,24 +88,22 @@ export default async function SimulationPage({ params, searchParams }: Simulatio
           Marcar para revisar
         </label>
 
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex gap-2">
-            {prevOrder ? (
+            {prevOrder && (
               <Link
                 href={`/simulations/${id}?q=${prevOrder}`}
-                className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-100"
+                className="rounded-md border border-slate-300 px-4 py-2 text-center text-sm font-medium hover:bg-slate-100"
               >
                 ← Anterior
               </Link>
-            ) : (
-              <span />
             )}
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <Link
               href={`/simulations/${id}/submit`}
-              className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-100"
+              className="rounded-md border border-slate-300 px-4 py-2 text-center text-sm font-medium hover:bg-slate-100"
             >
               Enviar simulado
             </Link>
