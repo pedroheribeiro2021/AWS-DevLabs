@@ -716,6 +716,413 @@ Fundamentos de Lambda aparecem em todo o domínio "Development with AWS Services
     }
   }
 
+  // ---------------------------------------------------------------------
+  // Content-authoring push (Session 19+): first topic of the 12 that were
+  // skeleton-only since Session 11. One topic at a time, reviewed before
+  // moving to the next -- see docs/Pendencias.md.
+  // ---------------------------------------------------------------------
+
+  const securityDomain = await prisma.domain.findUniqueOrThrow({
+    where: { examVersionId_code: { examVersionId: examVersion.id, code: 'domain-2' } },
+  });
+  const authTopic = await prisma.topic.findFirstOrThrow({
+    where: { domainId: securityDomain.id, name: 'Autenticação e autorização de aplicações' },
+  });
+
+  const cognitoServiceData = {
+    shortName: 'Cognito',
+    category: 'Security, Identity, & Compliance',
+    description:
+      'Gerencia autenticação de usuários (User Pools) e credenciais temporárias da AWS para clientes autenticados (Identity Pools).',
+  };
+  const cognitoService = await prisma.aWSService.upsert({
+    where: { name: 'Amazon Cognito' },
+    update: cognitoServiceData,
+    create: { name: 'Amazon Cognito', ...cognitoServiceData },
+  });
+
+  const authLessonContent = `## Objetivo
+
+Ao final desta lição você vai conseguir explicar como o Amazon Cognito autentica usuários de uma aplicação, diferenciar User Pools de Identity Pools, e escolher qual usar em cada cenário.
+
+## User Pools: quem é o usuário
+
+Um Cognito User Pool é um diretório de usuários gerenciado: cadastro, login, confirmação de e-mail/telefone, MFA e recuperação de senha, sem você precisar construir esse sistema do zero. Depois de um login bem-sucedido, o User Pool devolve três tokens no formato JWT: um ID token (identifica o usuário, usado pela própria aplicação), um access token (usado para chamar APIs protegidas, incluindo autorizadores do API Gateway) e um refresh token (usado para obter novos tokens sem pedir a senha de novo).
+
+## Identity Pools: o que o usuário pode fazer na AWS
+
+Um Cognito Identity Pool (Federated Identities) resolve um problema diferente: como dar a um usuário já autenticado (por um User Pool, ou por um provedor externo como Google, Facebook, ou qualquer IdP SAML/OIDC) credenciais temporárias da AWS para chamar serviços diretamente — por exemplo, fazer upload de um arquivo direto pro S3 a partir do navegador, sem passar por um backend. Por baixo dos panos, o Identity Pool troca o token do usuário por credenciais temporárias via STS (\`AssumeRoleWithWebIdentity\`), associadas a uma IAM role com permissões limitadas.
+
+## Least privilege na prática
+
+Cada Identity Pool tem (pelo menos) duas roles associadas: uma para usuários autenticados e outra para não autenticados (guest). É possível ir além e mapear usuários para roles diferentes, ou usar variáveis de política como \`\${cognito-identity.amazonaws.com:sub}\` para restringir o acesso de cada usuário só aos próprios dados (por exemplo, só ao seu próprio prefixo num bucket S3) — o princípio do menor privilégio aplicado de forma dinâmica, sem criar uma role por usuário.
+
+## Quando usar cada um
+
+Use um User Pool (sozinho) quando a aplicação só precisa saber quem é o usuário e proteger suas próprias APIs (ex.: um autorizador de User Pool no API Gateway validando o access token). Use um Identity Pool quando, além disso, o cliente (navegador, app mobile) precisa chamar serviços da AWS diretamente com credenciais temporárias. Os dois são frequentemente usados juntos: User Pool autentica, Identity Pool troca esse resultado por credenciais da AWS.
+
+## Relação com a prova DVA-C02
+
+Autenticação e autorização aparecem no domínio Security — espere questões de cenário pedindo pra você escolher entre User Pool e Identity Pool, reconhecer \`AssumeRoleWithWebIdentity\` como o mecanismo por trás da troca de token por credenciais, e aplicar o princípio do menor privilégio a políticas do IAM.`;
+
+  const existingAuthLesson = await prisma.lesson.findFirst({
+    where: { topicId: authTopic.id, title: 'Autenticando usuários com o Amazon Cognito' },
+  });
+
+  if (existingAuthLesson) {
+    await prisma.lesson.update({ where: { id: existingAuthLesson.id }, data: { content: authLessonContent } });
+  } else {
+    await prisma.lesson.create({
+      data: {
+        topicId: authTopic.id,
+        order: 1,
+        estimatedMinutes: 9,
+        title: 'Autenticando usuários com o Amazon Cognito',
+        content: authLessonContent,
+        resources: {
+          create: [
+            {
+              title: 'Amazon Cognito — documentação oficial',
+              url: 'https://docs.aws.amazon.com/cognito/latest/developerguide/what-is-amazon-cognito.html',
+              type: 'documentation',
+              order: 1,
+            },
+          ],
+        },
+      },
+    });
+  }
+
+  const authLabData = {
+    level: 1,
+    order: 1,
+    estimatedMinutes: 20,
+    objective:
+      'Ao final deste laboratório você terá criado um Amazon Cognito User Pool pelo Console, cadastrado um usuário de teste e obtido os tokens JWT emitidos após o login.',
+    prerequisites:
+      'Conta AWS com acesso ao Console (Free Tier é suficiente — o Cognito é gratuito até 10.000 usuários ativos por mês). Não é necessário conhecimento prévio de Cognito.',
+    context:
+      'Uma equipe está construindo o backend de uma aplicação e precisa de um jeito de autenticar usuários sem implementar login do zero. Antes de integrar com o resto do sistema, o time quer criar um User Pool, testar o cadastro/login de um usuário e entender o que vem de volta depois de um login bem-sucedido.',
+    troubleshooting:
+      'Usuário fica com status "Force change password": normal se a senha temporária não foi trocada — use o fluxo de autenticação apropriado (ex.: \`aws cognito-idp admin-set-user-password\` com \`--permanent\`) ou crie o usuário já com senha permanente. \n\nHosted UI retorna erro de "redirect_uri mismatch": confira se a URL de callback configurada no app client bate exatamente com a usada no teste. \n\nLogin bem-sucedido mas sem token na URL: confira se o "response type" do app client está configurado para retornar tokens (ex.: implicit grant ou authorization code, conforme o fluxo escolhido).',
+    cleanup:
+      'Se não for reaproveitar o User Pool, exclua-o: acesse o Cognito no Console, selecione o pool criado e clique em "Delete". Isso remove o pool, o app client e o usuário de teste juntos.',
+    costWarning:
+      'O Cognito tem um Free Tier permanente de até 10.000 usuários ativos por mês (MAUs) para User Pools padrão. Este laboratório cria um único usuário de teste, então não deve gerar cobrança.',
+  };
+
+  const existingAuthLab = await prisma.lab.findFirst({
+    where: { topicId: authTopic.id, title: 'Criar um User Pool e obter um token JWT' },
+  });
+
+  if (existingAuthLab) {
+    await prisma.lab.update({ where: { id: existingAuthLab.id }, data: authLabData });
+  } else {
+    await prisma.lab.create({
+      data: {
+        topicId: authTopic.id,
+        title: 'Criar um User Pool e obter um token JWT',
+        ...authLabData,
+        steps: {
+          create: [
+            {
+              order: 1,
+              title: 'Criar o User Pool',
+              instructions:
+                'No Console da AWS, acesse o serviço Cognito e clique em "Create user pool". Escolha "Email" como método de login, mantenha os requisitos de senha padrão sugeridos pelo Console, e conclua a criação com o nome `devlab-user-pool`.',
+              validation:
+                'O User Pool aparece na lista de "User pools" com o nome `devlab-user-pool` e status disponível para uso.',
+            },
+            {
+              order: 2,
+              title: 'Configurar um app client',
+              instructions:
+                'Dentro do User Pool criado, acesse a aba "App integration" e crie um app client ("Create app client"). Escolha o tipo público (sem client secret, já que vamos testar diretamente, sem um backend confidencial) e dê o nome `devlab-app-client`.',
+              validation: 'O app client aparece listado com um "Client ID" gerado automaticamente.',
+            },
+            {
+              order: 3,
+              title: 'Criar um usuário de teste',
+              instructions:
+                'Na aba "Users", clique em "Create user". Preencha um e-mail válido, marque a opção para não enviar convite por e-mail, e defina uma senha temporária.',
+              validation:
+                'O usuário aparece na lista de "Users" com status "Confirmed" ou "Force change password".',
+            },
+            {
+              order: 4,
+              title: 'Autenticar e inspecionar o token',
+              instructions:
+                'Configure um domínio do Cognito (aba "App integration" > "Domain") e acesse a Hosted UI de login pelo navegador, informando o Client ID do app client criado. Faça login com o usuário de teste.',
+              validation:
+                'Após o login, você recebe um ID token, um access token e um refresh token — três strings longas separadas por pontos (formato JWT), visíveis na URL de redirecionamento ou na resposta do endpoint de token.',
+            },
+          ],
+        },
+      },
+    });
+  }
+
+  const authQuestionsToSeed: {
+    prompt: string;
+    type: 'KNOWLEDGE' | 'APPLICATION' | 'SCENARIO' | 'EXAM_LEVEL';
+    difficulty: 'EASY' | 'MEDIUM' | 'HARD';
+    explanation: string;
+    officialReferences?: string;
+    options: { text: string; isCorrect: boolean; explanation: string }[];
+  }[] = [
+    {
+      prompt: 'Qual é a principal diferença entre um Amazon Cognito User Pool e um Identity Pool?',
+      type: 'KNOWLEDGE',
+      difficulty: 'EASY',
+      explanation:
+        'O User Pool é um diretório de usuários que autentica (quem é o usuário) e emite tokens JWT. O Identity Pool troca um token (de um User Pool ou de outro provedor) por credenciais temporárias da AWS via STS, permitindo que o cliente chame serviços da AWS diretamente.',
+      officialReferences:
+        'https://docs.aws.amazon.com/cognito/latest/developerguide/what-is-amazon-cognito.html',
+      options: [
+        {
+          text: 'User Pool autentica usuários e emite tokens JWT; Identity Pool troca esses tokens por credenciais temporárias da AWS.',
+          isCorrect: true,
+          explanation:
+            'Correto: são dois problemas diferentes — "quem é o usuário" (User Pool) e "o que ele pode fazer na AWS" (Identity Pool).',
+        },
+        {
+          text: 'User Pool e Identity Pool são nomes diferentes para o mesmo recurso.',
+          isCorrect: false,
+          explanation: 'São recursos distintos do Cognito, frequentemente usados em conjunto, mas com propósitos diferentes.',
+        },
+        {
+          text: 'User Pool serve para dar permissões de IAM; Identity Pool serve para cadastro de usuários.',
+          isCorrect: false,
+          explanation: 'Está invertido: quem cadastra/autentica usuários é o User Pool; quem entrega credenciais da AWS é o Identity Pool.',
+        },
+        {
+          text: 'Identity Pool é usado só para login social (Google, Facebook); User Pool não suporta provedores externos.',
+          isCorrect: false,
+          explanation: 'Ambos podem se integrar a provedores externos; a diferença não é essa.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Uma aplicação de fotos quer permitir que o usuário, já autenticado, faça upload de imagens diretamente do navegador para um bucket S3, sem passar por um servidor backend. Qual componente do Cognito viabiliza isso?',
+      type: 'APPLICATION',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Um Identity Pool troca o token do usuário autenticado por credenciais temporárias da AWS (via STS), que o navegador pode usar para chamar o S3 diretamente com uma IAM role com permissão limitada de upload.',
+      options: [
+        {
+          text: 'Identity Pool, trocando o token de login por credenciais temporárias da AWS.',
+          isCorrect: true,
+          explanation: 'Correto: é exatamente o caso de uso central de um Identity Pool — acesso direto a serviços da AWS a partir do cliente.',
+        },
+        {
+          text: 'User Pool, usando o access token diretamente como credencial da AWS.',
+          isCorrect: false,
+          explanation: 'O access token do User Pool autoriza chamadas à própria aplicação, não é uma credencial da AWS (access key/secret/token) reconhecida pelo S3.',
+        },
+        {
+          text: 'Um App Client do User Pool com client secret.',
+          isCorrect: false,
+          explanation: 'Um client secret é usado para autenticar a aplicação junto ao User Pool, não para dar acesso a outros serviços da AWS.',
+        },
+        {
+          text: 'O Hosted UI do Cognito, que já inclui acesso direto ao S3.',
+          isCorrect: false,
+          explanation: 'O Hosted UI é só a tela de login/cadastro hospedada; não concede acesso a outros serviços da AWS por si só.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Uma API no API Gateway, com integração Lambda, precisa rejeitar requisições de usuários não autenticados antes mesmo de invocar a função Lambda. Qual abordagem usa o Cognito para isso da forma mais direta?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'O API Gateway suporta um authorizer nativo do tipo Cognito User Pool, que valida o token do usuário automaticamente antes de invocar a integração, sem precisar de um Lambda authorizer customizado.',
+      officialReferences:
+        'https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-integrate-with-cognito.html',
+      options: [
+        {
+          text: 'Configurar um Cognito User Pool authorizer no API Gateway para validar o token antes da integração.',
+          isCorrect: true,
+          explanation: 'Correto: é o mecanismo nativo do API Gateway pensado exatamente para esse cenário, sem código adicional.',
+        },
+        {
+          text: 'Validar o token manualmente dentro do código da função Lambda, na primeira linha.',
+          isCorrect: false,
+          explanation: 'Funcionaria, mas invoca a Lambda desnecessariamente para requisições que serão rejeitadas — não é a forma mais direta.',
+        },
+        {
+          text: 'Usar um Identity Pool para bloquear requisições sem credenciais AWS.',
+          isCorrect: false,
+          explanation: 'Identity Pool entrega credenciais da AWS; não é o mecanismo de autorização de requisições HTTP no API Gateway.',
+        },
+        {
+          text: 'Criar uma VPC e restringir o acesso por endereço IP.',
+          isCorrect: false,
+          explanation: 'Restringir por IP não verifica identidade do usuário, só a origem da rede — não resolve autenticação.',
+        },
+      ],
+    },
+    {
+      prompt:
+        "Uma aplicação usa um Identity Pool para dar a cada usuário acesso de leitura e escrita só à sua própria \"pasta\" dentro de um bucket S3 compartilhado (ex.: bucket/usuario-123/), sem criar uma IAM role separada para cada usuário. Qual mecanismo torna isso possível?",
+      type: 'EXAM_LEVEL',
+      difficulty: 'HARD',
+      explanation:
+        'Variáveis de política do IAM, como ${cognito-identity.amazonaws.com:sub}, permitem escrever uma única policy que se adapta dinamicamente à identidade de cada usuário autenticado pelo Identity Pool, aplicando o princípio do menor privilégio sem precisar de uma role por usuário.',
+      options: [
+        {
+          text: 'Variáveis de política do IAM (ex.: ${cognito-identity.amazonaws.com:sub}) na policy da role associada ao Identity Pool.',
+          isCorrect: true,
+          explanation: 'Correto: a variável é substituída em tempo de execução pelo identificador do usuário autenticado, restringindo o escopo por usuário com uma única policy.',
+        },
+        {
+          text: 'Criar uma IAM role individual para cada novo usuário automaticamente.',
+          isCorrect: false,
+          explanation: 'Contradiz o enunciado, que pede uma solução sem role separada por usuário — além de não escalar bem.',
+        },
+        {
+          text: 'Configurar um bucket S3 por usuário.',
+          isCorrect: false,
+          explanation: 'Não é o que o Identity Pool resolve, e não escala para muitos usuários.',
+        },
+        {
+          text: 'Usar apenas o ID token do User Pool como credencial de acesso ao S3.',
+          isCorrect: false,
+          explanation: 'O ID token não é uma credencial da AWS reconhecida pelo S3; é o Identity Pool que faz essa troca.',
+        },
+      ],
+    },
+    {
+      prompt: 'Depois de um login bem-sucedido num Cognito User Pool, quais tokens a aplicação recebe?',
+      type: 'KNOWLEDGE',
+      difficulty: 'EASY',
+      explanation:
+        'Um User Pool emite três tokens JWT após autenticação: ID token (identifica o usuário), access token (autoriza chamadas a APIs protegidas) e refresh token (renova os outros dois sem pedir login novamente).',
+      options: [
+        {
+          text: 'ID token, access token e refresh token.',
+          isCorrect: true,
+          explanation: 'Correto: são os três tokens padrão emitidos por um User Pool após um login bem-sucedido.',
+        },
+        {
+          text: 'Apenas uma access key e uma secret key da AWS.',
+          isCorrect: false,
+          explanation: 'Isso viria de credenciais temporárias via Identity Pool (STS), não diretamente do User Pool.',
+        },
+        {
+          text: 'Apenas uma API key fixa, sem expiração.',
+          isCorrect: false,
+          explanation: 'Os tokens do Cognito têm expiração configurável; não são chaves fixas.',
+        },
+        {
+          text: 'Um certificado X.509 para autenticação mútua TLS.',
+          isCorrect: false,
+          explanation: 'Cognito usa tokens JWT para esse fluxo, não certificados de cliente TLS.',
+        },
+      ],
+    },
+  ];
+
+  for (const q of authQuestionsToSeed) {
+    const questionData = {
+      type: q.type,
+      difficulty: q.difficulty,
+      explanation: q.explanation,
+      officialReferences: q.officialReferences,
+    };
+
+    const existingQuestion = await prisma.question.findFirst({
+      where: { topicId: authTopic.id, prompt: q.prompt },
+    });
+
+    if (existingQuestion) {
+      await prisma.question.update({ where: { id: existingQuestion.id }, data: questionData });
+    } else {
+      await prisma.question.create({
+        data: {
+          topicId: authTopic.id,
+          prompt: q.prompt,
+          ...questionData,
+          options: {
+            create: q.options.map((option, index) => ({
+              text: option.text,
+              isCorrect: option.isCorrect,
+              explanation: option.explanation,
+              order: index + 1,
+            })),
+          },
+        },
+      });
+    }
+  }
+
+  const authFlashcardsToSeed: { conceptName: string; conceptDescription: string; front: string; back: string }[] = [
+    {
+      conceptName: 'Cognito User Pool',
+      conceptDescription: 'Diretório de usuários gerenciado que autentica usuários e emite tokens JWT (ID, access, refresh).',
+      front: 'Qual a diferença entre um Cognito User Pool e um Identity Pool?',
+      back: 'User Pool autentica usuários e emite tokens JWT (ID, access, refresh). Identity Pool troca esses tokens por credenciais temporárias da AWS via STS, para o cliente chamar serviços da AWS diretamente.',
+    },
+    {
+      conceptName: 'AssumeRoleWithWebIdentity',
+      conceptDescription: 'API do STS usada por um Identity Pool para trocar um token de identidade por credenciais temporárias associadas a uma IAM role.',
+      front: 'Qual API do STS um Identity Pool usa por trás dos panos para gerar credenciais temporárias?',
+      back: 'AssumeRoleWithWebIdentity — troca um token de identidade (de um User Pool ou provedor externo) por credenciais temporárias associadas a uma IAM role.',
+    },
+    {
+      conceptName: 'Tokens do User Pool',
+      conceptDescription: 'Os três tokens JWT (ID, access, refresh) emitidos por um Cognito User Pool após login.',
+      front: 'Quais três tokens um Cognito User Pool emite após um login bem-sucedido?',
+      back: 'ID token (identifica o usuário), access token (autoriza chamadas a APIs) e refresh token (renova os outros sem novo login).',
+    },
+    {
+      conceptName: 'Least privilege com Identity Pool',
+      conceptDescription: 'Uso de variáveis de política do IAM para restringir dinamicamente o acesso de cada usuário de um Identity Pool aos próprios dados.',
+      front: 'Como aplicar o princípio do menor privilégio a usuários de um Identity Pool sem criar uma IAM role por usuário?',
+      back: 'Usando variáveis de política do IAM, como ${cognito-identity.amazonaws.com:sub}, que adaptam dinamicamente a policy à identidade de cada usuário autenticado.',
+    },
+    {
+      conceptName: 'Cognito User Pool authorizer',
+      conceptDescription: 'Authorizer nativo do API Gateway que valida tokens emitidos por um Cognito User Pool antes de invocar a integração.',
+      front: 'Qual authorizer nativo do API Gateway valida tokens de um Cognito User Pool automaticamente?',
+      back: 'O Cognito User Pool authorizer — valida o token (ID ou access) antes de invocar a integração (ex.: uma função Lambda), sem precisar de um Lambda authorizer customizado.',
+    },
+  ];
+
+  for (const card of authFlashcardsToSeed) {
+    const existingConcept = await prisma.concept.findFirst({
+      where: { topicId: authTopic.id, name: card.conceptName },
+    });
+
+    const concept = existingConcept
+      ? await prisma.concept.update({
+          where: { id: existingConcept.id },
+          data: { description: card.conceptDescription },
+        })
+      : await prisma.concept.create({
+          data: {
+            topicId: authTopic.id,
+            name: card.conceptName,
+            description: card.conceptDescription,
+            awsServices: { connect: { id: cognitoService.id } },
+          },
+        });
+
+    const existingFlashcard = await prisma.flashcard.findFirst({
+      where: { conceptId: concept.id, front: card.front },
+    });
+
+    if (existingFlashcard) {
+      await prisma.flashcard.update({ where: { id: existingFlashcard.id }, data: { back: card.back } });
+    } else {
+      await prisma.flashcard.create({
+        data: { conceptId: concept.id, front: card.front, back: card.back },
+      });
+    }
+  }
+
   const domainCount = await prisma.domain.count({ where: { examVersionId: examVersion.id } });
   const topicCount = await prisma.topic.count({ where: { domain: { examVersionId: examVersion.id } } });
 

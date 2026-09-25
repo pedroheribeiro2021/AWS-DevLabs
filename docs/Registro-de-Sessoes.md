@@ -373,3 +373,24 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 **Decisions:** none — a mechanical generalization of an existing pattern, no new architectural surface.
 
 **Next steps:** the 12-topic content-authoring push (lessons, labs, questions, flashcards for Domains 2–4) can now start without content edits silently failing to apply. The nested-relation sync gap (steps/options/resources) noted above is worth a second pass if it causes real pain during that push, but wasn't blocking it.
+
+---
+
+## 2026-09-25 — Session 19: content-authoring push, topic 1 of 12 (Cognito authentication)
+
+**Goal:** start the 12-topic content-authoring push flagged since Session 11. Wrote one topic fully first — "Autenticação e autorização de aplicações" (Security domain, 26% weight, the highest-weighted of the four empty domains) — for Pedro to review the format before the other 11 get the same treatment, rather than generating all 12 unsupervised.
+
+**Changes:**
+
+- `packages/database/prisma/seed.ts`: added a full content set for the topic, following the exact structure and quality bar the Lambda topic (Session 3–6) established:
+  - **Lesson** ("Autenticando usuários com o Amazon Cognito", 9 min): Markdown content covering User Pools (the user directory, the three JWT tokens it issues) vs. Identity Pools (`AssumeRoleWithWebIdentity`, exchanging a token for temporary AWS credentials), least-privilege via IAM policy variables (`${cognito-identity.amazonaws.com:sub}`), and when to use each — matching the learning objective Session 11 already wrote for this topic.
+  - **Lab** ("Criar um User Pool e obter um token JWT", Level 1, 20 min): create a User Pool, an app client, a test user, and inspect the JWT tokens issued after login — Free Tier eligible.
+  - **5 questions** across all 4 types/difficulties (User Pool vs. Identity Pool, S3 upload from the browser, an API Gateway Cognito authorizer, per-user least privilege via policy variables, which tokens a User Pool issues).
+  - **5 flashcards** (one new `Concept` each, connected to a new `Amazon Cognito` `AWSService` row).
+  - Used the update-or-create pattern Session 18 just generalized throughout, so this topic's content will itself stay in sync on future reseeds.
+- Verified end-to-end in a real browser: the dashboard's skill-tree node for this topic now shows "0/1 lições concluídas" (a real, non-dashed node) instead of "Conteúdo em breve"; the lesson renders correctly as Markdown (including inline code spans and the `${...}` policy variable, which does **not** get accidentally interpolated since the source is an escaped JS template literal); the lab, all 5 questions, and all 5 flashcards show up correctly attributed to the topic in their respective list pages.
+- Full API suite (26 unit + 39 e2e) still green after seeding — in particular confirmed the simulation question-selection tests don't assume Domain 1 is the only domain with questions (they don't; the algorithm and its tests were already domain-count-agnostic).
+
+**Decisions:** none — content authoring, not an architectural change.
+
+**Next steps:** waiting on Pedro's review of this topic's format/depth/tone before writing the other 11 (2 more Domain 1 topics; 2 more Security topics; 4 Deployment topics; 3 Troubleshooting and Optimization topics).
