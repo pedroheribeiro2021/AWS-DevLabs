@@ -1,18 +1,71 @@
 import 'dotenv/config';
 import { prisma } from '../src/index.js';
 
-async function main() {
-  const certification = await prisma.certification.upsert({
-    where: { slug: 'aws-certified-developer-associate' },
-    update: {},
-    create: {
-      slug: 'aws-certified-developer-associate',
-      name: 'AWS Certified Developer – Associate',
-      description:
-        'Certificação AWS focada em desenvolver, publicar e depurar aplicações na nuvem AWS.',
+/**
+ * Creates a topic (with its single learning objective) if it doesn't exist yet,
+ * or syncs its order and objective wording if it does -- shared by the two
+ * "skeleton" topic loops below, which are otherwise identical in shape.
+ */
+async function upsertTopicWithObjective(
+  domainId: string,
+  name: string,
+  order: number,
+  objective: string,
+) {
+  const existingTopic = await prisma.topic.findFirst({ where: { domainId, name } });
+
+  if (existingTopic) {
+    await prisma.topic.update({ where: { id: existingTopic.id }, data: { order } });
+
+    const existingObjective = await prisma.learningObjective.findFirst({
+      where: { topicId: existingTopic.id },
+    });
+    if (existingObjective) {
+      await prisma.learningObjective.update({
+        where: { id: existingObjective.id },
+        data: { description: objective },
+      });
+    } else {
+      await prisma.learningObjective.create({
+        data: { topicId: existingTopic.id, description: objective, order: 1 },
+      });
+    }
+    return existingTopic;
+  }
+
+  return prisma.topic.create({
+    data: {
+      domainId,
+      name,
+      order,
+      learningObjectives: { create: [{ description: objective, order: 1 }] },
     },
   });
+}
 
+async function main() {
+  // Every upsert below passes the same fields to `update` and `create` (rather
+  // than `update: {}`), so a wording/value edit made here actually reaches an
+  // already-seeded database on the next `pnpm db:seed` run. See Session 15 for
+  // the near-miss this generalizes: the Lambda lesson's DVA-C03 -> DVA-C02
+  // rename landed in this file but silently never reached the seeded row,
+  // because its block only ever `create`d.
+  const certificationData = {
+    name: 'AWS Certified Developer – Associate',
+    description: 'Certificação AWS focada em desenvolver, publicar e depurar aplicações na nuvem AWS.',
+  };
+  const certification = await prisma.certification.upsert({
+    where: { slug: 'aws-certified-developer-associate' },
+    update: certificationData,
+    create: { slug: 'aws-certified-developer-associate', ...certificationData },
+  });
+
+  const examVersionData = {
+    questionCount: 65,
+    durationMinutes: 130,
+    passingScorePercent: 72,
+    isCurrent: true,
+  };
   const examVersion = await prisma.examVersion.upsert({
     where: {
       certificationId_code: {
@@ -20,17 +73,17 @@ async function main() {
         code: 'DVA-C02',
       },
     },
-    update: {},
-    create: {
-      certificationId: certification.id,
-      code: 'DVA-C02',
-      questionCount: 65,
-      durationMinutes: 130,
-      passingScorePercent: 72,
-      isCurrent: true,
-    },
+    update: examVersionData,
+    create: { certificationId: certification.id, code: 'DVA-C02', ...examVersionData },
   });
 
+  const domainData = {
+    // Nome oficial do domínio no exam guide da AWS (mantido em inglês, como no
+    // documento oficial); o conteúdo dentro dele é ensinado em português.
+    name: 'Development with AWS Services',
+    weightPercent: 32,
+    order: 1,
+  };
   const domain = await prisma.domain.upsert({
     where: {
       examVersionId_code: {
@@ -38,27 +91,19 @@ async function main() {
         code: 'domain-1',
       },
     },
-    update: {},
-    create: {
-      examVersionId: examVersion.id,
-      code: 'domain-1',
-      // Nome oficial do domínio no exam guide da AWS (mantido em inglês, como no
-      // documento oficial); o conteúdo dentro dele é ensinado em português.
-      name: 'Development with AWS Services',
-      weightPercent: 32,
-      order: 1,
-    },
+    update: domainData,
+    create: { examVersionId: examVersion.id, code: 'domain-1', ...domainData },
   });
 
+  const lambdaServiceData = {
+    shortName: 'Lambda',
+    category: 'Compute',
+    description: 'Executa seu código sem provisionar ou gerenciar servidores, cobrado por invocação.',
+  };
   const lambdaService = await prisma.aWSService.upsert({
     where: { name: 'AWS Lambda' },
-    update: {},
-    create: {
-      name: 'AWS Lambda',
-      shortName: 'Lambda',
-      category: 'Compute',
-      description: 'Executa seu código sem provisionar ou gerenciar servidores, cobrado por invocação.',
-    },
+    update: lambdaServiceData,
+    create: { name: 'AWS Lambda', ...lambdaServiceData },
   });
 
   const topic =
@@ -155,30 +200,38 @@ Fundamentos de Lambda aparecem em todo o domínio "Development with AWS Services
     });
   }
 
+  const labData = {
+    level: 1,
+    order: 1,
+    estimatedMinutes: 25,
+    objective:
+      'Ao final deste laboratório você terá criado uma função Lambda pelo Console da AWS, invocado ela manualmente e visualizado o resultado e os logs de execução.',
+    prerequisites:
+      'Conta AWS com acesso ao Console (Free Tier é suficiente). Nenhum conhecimento prévio de Lambda é necessário — a lição "O que é o AWS Lambda?" ajuda a entender o contexto, mas não é obrigatória para seguir os passos.',
+    context:
+      'Uma equipe de e-commerce precisa de uma função simples que, futuramente, vai calcular o frete de um pedido. Antes de integrar com o resto do sistema, o time quer validar o básico: criar a função, rodar ela manualmente e confirmar que ela responde como esperado.',
+    troubleshooting:
+      'Erro "Runtime.HandlerNotFound": confira se o nome do handler configurado na aba Runtime settings bate com o nome do arquivo e da função exportada (ex.: index.handler). \n\nFunção não aparece na lista após criar: confirme se está na mesma região da AWS em que criou a função (canto superior direito do Console). \n\nInvocação sem retorno visível: o resultado aparece na aba "Test" após clicar em "Test" novamente — role a página até a seção "Execution results".',
+    cleanup:
+      'Se não for reaproveitar a função, exclua-a: abra a função no Console, clique em "Actions" > "Delete function". Isso evita que ela apareça em listagens futuras sem necessidade (o custo de mantê-la parada é zero, mas manter o ambiente limpo ajuda em laboratórios futuros).',
+    costWarning:
+      'Fica dentro do Free Tier da AWS (1 milhão de invocações gratuitas por mês). Este laboratório usa poucas invocações manuais e não deixa nada rodando continuamente, então não deve gerar cobrança.',
+  };
+
   const existingLab = await prisma.lab.findFirst({
     where: { topicId: topic.id, title: 'Criar e invocar sua primeira função Lambda' },
   });
 
-  if (!existingLab) {
+  if (existingLab) {
+    // Steps aren't synced here (a nested `create`, not a diffable list) -- only
+    // this lab's own scalar fields. See the comment above certificationData.
+    await prisma.lab.update({ where: { id: existingLab.id }, data: labData });
+  } else {
     await prisma.lab.create({
       data: {
         topicId: topic.id,
         title: 'Criar e invocar sua primeira função Lambda',
-        level: 1,
-        order: 1,
-        estimatedMinutes: 25,
-        objective:
-          'Ao final deste laboratório você terá criado uma função Lambda pelo Console da AWS, invocado ela manualmente e visualizado o resultado e os logs de execução.',
-        prerequisites:
-          'Conta AWS com acesso ao Console (Free Tier é suficiente). Nenhum conhecimento prévio de Lambda é necessário — a lição "O que é o AWS Lambda?" ajuda a entender o contexto, mas não é obrigatória para seguir os passos.',
-        context:
-          'Uma equipe de e-commerce precisa de uma função simples que, futuramente, vai calcular o frete de um pedido. Antes de integrar com o resto do sistema, o time quer validar o básico: criar a função, rodar ela manualmente e confirmar que ela responde como esperado.',
-        troubleshooting:
-          'Erro "Runtime.HandlerNotFound": confira se o nome do handler configurado na aba Runtime settings bate com o nome do arquivo e da função exportada (ex.: index.handler). \n\nFunção não aparece na lista após criar: confirme se está na mesma região da AWS em que criou a função (canto superior direito do Console). \n\nInvocação sem retorno visível: o resultado aparece na aba "Test" após clicar em "Test" novamente — role a página até a seção "Execution results".',
-        cleanup:
-          'Se não for reaproveitar a função, exclua-a: abra a função no Console, clique em "Actions" > "Delete function". Isso evita que ela apareça em listagens futuras sem necessidade (o custo de mantê-la parada é zero, mas manter o ambiente limpo ajuda em laboratórios futuros).',
-        costWarning:
-          'Fica dentro do Free Tier da AWS (1 milhão de invocações gratuitas por mês). Este laboratório usa poucas invocações manuais e não deixa nada rodando continuamente, então não deve gerar cobrança.',
+        ...labData,
         steps: {
           create: [
             {
@@ -434,19 +487,27 @@ Fundamentos de Lambda aparecem em todo o domínio "Development with AWS Services
   ];
 
   for (const q of questionsToSeed) {
+    const questionData = {
+      type: q.type,
+      difficulty: q.difficulty,
+      explanation: q.explanation,
+      officialReferences: q.officialReferences,
+    };
+
     const existingQuestion = await prisma.question.findFirst({
       where: { topicId: topic.id, prompt: q.prompt },
     });
 
-    if (!existingQuestion) {
+    if (existingQuestion) {
+      // Options aren't synced here (a nested `create`, not a diffable list) --
+      // only the question's own scalar fields.
+      await prisma.question.update({ where: { id: existingQuestion.id }, data: questionData });
+    } else {
       await prisma.question.create({
         data: {
           topicId: topic.id,
-          type: q.type,
-          difficulty: q.difficulty,
           prompt: q.prompt,
-          explanation: q.explanation,
-          officialReferences: q.officialReferences,
+          ...questionData,
           options: {
             create: q.options.map((option, index) => ({
               text: option.text,
@@ -499,24 +560,31 @@ Fundamentos de Lambda aparecem em todo o domínio "Development with AWS Services
   ];
 
   for (const card of flashcardsToSeed) {
-    const concept =
-      (await prisma.concept.findFirst({
-        where: { topicId: topic.id, name: card.conceptName },
-      })) ??
-      (await prisma.concept.create({
-        data: {
-          topicId: topic.id,
-          name: card.conceptName,
-          description: card.conceptDescription,
-          awsServices: { connect: { id: lambdaService.id } },
-        },
-      }));
+    const existingConcept = await prisma.concept.findFirst({
+      where: { topicId: topic.id, name: card.conceptName },
+    });
+
+    const concept = existingConcept
+      ? await prisma.concept.update({
+          where: { id: existingConcept.id },
+          data: { description: card.conceptDescription },
+        })
+      : await prisma.concept.create({
+          data: {
+            topicId: topic.id,
+            name: card.conceptName,
+            description: card.conceptDescription,
+            awsServices: { connect: { id: lambdaService.id } },
+          },
+        });
 
     const existingFlashcard = await prisma.flashcard.findFirst({
       where: { conceptId: concept.id, front: card.front },
     });
 
-    if (!existingFlashcard) {
+    if (existingFlashcard) {
+      await prisma.flashcard.update({ where: { id: existingFlashcard.id }, data: { back: card.back } });
+    } else {
       await prisma.flashcard.create({
         data: { conceptId: concept.id, front: card.front, back: card.back },
       });
@@ -541,19 +609,7 @@ Fundamentos de Lambda aparecem em todo o domínio "Development with AWS Services
   ];
 
   for (const [index, def] of domain1ExtraTopics.entries()) {
-    const existingTopic = await prisma.topic.findFirst({
-      where: { domainId: domain.id, name: def.name },
-    });
-    if (!existingTopic) {
-      await prisma.topic.create({
-        data: {
-          domainId: domain.id,
-          name: def.name,
-          order: index + 2,
-          learningObjectives: { create: [{ description: def.objective, order: 1 }] },
-        },
-      });
-    }
+    await upsertTopicWithObjective(domain.id, def.name, index + 2, def.objective);
   }
 
   const domainDefs: Array<{
@@ -640,36 +696,23 @@ Fundamentos de Lambda aparecem em todo o domínio "Development with AWS Services
   ];
 
   for (const domainDef of domainDefs) {
+    const extraDomainData = {
+      // Nome oficial do domínio no exam guide da AWS (mantido em inglês), como
+      // no domain-1 acima; o conteúdo dentro dele é ensinado em português.
+      name: domainDef.name,
+      weightPercent: domainDef.weightPercent,
+      order: domainDef.order,
+    };
     const newDomain = await prisma.domain.upsert({
       where: {
         examVersionId_code: { examVersionId: examVersion.id, code: domainDef.code },
       },
-      update: {},
-      create: {
-        examVersionId: examVersion.id,
-        code: domainDef.code,
-        // Nome oficial do domínio no exam guide da AWS (mantido em inglês), como
-        // no domain-1 acima; o conteúdo dentro dele é ensinado em português.
-        name: domainDef.name,
-        weightPercent: domainDef.weightPercent,
-        order: domainDef.order,
-      },
+      update: extraDomainData,
+      create: { examVersionId: examVersion.id, code: domainDef.code, ...extraDomainData },
     });
 
     for (const [index, topicDef] of domainDef.topics.entries()) {
-      const existingTopic = await prisma.topic.findFirst({
-        where: { domainId: newDomain.id, name: topicDef.name },
-      });
-      if (!existingTopic) {
-        await prisma.topic.create({
-          data: {
-            domainId: newDomain.id,
-            name: topicDef.name,
-            order: index + 1,
-            learningObjectives: { create: [{ description: topicDef.objective, order: 1 }] },
-          },
-        });
-      }
+      await upsertTopicWithObjective(newDomain.id, topicDef.name, index + 1, topicDef.objective);
     }
   }
 

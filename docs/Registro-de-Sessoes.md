@@ -355,3 +355,21 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 **Decisions:** none — pure UI/rendering change.
 
 **Next steps:** this closes out Pedro's original gamification ask (XP/levels/streaks → badges → visual track). Standing items: generalize the seed script's update-on-reseed fix (Session 15), domain-level badges once more domains have content (ADR 0006), and the 12-topic content-authoring push — the skill tree will get visually much more interesting once that content exists.
+
+---
+
+## 2026-09-25 — Session 18: generalized the seed script's update-on-reseed fix
+
+**Goal:** Pedro asked to fix the seed-script gotcha flagged in Session 15/17 (Pendencias.md) before starting the 12-topic content-authoring push — every model except the one Lambda lesson still used a `findFirst` + `if (!existing) create` guard with no update path, so editing already-seeded content in `seed.ts` and re-running the seed would silently never reach the database.
+
+**Changes:**
+
+- `packages/database/prisma/seed.ts`: every `upsert` that previously passed `update: {}` (a no-op) now passes the same field object it passes to `create` — found this same bug, not just in the four models flagged in Pendencias.md, but also in the `Certification`, `ExamVersion`, `Domain` (both the domain-1 upsert and the domain-2–4 loop's upsert), and `AWSService` upserts, all of which had the identical "upsert with an empty update" shape.
+- `Lab`, `Question` (in its seed loop), and `Flashcard`/`Concept` (in the flashcard loop) converted from `if (!existing) create` to `if (existing) update else create`, syncing their own scalar fields (title/objective/prerequisites/etc. for Lab; type/difficulty/explanation/officialReferences for Question; description for Concept; back for Flashcard) — matching the pattern the Lambda lesson fix (Session 15) already established.
+- New shared helper `upsertTopicWithObjective(domainId, name, order, objective)` replaces the duplicated topic-seeding logic in both "skeleton" loops (the 2 extra Domain 1 topics and the 10 topics across Domains 2–4): syncs a topic's `order` and its single `LearningObjective`'s wording on reseed, creates both if the topic doesn't exist yet.
+- **Deliberately not synced:** nested one-to-many relations seeded via a nested `create` block (Lab steps, Question options, Lesson resources) — editing an existing lab step's instructions or a question option's text still won't reach the database on reseed. Diffing/upserting child collections by stable identity is a materially bigger problem than syncing a parent's scalar fields and was out of scope here; flagged as a known remaining gap in `Pendencias.md`.
+- Verified by running `pnpm db:seed` twice against the shared dev DB: both runs exited cleanly with identical `domains: 4, topics: 13` (no duplicates), and the full API suite (26 unit + 39 e2e) stayed green afterward.
+
+**Decisions:** none — a mechanical generalization of an existing pattern, no new architectural surface.
+
+**Next steps:** the 12-topic content-authoring push (lessons, labs, questions, flashcards for Domains 2–4) can now start without content edits silently failing to apply. The nested-relation sync gap (steps/options/resources) noted above is worth a second pass if it causes real pain during that push, but wasn't blocking it.
