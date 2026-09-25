@@ -238,7 +238,26 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 
 ---
 
-## 2026-09-25 — Session 12: mobile-first responsive fixes
+## 2026-09-19 — Session 12: fixed the login/register hydration race
+
+**Goal:** root-cause and fix the login/register silent-failure bug logged in Session 11.
+
+**Root cause:** `apps/web/src/components/auth-form.tsx` was a client component wired with `onSubmit={handleSubmit}` (`event.preventDefault()` + a client-side `fetch('/api/auth/${mode}')`). The `<form>` element had no `method`/`action` attributes of its own, so if a submit (click or Enter) happened *before* React finished hydrating this component, the browser fell back to native HTML form submission — a default GET to the current URL with the fields appended as a query string. That reloads the page (clearing the form, no error, no redirect) without ever calling the API. Every other feature in this codebase (Labs, Questions, Flashcards, Simulations) uses a real Server Action wired via the form's `action` prop instead, which works via progressive enhancement regardless of hydration timing — auth was the one outlier built the old way, which is exactly why it was the one with this bug.
+
+**Fix:** converted `AuthForm` to real Next.js Server Actions, matching the rest of the codebase's pattern:
+- Added `apps/web/src/app/login/actions.ts` (`loginAction`) and `apps/web/src/app/register/actions.ts` (`registerAction`), both reusing the existing `loginOrRegister` helper in `lib/auth-server.ts` unchanged (it already calls the NestJS API and sets the httpOnly cookies via `next/headers`). Added a small shared `AuthFormState`/`extractApiErrorMessage` pair to that same lib file rather than duplicating error-extraction logic in both actions.
+- `AuthForm` now wires `<form action={formAction}>` via React 19's `useActionState`, with `useFormStatus` driving the submit button's pending state — no more client `fetch`, no more `onSubmit`.
+- Deleted the now-dead `apps/web/src/app/api/auth/login/route.ts` and `.../register/route.ts` (confirmed `auth-form.tsx` was their only caller in the whole codebase; the separate `refresh`/`me` route handlers used by `proxy.ts` were untouched).
+
+**Verification:** confirmed the server-rendered `<form>` now has `method="post" encType="multipart/form-data"` (the structural signature of a Server-Action-bound form — real native progressive enhancement, not just a narrower race window) via the raw HTML, then exercised all three flows in a real browser: successful registration → redirect to `/dashboard`; wrong password on login → "E-mail ou senha inválidos." displayed correctly; duplicate email on register → "E-mail já está em uso." displayed correctly. Full suite still green: 12/12 unit, 39/39 e2e, web build and lint clean.
+
+**Decisions:** none beyond the fix itself — no new pattern introduced, just aligning auth with the convention every other feature already followed.
+
+**Next steps:** content-authoring for the 12 empty topics (lessons, labs, questions, flashcards) added in Session 11 remains the main open work — see `Pendencias.md`.
+
+---
+
+## 2026-09-25 — Session 13: mobile-first responsive fixes
 
 **Goal:** Pedro tested the app on his phone and reported the layout as badly broken ("toda mal diagramada"). Diagnosed and fixed the actual responsive bugs rather than guessing from a desktop view.
 
@@ -256,7 +275,8 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 - The Claude-in-Chrome extension's window-resize tool did not actually shrink the tab's viewport in this environment (window stayed at full screen size, resize calls silently no-op'd). Worked around it by injecting a fixed-width `<iframe>` into a real tab as a same-origin mobile-viewport emulator — a reusable trick if this comes up again.
 - A PowerShell bulk-edit (`Get-Content -Raw` / `Set-Content -NoNewline`) used partway through this session **silently corrupted 8 files**: it re-wrote them with a non-UTF-8 encoding (mangling every accented Portuguese character into mojibake, e.g. `Não` → `NÃ£o`) and prepended a stray UTF-8 BOM to each. Caught immediately via `git diff` before committing — fixed with targeted string edits and stripping the BOM bytes. **Lesson: never use PowerShell `Get-Content`/`Set-Content` for bulk text edits on this repo's UTF-8 files — use per-file targeted find/replace instead.** `git checkout -- <path>` (the clean revert-and-redo path) was blocked by the harness's destructive-action guard, which is why the fix was surgical rather than a revert.
 - `pnpm` is not on this machine's `PATH` directly; `corepack pnpm <cmd>` works from PowerShell (Bash's `pnpm` also fails — same root cause).
+- This session's branch was cut before Session 12 merged, so `docs/Pendencias.md` and this file had a merge conflict (both sessions appending to the same section) — resolved by ordering entries chronologically and renumbering this one from the original "Session 12" to "Session 13".
 
 **Decisions:** none — pure bug fix, no new architectural surface.
 
-**Next steps:** the pre-existing login/register silent-failure bug (Session 11) is still open. Content-authoring for the 12 empty Domain 2–4 topics remains the main remaining work — see `Pendencias.md`.
+**Next steps:** content-authoring for the 12 empty Domain 2–4 topics remains the main remaining work — see `Pendencias.md`.

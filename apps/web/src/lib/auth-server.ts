@@ -10,6 +10,16 @@ export interface PublicUser {
   createdAt: string;
 }
 
+export interface AuthFormState {
+  error: string | null;
+}
+
+export function extractApiErrorMessage(error: ApiError): string {
+  const body = error.body as { message?: string | string[] } | null | undefined;
+  const message = Array.isArray(body?.message) ? body.message.join(' ') : body?.message;
+  return message ?? 'Algo deu errado. Tente novamente.';
+}
+
 interface AuthTokensResponse {
   accessToken: string;
   refreshToken: string;

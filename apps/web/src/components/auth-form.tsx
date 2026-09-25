@@ -1,58 +1,37 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
+import { useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
+import { loginAction } from '@/app/login/actions';
+import { registerAction } from '@/app/register/actions';
+import type { AuthFormState } from '@/lib/auth-server';
 
 interface AuthFormProps {
   mode: 'login' | 'register';
 }
 
-export function AuthForm({ mode }: AuthFormProps) {
-  const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+const initialState: AuthFormState = { error: null };
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError(null);
-    setIsSubmitting(true);
-
-    const formData = new FormData(event.currentTarget);
-    const payload =
-      mode === 'register'
-        ? {
-            name: formData.get('name'),
-            email: formData.get('email'),
-            password: formData.get('password'),
-          }
-        : {
-            email: formData.get('email'),
-            password: formData.get('password'),
-          };
-
-    try {
-      const res = await fetch(`/api/auth/${mode}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        const message = Array.isArray(body?.message) ? body.message.join(' ') : body?.message;
-        setError(message ?? 'Algo deu errado. Tente novamente.');
-        return;
-      }
-
-      router.push('/dashboard');
-      router.refresh();
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
+function SubmitButton({ mode }: { mode: 'login' | 'register' }) {
+  const { pending } = useFormStatus();
 
   return (
-    <form onSubmit={handleSubmit} className="flex w-full max-w-sm flex-col gap-4">
+    <button
+      type="submit"
+      disabled={pending}
+      className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-50"
+    >
+      {pending ? 'Aguarde…' : mode === 'login' ? 'Entrar' : 'Criar conta'}
+    </button>
+  );
+}
+
+export function AuthForm({ mode }: AuthFormProps) {
+  const action = mode === 'login' ? loginAction : registerAction;
+  const [state, formAction] = useActionState(action, initialState);
+
+  return (
+    <form action={formAction} className="flex w-full max-w-sm flex-col gap-4">
       {mode === 'register' && (
         <label className="flex flex-col gap-1 text-sm font-medium">
           Nome
@@ -87,15 +66,9 @@ export function AuthForm({ mode }: AuthFormProps) {
         />
       </label>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {state.error && <p className="text-sm text-red-600">{state.error}</p>}
 
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-50"
-      >
-        {isSubmitting ? 'Aguarde…' : mode === 'login' ? 'Entrar' : 'Criar conta'}
-      </button>
+      <SubmitButton mode={mode} />
     </form>
   );
 }
