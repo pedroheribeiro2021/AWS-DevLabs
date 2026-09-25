@@ -1,7 +1,9 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { AppNav } from '@/components/app-nav';
+import { GamificationHeader } from '@/components/gamification-header';
 import { getCurrentUser } from '@/lib/auth-server';
+import { getGamificationStats } from '@/lib/gamification';
 import { getTrack } from '@/lib/learning';
 
 const DEFAULT_CERTIFICATION_SLUG = 'aws-certified-developer-associate';
@@ -19,13 +21,18 @@ export default async function DashboardPage() {
     redirect('/login');
   }
 
-  const track = await getTrack(DEFAULT_CERTIFICATION_SLUG);
+  const [track, gamificationStats] = await Promise.all([
+    getTrack(DEFAULT_CERTIFICATION_SLUG),
+    getGamificationStats(),
+  ]);
   const lessons = track.examVersions.flatMap((ev) => ev.domains).flatMap((d) => d.topics).flatMap((t) => t.lessons);
   const completedCount = lessons.filter((lesson) => lesson.status === 'COMPLETED').length;
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-4 py-10 sm:py-16">
       <AppNav title={`Olá, ${user.name}`} />
+
+      <GamificationHeader stats={gamificationStats} />
 
       <section className="rounded-lg border border-slate-200 bg-white p-5">
         <h2 className="text-lg font-semibold">{track.name}</h2>

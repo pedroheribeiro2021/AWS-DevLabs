@@ -1,11 +1,13 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { XpBanner } from '@/components/xp-banner';
 import { getCurrentUser } from '@/lib/auth-server';
 import { getQuestion } from '@/lib/questions';
 import { submitQuestionAnswer } from './actions';
 
 interface QuestionPageProps {
   params: Promise<{ questionId: string }>;
+  searchParams: Promise<{ xp?: string; level?: string; streak?: string }>;
 }
 
 const DIFFICULTY_LABEL: Record<string, string> = {
@@ -14,7 +16,7 @@ const DIFFICULTY_LABEL: Record<string, string> = {
   HARD: 'Difícil',
 };
 
-export default async function QuestionPage({ params }: QuestionPageProps) {
+export default async function QuestionPage({ params, searchParams }: QuestionPageProps) {
   const user = await getCurrentUser();
 
   if (!user) {
@@ -22,6 +24,7 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
   }
 
   const { questionId } = await params;
+  const { xp, level, streak } = await searchParams;
   const question = await getQuestion(questionId);
   const action = submitQuestionAnswer.bind(null, questionId);
   const inputType = question.multipleCorrect ? 'checkbox' : 'radio';
@@ -31,6 +34,8 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
       <Link href="/questions" className="text-sm text-slate-500 hover:underline">
         ← Voltar às questões
       </Link>
+
+      <XpBanner xp={xp} level={level} streak={streak} />
 
       <div>
         <p className="text-sm text-slate-500">

@@ -1,0 +1,5 @@
+export const XP_LESSON_COMPLETED = 15;
+export const XP_LAB_COMPLETED = 25;
+export const XP_QUESTION_FIRST_CORRECT = 10;
+export const XP_SIMULATION_COMPLETED = 20;
+export const XP_SIMULATION_PASSED_BONUS = 30;

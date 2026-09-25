@@ -1,14 +1,16 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { XpBanner } from '@/components/xp-banner';
 import { getCurrentUser } from '@/lib/auth-server';
 import { getLab } from '@/lib/labs';
 import { completeLabAction, startLabAction } from './actions';
 
 interface LabPageProps {
   params: Promise<{ labId: string }>;
+  searchParams: Promise<{ xp?: string; level?: string; streak?: string }>;
 }
 
-export default async function LabPage({ params }: LabPageProps) {
+export default async function LabPage({ params, searchParams }: LabPageProps) {
   const user = await getCurrentUser();
 
   if (!user) {
@@ -16,6 +18,7 @@ export default async function LabPage({ params }: LabPageProps) {
   }
 
   const { labId } = await params;
+  const { xp, level, streak } = await searchParams;
   const lab = await getLab(labId);
   const start = startLabAction.bind(null, labId);
   const complete = completeLabAction.bind(null, labId);
@@ -25,6 +28,8 @@ export default async function LabPage({ params }: LabPageProps) {
       <Link href="/labs" className="text-sm text-slate-500 hover:underline">
         ← Voltar aos laboratórios
       </Link>
+
+      <XpBanner xp={xp} level={level} streak={streak} />
 
       <div>
         <p className="text-sm text-slate-500">

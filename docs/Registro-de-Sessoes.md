@@ -280,3 +280,22 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 **Decisions:** none — pure bug fix, no new architectural surface.
 
 **Next steps:** content-authoring for the 12 empty Domain 2–4 topics remains the main remaining work — see `Pendencias.md`.
+
+---
+
+## 2026-09-25 — Session 14: gamification, phase 1 (XP, levels, daily streaks)
+
+**Goal:** Pedro said the platform still felt "massante" despite all the content mechanics being in place, and asked for it to be more gamified and dynamic. Aligned on scope first: he wants XP/levels, streaks, badges, and a visual skill-tree track, in that priority, but explicitly asked for a small working slice before the full system. Shipped slice 1: XP, levels, and daily streaks, wired into all four existing completion actions.
+
+**Changes:**
+
+- Schema: `User.xp`, `User.currentStreak`, `User.longestStreak`, `User.lastActivityDate` (migration `add_gamification_fields`, applied to the shared Neon dev DB). See **ADR 0005** for why these live on `User` directly, why there's no XP ledger table yet, and the leveling/streak formulas.
+- `apps/api`: new `GamificationModule` (`xp.ts`/`streak.ts` pure functions + `GamificationService.awardXp`/`getStats`, `GET /gamification/me`). Wired into `LearningService.completeLesson` (+15 XP), `LabsService.complete` (+25 XP), `QuestionsService.submitAnswer` (+10 XP on a user's first-ever correct answer to a question), and `SimulationsService.finalize` (+20 XP on completion, +30 more if passed) — each gated on the action's existing completion state so XP is awarded exactly once, not a new ledger. 14 new unit tests for the level/streak formulas (`xp.spec.ts`, `streak.spec.ts`); all 39 existing e2e tests still pass unmodified since they don't assert exact response shapes.
+- `apps/web`: dashboard gained a `<GamificationHeader>` (level badge, XP progress bar to next level, streak counter) fetched via a new `getGamificationStats()`. The four completion Server Actions (`markLessonComplete`, `completeLabAction`, `submitQuestionAnswer`, `confirmSubmitSimulation`) now redirect to the same/next page with the XP result encoded as a query string (`?xp=&level=&streak=`), rendered by a new `<XpBanner>` — no new client state needed, matches the query-param pattern the simulation question navigator already used.
+- Verified end-to-end in a real browser: registered a fresh user (started at Level 1, 0 XP, 0-day streak), completed a lesson (+15 XP, banner showed "+15 XP 🔥 1 dia seguido", dashboard reflected 15/100 XP and the streak), then answered a question correctly (+10 XP banner, no streak note since it was the same day — correct, since the streak already counted today).
+
+**Process note:** caught and fixed a real grammar bug in `<XpBanner>` during manual testing — "1 dia seguidos" (missing agreement on "seguido/seguidos") — before it shipped, by testing the actual rendered banner rather than just reading the JSX.
+
+**Decisions:** ADR 0005 (gamification data model, leveling/streak formulas, what's deliberately deferred).
+
+**Next steps:** badges/achievements and the visual skill-tree track (mentioned by Pedro, deferred by explicit agreement) are the natural next gamification phases — see `Pendencias.md`. Flashcards were excluded from XP-awarding this round (repeatable-review nature doesn't fit the same first-completion gating) and need their own design pass alongside badges.

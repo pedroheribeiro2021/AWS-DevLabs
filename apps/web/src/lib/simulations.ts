@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { apiFetch } from './api';
 import { ACCESS_TOKEN_COOKIE } from './auth-cookies';
+import type { GamificationResult } from './gamification';
 
 export type SimulationStatus = 'IN_PROGRESS' | 'COMPLETED' | 'ABANDONED';
 
@@ -109,8 +110,10 @@ export function updateSimulationQuestion(
   });
 }
 
-export function submitSimulation(attemptId: string): Promise<SimulationReview> {
-  return authorizedFetch<SimulationReview>(`/simulations/${attemptId}/submit`, {
+export function submitSimulation(
+  attemptId: string,
+): Promise<SimulationReview & { gamification: GamificationResult | null }> {
+  return authorizedFetch(`/simulations/${attemptId}/submit`, {
     method: 'POST',
   });
 }

@@ -1,11 +1,16 @@
 import { NotFoundException } from '@nestjs/common';
 import { Injectable } from '@nestjs/common';
 import { ProgressStatus } from '@aws-devlab/database';
+import { GamificationService } from '../gamification/gamification.service.js';
+import { XP_LESSON_COMPLETED } from '../gamification/xp-amounts.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 
 @Injectable()
 export class LearningService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gamification: GamificationService,
+  ) {}
 
   async getTrack(certificationSlug: string, userId: string) {
     const certification = await this.prisma.client.certification.findUnique({
@@ -107,7 +112,12 @@ export class LearningService {
       throw new NotFoundException('Lição não encontrada.');
     }
 
-    return this.prisma.client.userProgress.upsert({
+    const existing = await this.prisma.client.userProgress.findUnique({
+      where: { userId_lessonId: { userId, lessonId } },
+    });
+    const alreadyCompleted = existing?.status === ProgressStatus.COMPLETED;
+
+    const progress = await this.prisma.client.userProgress.upsert({
       where: { userId_lessonId: { userId, lessonId } },
       update: { status: ProgressStatus.COMPLETED, completedAt: new Date() },
       create: {
@@ -117,6 +127,12 @@ export class LearningService {
         completedAt: new Date(),
       },
     });
+
+    const gamification = alreadyCompleted
+      ? null
+      : await this.gamification.awardXp(userId, XP_LESSON_COMPLETED);
+
+    return { ...progress, gamification };
   }
 
   private async getProgressMap(userId: string, lessonIds: string[]) {

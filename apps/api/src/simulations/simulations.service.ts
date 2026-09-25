@@ -1,5 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, SimulationStatus } from '@aws-devlab/database';
+import { GamificationResult, GamificationService } from '../gamification/gamification.service.js';
+import { XP_SIMULATION_COMPLETED, XP_SIMULATION_PASSED_BONUS } from '../gamification/xp-amounts.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { selectSimulationQuestionIds } from './question-selection.js';
 import { computeExpiresAt, isExpired, remainingSeconds } from './simulation-time.js';
@@ -16,7 +18,10 @@ type OwnedSimulationAttempt = Prisma.SimulationAttemptGetPayload<{
 
 @Injectable()
 export class SimulationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gamification: GamificationService,
+  ) {}
 
   async findAll(userId: string) {
     return this.prisma.client.simulationAttempt.findMany({
@@ -176,11 +181,13 @@ export class SimulationsService {
   async submit(attemptId: string, userId: string) {
     const attempt = await this.getOwnedAttempt(attemptId, userId);
 
+    let gamification: GamificationResult | null = null;
     if (attempt.status === SimulationStatus.IN_PROGRESS) {
-      await this.finalize(attempt.id);
+      gamification = await this.finalize(attempt.id);
     }
 
-    return this.review(attemptId, userId);
+    const review = await this.review(attemptId, userId);
+    return { ...review, gamification };
   }
 
   async review(attemptId: string, userId: string) {
@@ -253,14 +260,14 @@ export class SimulationsService {
     return attempt;
   }
 
-  private async finalize(attemptId: string) {
+  private async finalize(attemptId: string): Promise<GamificationResult | null> {
     const attempt = await this.prisma.client.simulationAttempt.findUnique({
       where: { id: attemptId },
       include: ownedAttemptInclude,
     });
 
     if (!attempt || attempt.status !== SimulationStatus.IN_PROGRESS) {
-      return;
+      return null;
     }
 
     let correctCount = 0;
@@ -295,6 +302,7 @@ export class SimulationsService {
       attempt.questions.length > 0
         ? Math.round((correctCount / attempt.questions.length) * 100)
         : 0;
+    const passed = scorePercent >= (examVersion?.passingScorePercent ?? 100);
 
     await this.prisma.client.simulationAttempt.update({
       where: { id: attempt.id },
@@ -303,8 +311,11 @@ export class SimulationsService {
         completedAt: new Date(),
         correctCount,
         scorePercent,
-        passed: scorePercent >= (examVersion?.passingScorePercent ?? 100),
+        passed,
       },
     });
+
+    const xpAmount = XP_SIMULATION_COMPLETED + (passed ? XP_SIMULATION_PASSED_BONUS : 0);
+    return this.gamification.awardXp(attempt.userId, xpAmount);
   }
 }

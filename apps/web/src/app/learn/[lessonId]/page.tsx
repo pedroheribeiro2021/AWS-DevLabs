@@ -1,14 +1,16 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { XpBanner } from '@/components/xp-banner';
 import { getCurrentUser } from '@/lib/auth-server';
 import { getLesson } from '@/lib/learning';
 import { markLessonComplete } from './actions';
 
 interface LessonPageProps {
   params: Promise<{ lessonId: string }>;
+  searchParams: Promise<{ xp?: string; level?: string; streak?: string }>;
 }
 
-export default async function LessonPage({ params }: LessonPageProps) {
+export default async function LessonPage({ params, searchParams }: LessonPageProps) {
   const user = await getCurrentUser();
 
   if (!user) {
@@ -16,6 +18,7 @@ export default async function LessonPage({ params }: LessonPageProps) {
   }
 
   const { lessonId } = await params;
+  const { xp, level, streak } = await searchParams;
   const lesson = await getLesson(lessonId);
   const completeAction = markLessonComplete.bind(null, lessonId);
 
@@ -24,6 +27,8 @@ export default async function LessonPage({ params }: LessonPageProps) {
       <Link href="/dashboard" className="text-sm text-slate-500 hover:underline">
         ← Voltar ao painel
       </Link>
+
+      <XpBanner xp={xp} level={level} streak={streak} />
 
       <div>
         <p className="text-sm text-slate-500">

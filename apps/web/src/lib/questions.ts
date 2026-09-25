@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { apiFetch } from './api';
 import { ACCESS_TOKEN_COOKIE } from './auth-cookies';
+import type { GamificationResult } from './gamification';
 
 export type QuestionType = 'KNOWLEDGE' | 'APPLICATION' | 'SCENARIO' | 'EXAM_LEVEL';
 export type QuestionDifficulty = 'EASY' | 'MEDIUM' | 'HARD';
@@ -58,7 +59,10 @@ export function getQuestion(questionId: string): Promise<QuestionDetail> {
   return authorizedFetch<QuestionDetail>(`/questions/${questionId}`);
 }
 
-export function submitAnswer(questionId: string, selectedOptionIds: string[]) {
+export function submitAnswer(
+  questionId: string,
+  selectedOptionIds: string[],
+): Promise<QuestionDetail & { gamification: GamificationResult | null }> {
   return authorizedFetch(`/questions/${questionId}/answer`, {
     method: 'POST',
     body: JSON.stringify({ selectedOptionIds }),
