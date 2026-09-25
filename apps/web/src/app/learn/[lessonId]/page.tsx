@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { MarkdownContent } from '@/components/markdown-content';
 import { XpBanner } from '@/components/xp-banner';
 import { getCurrentUser } from '@/lib/auth-server';
 import { getLesson } from '@/lib/learning';
@@ -38,8 +39,8 @@ export default async function LessonPage({ params, searchParams }: LessonPagePro
         <p className="mt-1 text-sm text-slate-500">{lesson.estimatedMinutes} min de leitura</p>
       </div>
 
-      <article className="whitespace-pre-wrap rounded-lg border border-slate-200 bg-white p-6 text-sm leading-relaxed text-slate-800">
-        {lesson.content}
+      <article className="rounded-lg border border-slate-200 bg-white p-6 text-sm leading-relaxed text-slate-800">
+        <MarkdownContent content={lesson.content} />
       </article>
 
       {lesson.resources.length > 0 && (
