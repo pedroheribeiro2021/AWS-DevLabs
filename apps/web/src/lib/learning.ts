@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { apiFetch } from './api';
 import { ACCESS_TOKEN_COOKIE } from './auth-cookies';
+import type { GamificationResult } from './gamification';
 
 export type LessonStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED';
 
@@ -65,6 +66,8 @@ export function getLesson(lessonId: string): Promise<LessonDetail> {
   return authorizedFetch<LessonDetail>(`/learning/lessons/${lessonId}`);
 }
 
-export function completeLesson(lessonId: string) {
+export function completeLesson(
+  lessonId: string,
+): Promise<{ gamification: GamificationResult | null }> {
   return authorizedFetch(`/learning/lessons/${lessonId}/complete`, { method: 'POST' });
 }

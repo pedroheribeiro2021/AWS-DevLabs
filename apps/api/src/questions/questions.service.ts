@@ -1,5 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type { QuestionDifficulty, QuestionType } from '@aws-devlab/database';
+import { GamificationService } from '../gamification/gamification.service.js';
+import { XP_QUESTION_FIRST_CORRECT } from '../gamification/xp-amounts.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 
 interface FindAllFilters {
@@ -9,7 +11,10 @@ interface FindAllFilters {
 
 @Injectable()
 export class QuestionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gamification: GamificationService,
+  ) {}
 
   async findAll(userId: string, filters: FindAllFilters) {
     const questions = await this.prisma.client.question.findMany({
@@ -114,10 +119,22 @@ export class QuestionsService {
       correctOptionIds.length === selectedSorted.length &&
       correctOptionIds.every((id, index) => id === selectedSorted[index]);
 
+    const hadPriorCorrectAnswer = isCorrect
+      ? (await this.prisma.client.questionAnswer.count({
+          where: { userId, questionId, isCorrect: true },
+        })) > 0
+      : false;
+
     await this.prisma.client.questionAnswer.create({
       data: { userId, questionId, selectedOptionIds, isCorrect },
     });
 
-    return this.findOne(questionId, userId);
+    const gamification =
+      isCorrect && !hadPriorCorrectAnswer
+        ? await this.gamification.awardXp(userId, XP_QUESTION_FIRST_CORRECT)
+        : null;
+
+    const detail = await this.findOne(questionId, userId);
+    return { ...detail, gamification };
   }
 }

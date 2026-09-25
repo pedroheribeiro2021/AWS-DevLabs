@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { apiFetch } from './api';
 import { ACCESS_TOKEN_COOKIE } from './auth-cookies';
+import type { GamificationResult } from './gamification';
 
 export type LabStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED';
 
@@ -62,6 +63,6 @@ export function startLab(labId: string) {
   return authorizedFetch(`/labs/${labId}/start`, { method: 'POST' });
 }
 
-export function completeLab(labId: string) {
+export function completeLab(labId: string): Promise<{ gamification: GamificationResult | null }> {
   return authorizedFetch(`/labs/${labId}/complete`, { method: 'POST' });
 }

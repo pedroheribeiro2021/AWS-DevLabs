@@ -1,10 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ProgressStatus } from '@aws-devlab/database';
+import { GamificationService } from '../gamification/gamification.service.js';
+import { XP_LAB_COMPLETED } from '../gamification/xp-amounts.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 
 @Injectable()
 export class LabsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gamification: GamificationService,
+  ) {}
 
   async findAll(userId: string) {
     const labs = await this.prisma.client.lab.findMany({
@@ -61,7 +66,12 @@ export class LabsService {
   async complete(labId: string, userId: string) {
     await this.ensureLabExists(labId);
 
-    return this.prisma.client.labAttempt.upsert({
+    const existing = await this.prisma.client.labAttempt.findUnique({
+      where: { userId_labId: { userId, labId } },
+    });
+    const alreadyCompleted = existing?.status === ProgressStatus.COMPLETED;
+
+    const attempt = await this.prisma.client.labAttempt.upsert({
       where: { userId_labId: { userId, labId } },
       update: { status: ProgressStatus.COMPLETED, completedAt: new Date() },
       create: {
@@ -72,6 +82,12 @@ export class LabsService {
         completedAt: new Date(),
       },
     });
+
+    const gamification = alreadyCompleted
+      ? null
+      : await this.gamification.awardXp(userId, XP_LAB_COMPLETED);
+
+    return { ...attempt, gamification };
   }
 
   private async ensureLabExists(labId: string) {

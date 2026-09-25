@@ -1,19 +1,22 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { XpBanner } from '@/components/xp-banner';
 import { getCurrentUser } from '@/lib/auth-server';
 import { getSimulationReview } from '@/lib/simulations';
 
 interface ReviewPageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ xp?: string; level?: string; streak?: string }>;
 }
 
-export default async function SimulationReviewPage({ params }: ReviewPageProps) {
+export default async function SimulationReviewPage({ params, searchParams }: ReviewPageProps) {
   const user = await getCurrentUser();
   if (!user) {
     redirect('/login');
   }
 
   const { id } = await params;
+  const { xp, level, streak } = await searchParams;
   const review = await getSimulationReview(id);
 
   return (
@@ -21,6 +24,8 @@ export default async function SimulationReviewPage({ params }: ReviewPageProps) 
       <Link href="/simulations" className="text-sm text-slate-500 hover:underline">
         ← Voltar aos simulados
       </Link>
+
+      <XpBanner xp={xp} level={level} streak={streak} />
 
       <div
         className={
