@@ -2,7 +2,7 @@ import Link from 'next/link';
 
 export default function Home() {
   return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-6 px-4 py-16 text-center">
+    <main className="flex flex-1 flex-col items-center justify-center gap-6 px-4 py-10 sm:py-16 text-center">
       <h1 className="text-4xl font-bold tracking-tight">AWS DevLab</h1>
       <p className="max-w-md text-slate-600">
         Aprenda AWS fazendo AWS. Conteúdo estruturado, laboratórios práticos e exercícios para a

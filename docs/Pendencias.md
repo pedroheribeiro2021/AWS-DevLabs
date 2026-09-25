@@ -15,6 +15,9 @@ New entries from Session 2 onward are in English (see `Registro-de-Sessoes.md`).
 
 ## Done
 
+### Session 12 (2026-09-25) — mobile-first responsive fixes
+- Fixed `AppNav` (shared by every authenticated page) overflowing horizontally on real phone widths — title/nav/logout now stack and wrap below the `sm` breakpoint instead of forcing everything into one unbroken row. Also tightened mobile vertical padding (`py-16` → `py-10 sm:py-16`) across all pages, fixed the simulation-taking page's 3-button footer to stack on mobile, and stopped list-item status badges from crowding long titles. Verified at a real 390px viewport in a browser. See Session 12 log for details and an incidental encoding-corruption near-miss (caught before commit).
+
 ### Session 9 (2026-09-18) — Render migration + visual identity
 - Moved `apps/api` from Vercel to Render (Web Service, free tier, `apps/api` as root directory, `pnpm install --frozen-lockfile; pnpm run build` build command, `node dist/main.js` start command). Confirmed working end-to-end: `/health` and `/certifications` respond correctly, and a real register → dashboard flow succeeds against production. Root cause of the Vercel failure never fully identified at the code level (see ADR 0004's update) — moving to a persistent Node process instead of a serverless function sidestepped it entirely, no application code changes needed beyond what was already in place from the Vercel debugging.
 - Updated `apps/web`'s `API_URL` production env var to point at the new Render URL and redeployed.

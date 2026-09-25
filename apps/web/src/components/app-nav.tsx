@@ -12,10 +12,10 @@ export function AppNav({ title }: AppNavProps) {
       <Link href="/dashboard" className="w-fit">
         <Logo />
       </Link>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-6">
-          <h1 className="text-2xl font-bold">{title}</h1>
-          <nav className="flex gap-4 text-sm font-medium text-slate-600">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
+          <h1 className="text-xl font-bold sm:text-2xl">{title}</h1>
+          <nav className="flex flex-wrap gap-x-4 gap-y-2 text-sm font-medium text-slate-600">
             <Link href="/dashboard" className="hover:text-slate-900">
               Painel
             </Link>

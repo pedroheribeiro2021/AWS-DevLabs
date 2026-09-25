@@ -20,7 +20,7 @@ export default async function LessonPage({ params }: LessonPageProps) {
   const completeAction = markLessonComplete.bind(null, lessonId);
 
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-4 py-16">
+    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-4 py-10 sm:py-16">
       <Link href="/dashboard" className="text-sm text-slate-500 hover:underline">
         ← Voltar ao painel
       </Link>

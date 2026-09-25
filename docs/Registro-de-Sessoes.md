@@ -235,3 +235,28 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 **Decisions:** none beyond the DVA-C02 correction (a factual fix, not a design decision) and the domain/topic map, which follows the official exam guide directly rather than inventing structure.
 
 **Next steps:** the login/register form's silent-failure bug (see process note) is worth a dedicated look. Otherwise, content-authoring for the 12 new empty topics (lessons, labs, questions, flashcards) is the real remaining work before simulations feel like the real exam — see `Pendencias.md`.
+
+---
+
+## 2026-09-25 — Session 12: mobile-first responsive fixes
+
+**Goal:** Pedro tested the app on his phone and reported the layout as badly broken ("toda mal diagramada"). Diagnosed and fixed the actual responsive bugs rather than guessing from a desktop view.
+
+**Root cause:** `AppNav` (shared by Dashboard, Labs, Questões, Flashcards, Simulados — every authenticated screen) laid out the title, all 5 nav links, and the logout button in a single non-wrapping flex row. On a real phone width (~390px) this overflowed horizontally: most of the nav (Flashcards, Simulados, Sair) was pushed off-screen and inaccessible, and the page gained a horizontal scrollbar on top of the vertical one. No responsive breakpoints existed anywhere in the codebase before this session.
+
+**Changes:**
+
+- `app-nav.tsx`: title/nav/logout now stack vertically below the `sm` breakpoint and go horizontal above it; the nav itself uses `flex-wrap` so it degrades gracefully even before that breakpoint.
+- All 16 page `<main>` containers: `py-16` → `py-10 sm:py-16` (the fixed 64px top/bottom padding was eating a disproportionate share of a phone screen).
+- `simulations/[id]` (the timed exam UI): the 3-button footer (Anterior / Enviar simulado / Salvar e continuar) now stacks full-width on mobile instead of squeezing into one row.
+- Dashboard's lesson rows and the Labs list's status badges: switched `items-center` → `items-start` and added `shrink-0` to the badge so a long title no longer crowds/overlaps the status text at narrow widths.
+- Verified end-to-end at a real 390px mobile viewport in a real browser (dashboard, labs, questions, simulations list, login, register) — nav wraps cleanly onto two lines, no horizontal overflow anywhere, badges no longer crowd list items.
+
+**Process notes / environment findings:**
+- The Claude-in-Chrome extension's window-resize tool did not actually shrink the tab's viewport in this environment (window stayed at full screen size, resize calls silently no-op'd). Worked around it by injecting a fixed-width `<iframe>` into a real tab as a same-origin mobile-viewport emulator — a reusable trick if this comes up again.
+- A PowerShell bulk-edit (`Get-Content -Raw` / `Set-Content -NoNewline`) used partway through this session **silently corrupted 8 files**: it re-wrote them with a non-UTF-8 encoding (mangling every accented Portuguese character into mojibake, e.g. `Não` → `NÃ£o`) and prepended a stray UTF-8 BOM to each. Caught immediately via `git diff` before committing — fixed with targeted string edits and stripping the BOM bytes. **Lesson: never use PowerShell `Get-Content`/`Set-Content` for bulk text edits on this repo's UTF-8 files — use per-file targeted find/replace instead.** `git checkout -- <path>` (the clean revert-and-redo path) was blocked by the harness's destructive-action guard, which is why the fix was surgical rather than a revert.
+- `pnpm` is not on this machine's `PATH` directly; `corepack pnpm <cmd>` works from PowerShell (Bash's `pnpm` also fails — same root cause).
+
+**Decisions:** none — pure bug fix, no new architectural surface.
+
+**Next steps:** the pre-existing login/register silent-failure bug (Session 11) is still open. Content-authoring for the 12 empty Domain 2–4 topics remains the main remaining work — see `Pendencias.md`.
