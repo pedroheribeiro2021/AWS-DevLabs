@@ -1,19 +1,13 @@
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { AppNav } from '@/components/app-nav';
 import { BadgesSection } from '@/components/badges-section';
 import { GamificationHeader } from '@/components/gamification-header';
+import { SkillTree } from '@/components/skill-tree';
 import { getCurrentUser } from '@/lib/auth-server';
 import { getGamificationStats } from '@/lib/gamification';
 import { getTrack } from '@/lib/learning';
 
 const DEFAULT_CERTIFICATION_SLUG = 'aws-certified-developer-associate';
-
-const STATUS_LABEL: Record<string, string> = {
-  NOT_STARTED: 'Não iniciada',
-  IN_PROGRESS: 'Em andamento',
-  COMPLETED: 'Concluída',
-};
 
 export default async function DashboardPage() {
   const user = await getCurrentUser();
@@ -52,36 +46,11 @@ export default async function DashboardPage() {
 
       {track.examVersions.map((examVersion) =>
         examVersion.domains.map((domain) => (
-          <section key={domain.id} className="flex flex-col gap-3">
-            <h3 className="text-base font-semibold text-slate-800">
+          <section key={domain.id} className="rounded-lg border border-slate-200 bg-white p-5">
+            <h3 className="mb-4 text-base font-semibold text-slate-800">
               {domain.name} <span className="font-normal text-slate-500">({domain.weightPercent}%)</span>
             </h3>
-            {domain.topics.map((topic) => (
-              <div key={topic.id} className="rounded-lg border border-slate-200 bg-white p-4">
-                <h4 className="mb-2 font-medium text-slate-700">{topic.name}</h4>
-                <ul className="flex flex-col gap-1">
-                  {topic.lessons.map((lesson) => (
-                    <li key={lesson.id}>
-                      <Link
-                        href={`/learn/${lesson.id}`}
-                        className="flex items-start justify-between gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-slate-50"
-                      >
-                        <span>{lesson.title}</span>
-                        <span
-                          className={
-                            lesson.status === 'COMPLETED'
-                              ? 'shrink-0 text-xs font-medium text-green-600'
-                              : 'shrink-0 text-xs text-slate-400'
-                          }
-                        >
-                          {STATUS_LABEL[lesson.status]}
-                        </span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+            <SkillTree topics={domain.topics} />
           </section>
         )),
       )}
