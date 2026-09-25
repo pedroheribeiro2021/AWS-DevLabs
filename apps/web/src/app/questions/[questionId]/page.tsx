@@ -7,7 +7,7 @@ import { submitQuestionAnswer } from './actions';
 
 interface QuestionPageProps {
   params: Promise<{ questionId: string }>;
-  searchParams: Promise<{ xp?: string; level?: string; streak?: string }>;
+  searchParams: Promise<{ xp?: string; level?: string; streak?: string; badges?: string }>;
 }
 
 const DIFFICULTY_LABEL: Record<string, string> = {
@@ -24,7 +24,7 @@ export default async function QuestionPage({ params, searchParams }: QuestionPag
   }
 
   const { questionId } = await params;
-  const { xp, level, streak } = await searchParams;
+  const { xp, level, streak, badges } = await searchParams;
   const question = await getQuestion(questionId);
   const action = submitQuestionAnswer.bind(null, questionId);
   const inputType = question.multipleCorrect ? 'checkbox' : 'radio';
@@ -35,7 +35,7 @@ export default async function QuestionPage({ params, searchParams }: QuestionPag
         ← Voltar às questões
       </Link>
 
-      <XpBanner xp={xp} level={level} streak={streak} />
+      <XpBanner xp={xp} level={level} streak={streak} badges={badges} />
 
       <div>
         <p className="text-sm text-slate-500">

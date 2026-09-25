@@ -32,8 +32,24 @@ model User {
   questionAnswers   QuestionAnswer[]
   flashcardProgress UserFlashcardProgress[]
   simulationAttempts SimulationAttempt[]
+  badges            UserBadge[]
 
   @@map("users")
+}
+
+// badgeId matches a key in the code-level badge catalog
+// (apps/api/src/gamification/badges.ts), not a foreign key to a table --
+// the catalog is small and curated, so it lives in code, not data.
+model UserBadge {
+  id       String   @id @default(cuid())
+  userId   String
+  badgeId  String
+  earnedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, badgeId])
+  @@map("user_badges")
 }
 
 model Certification {

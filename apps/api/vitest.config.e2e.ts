@@ -11,6 +11,9 @@ export default defineConfig({
     globals: true,
     root: './',
     include: ['**/*.e2e-spec.ts'],
+    // Default (5000ms) is too tight for flows that award XP: each award now also
+    // evaluates the badge catalog, adding several more real round trips to Neon.
+    testTimeout: 15000,
     env: {
       NODE_ENV: 'test',
     },
