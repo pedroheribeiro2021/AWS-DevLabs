@@ -95,18 +95,7 @@ async function main() {
       },
     }));
 
-  const existingLesson = await prisma.lesson.findFirst({
-    where: { topicId: topic.id, title: 'O que é o AWS Lambda?' },
-  });
-
-  if (!existingLesson) {
-    await prisma.lesson.create({
-      data: {
-        topicId: topic.id,
-        order: 1,
-        estimatedMinutes: 8,
-        title: 'O que é o AWS Lambda?',
-        content: `## Objetivo
+  const lambdaLessonContent = `## Objetivo
 
 Ao final desta lição você vai conseguir explicar o que é o AWS Lambda, por que ele existe e reconhecer o tipo de carga de trabalho em que ele é uma boa escolha.
 
@@ -130,7 +119,28 @@ Na primeira vez que uma função roda (ou depois de ficar ociosa), o Lambda prec
 
 ## Relação com a prova DVA-C02
 
-Fundamentos de Lambda aparecem em todo o domínio "Development with AWS Services" — espere questões de cenário sobre escolher Lambda vs. EC2/containers, e sobre diagnosticar latência causada por cold starts.`,
+Fundamentos de Lambda aparecem em todo o domínio "Development with AWS Services" — espere questões de cenário sobre escolher Lambda vs. EC2/containers, e sobre diagnosticar latência causada por cold starts.`;
+
+  const existingLesson = await prisma.lesson.findFirst({
+    where: { topicId: topic.id, title: 'O que é o AWS Lambda?' },
+  });
+
+  if (existingLesson) {
+    // Keeps previously-seeded content in sync with edits to this script (e.g. the
+    // DVA-C03 -> DVA-C02 rename in Session 11 fixed the source here but never
+    // reached the already-seeded row, since this block used to only ever `create`).
+    await prisma.lesson.update({
+      where: { id: existingLesson.id },
+      data: { content: lambdaLessonContent },
+    });
+  } else {
+    await prisma.lesson.create({
+      data: {
+        topicId: topic.id,
+        order: 1,
+        estimatedMinutes: 8,
+        title: 'O que é o AWS Lambda?',
+        content: lambdaLessonContent,
         resources: {
           create: [
             {

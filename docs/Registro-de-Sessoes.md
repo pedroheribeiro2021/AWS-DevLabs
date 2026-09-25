@@ -299,3 +299,21 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 **Decisions:** ADR 0005 (gamification data model, leveling/streak formulas, what's deliberately deferred).
 
 **Next steps:** badges/achievements and the visual skill-tree track (mentioned by Pedro, deferred by explicit agreement) are the natural next gamification phases — see `Pendencias.md`. Flashcards were excluded from XP-awarding this round (repeatable-review nature doesn't fit the same first-completion gating) and need their own design pass alongside badges.
+
+---
+
+## 2026-09-25 — Session 15: Markdown rendering + a stale-content bug it exposed
+
+**Goal:** Pedro reported the Lambda lesson's content displaying raw Markdown syntax (`## Objetivo` literally visible, etc.) instead of being rendered — `Lesson.content` has always been authored as Markdown (see Session 3), but the page only ever rendered it as `whitespace-pre-wrap` plain text.
+
+**Changes:**
+
+- Added `react-markdown` + `remark-gfm` to `apps/web` and a new `<MarkdownContent>` component (`apps/web/src/components/markdown-content.tsx`) with Tailwind-styled renderers for headings, paragraphs, lists, links, blockquotes, and code blocks, matching the app's existing visual language. Wired into `learn/[lessonId]/page.tsx` in place of the raw-text `<article>`. Scoped to lesson content only — checked the rest of the seed data (lab fields, question explanations, etc.) and confirmed none of it uses Markdown syntax, so nothing else needed this.
+- **Found and fixed a second, unrelated bug while verifying the fix in a real browser:** the lesson still showed "Relação com a prova **DVA-C03**" even though Session 11 renamed the exam code to DVA-C02 "everywhere it described the current product target," including "the seed script... and the Lambda lesson's prose." The rename *did* land in `seed.ts`'s source, but the seed script's lesson block was (and, for every other model, still is) a `findFirst` + `if (!existing) create` guard with no update path — so a source edit to already-seeded content silently never reaches the database on re-seed. Fixed by extracting the lesson's content into a `lambdaLessonContent` const and changing that one block to update existing rows too, then re-ran `pnpm db:seed` against the shared dev DB to apply the correction. Left every other model's seed guard (Lab, Question, Flashcard, Topic) as-is — this was a targeted fix for the one reported symptom, not a rewrite of the seeding strategy; see the new `Pendencias.md` entry.
+- Verified end-to-end in a real browser: the lesson now renders proper headings/paragraphs with no raw `##`, and the DVA-C02 correction is live.
+
+**Process note:** the same stale-seed gotcha (edit `seed.ts`, forget the already-seeded row never updates) will keep resurfacing during the upcoming 12-topic content-authoring push unless every model's seed block gets the same update-on-reseed treatment — flagged in `Pendencias.md` rather than fixed everywhere now, since changing seeding semantics broadly deserves its own look rather than riding along on an unrelated bug report.
+
+**Decisions:** none — two scoped bug fixes, no new architectural surface.
+
+**Next steps:** decide whether to generalize the seed script's update-on-reseed fix to Lab/Question/Flashcard/Topic before the 12-topic content-authoring push starts (see `Pendencias.md`), then continue into gamification phase 2 (badges or the visual skill-tree track — Pedro to pick) per Session 14.
