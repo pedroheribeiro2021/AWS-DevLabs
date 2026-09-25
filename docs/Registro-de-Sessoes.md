@@ -335,3 +335,23 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 **Decisions:** ADR 0006 (badge catalog as code, not data; no ledger yet; no XP for badges; domain badges deferred).
 
 **Next steps:** the visual skill-tree track is the last piece of Pedro's original gamification ask (Session 14) — natural next phase once he wants it. Otherwise the standing items remain: generalize the seed script's update-on-reseed fix (Session 15), and the 12-topic content-authoring push.
+
+---
+
+## 2026-09-25 — Session 17: gamification, phase 3 (visual skill-tree track)
+
+**Goal:** the last piece of Pedro's original gamification ask (Session 14) — replace the dashboard's flat "domain section → stacked topic cards → lesson list" layout with a visual, path-style track. Pedro said "pode seguir" (go ahead) after Session 16.
+
+**Changes:**
+
+- New `<SkillTree>` component (`apps/web/src/components/skill-tree.tsx`): renders a domain's topics as a vertical path — a connecting line down the left edge, each topic a numbered circular node whose fill/border color encodes state (dashed gray = no content yet, outlined = not started, orange ring = in progress, filled orange with a checkmark = all lessons done). Clicking a topic node (a native `<details>/<summary>`, zero client JS) expands it in place to reveal its lesson list — same links and status labels the flat layout already had, just revealed on demand instead of always-open. Topics with zero lessons render as a plain non-interactive node reading "Conteúdo em breve" instead of an empty expandable panel.
+- Wired into `dashboard/page.tsx` in place of the old inline `domain.topics.map(...)` block; each domain section keeps its heading/weight%, now wrapping a `<SkillTree topics={domain.topics} />`.
+- Deliberately no new architectural surface: no schema change, no new API endpoint, no new data shape — this is a pure rendering change over the same `Track`/`TrackTopic` data the flat layout already used. No ADR for the same reason logo work in Session 9 didn't get one (a visual-design choice, not an architectural decision).
+- Scoped down from a literal Duolingo-style serpentine (alternating left/right nodes) to a single-column vertical timeline: the serpentine's zigzag line only stays visually connected to node centers if node heights are fixed, which breaks the moment an expandable `<details>` panel opens at a variable height. A straight vertical line sidesteps that fragility entirely while still reading clearly as a "path," not "flat cards."
+- Verified end-to-end in a real browser: topics with content show correctly (numbered circles, orange-filled-with-checkmark for the one completed topic, dashed-gray "Conteúdo em breve" for the twelve empty ones), and expanding a topic reveals its lesson(s) with live status.
+
+**Process note:** clicking a `<summary>` element via the browser extension's synthetic mouse-click (CDP `Input.dispatchMouseEvent`) did not toggle the native `<details>` open state, even after several attempts and confirming click coordinates were correct — `document.querySelector('summary').click()` via the JS tool toggled it instantly and correctly. This looks like a CDP/synthetic-event quirk specific to native `<details>`/`<summary>` toggle behavior, not a bug in the component: real mouse/touch clicks trigger the browser's native toggle handling directly and aren't affected. Worth remembering if a `<details>` (or similar native-toggle element) ever "doesn't respond" to automated clicks again — verify with `.click()` via JS before concluding there's a real bug.
+
+**Decisions:** none — pure UI/rendering change.
+
+**Next steps:** this closes out Pedro's original gamification ask (XP/levels/streaks → badges → visual track). Standing items: generalize the seed script's update-on-reseed fix (Session 15), domain-level badges once more domains have content (ADR 0006), and the 12-topic content-authoring push — the skill tree will get visually much more interesting once that content exists.
