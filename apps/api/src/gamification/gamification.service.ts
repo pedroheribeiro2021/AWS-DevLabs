@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
+import type { BadgeDefinition } from './badges.js';
+import { BadgesService, type BadgeStatus } from './badges.service.js';
 import { updateStreak } from './streak.js';
 import { getLevelInfo } from './xp.js';
 
@@ -13,6 +15,7 @@ export interface GamificationResult {
   currentStreak: number;
   longestStreak: number;
   streakExtended: boolean;
+  newBadges: BadgeDefinition[];
 }
 
 export interface GamificationStats {
@@ -22,11 +25,15 @@ export interface GamificationStats {
   xpForLevel: number;
   currentStreak: number;
   longestStreak: number;
+  badges: BadgeStatus[];
 }
 
 @Injectable()
 export class GamificationService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly badges: BadgesService,
+  ) {}
 
   async awardXp(userId: string, amount: number): Promise<GamificationResult> {
     const user = await this.prisma.client.user.findUniqueOrThrow({
@@ -49,6 +56,8 @@ export class GamificationService {
       },
     });
 
+    const newBadges = await this.badges.evaluateAndAward(userId);
+
     return {
       xpAwarded: amount,
       xp: newXp,
@@ -59,14 +68,18 @@ export class GamificationService {
       currentStreak: streak.currentStreak,
       longestStreak: streak.longestStreak,
       streakExtended: streak.streakExtended,
+      newBadges,
     };
   }
 
   async getStats(userId: string): Promise<GamificationStats> {
-    const user = await this.prisma.client.user.findUniqueOrThrow({
-      where: { id: userId },
-      select: { xp: true, currentStreak: true, longestStreak: true },
-    });
+    const [user, badges] = await Promise.all([
+      this.prisma.client.user.findUniqueOrThrow({
+        where: { id: userId },
+        select: { xp: true, currentStreak: true, longestStreak: true },
+      }),
+      this.badges.getAllWithStatus(userId),
+    ]);
 
     const levelInfo = getLevelInfo(user.xp);
 
@@ -77,6 +90,7 @@ export class GamificationService {
       xpForLevel: levelInfo.xpForLevel,
       currentStreak: user.currentStreak,
       longestStreak: user.longestStreak,
+      badges,
     };
   }
 }

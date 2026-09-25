@@ -14,6 +14,9 @@ export function buildGamificationQuery(gamification: GamificationResult | null):
   if (gamification.streakExtended) {
     params.set('streak', String(gamification.currentStreak));
   }
+  if (gamification.newBadges.length > 0) {
+    params.set('badges', gamification.newBadges.map((badge) => `${badge.icon} ${badge.name}`).join('|'));
+  }
 
   return `?${params.toString()}`;
 }

@@ -6,7 +6,7 @@ import { getSimulationReview } from '@/lib/simulations';
 
 interface ReviewPageProps {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ xp?: string; level?: string; streak?: string }>;
+  searchParams: Promise<{ xp?: string; level?: string; streak?: string; badges?: string }>;
 }
 
 export default async function SimulationReviewPage({ params, searchParams }: ReviewPageProps) {
@@ -16,7 +16,7 @@ export default async function SimulationReviewPage({ params, searchParams }: Rev
   }
 
   const { id } = await params;
-  const { xp, level, streak } = await searchParams;
+  const { xp, level, streak, badges } = await searchParams;
   const review = await getSimulationReview(id);
 
   return (
@@ -25,7 +25,7 @@ export default async function SimulationReviewPage({ params, searchParams }: Rev
         ← Voltar aos simulados
       </Link>
 
-      <XpBanner xp={xp} level={level} streak={streak} />
+      <XpBanner xp={xp} level={level} streak={streak} badges={badges} />
 
       <div
         className={

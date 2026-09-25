@@ -7,7 +7,7 @@ import { completeLabAction, startLabAction } from './actions';
 
 interface LabPageProps {
   params: Promise<{ labId: string }>;
-  searchParams: Promise<{ xp?: string; level?: string; streak?: string }>;
+  searchParams: Promise<{ xp?: string; level?: string; streak?: string; badges?: string }>;
 }
 
 export default async function LabPage({ params, searchParams }: LabPageProps) {
@@ -18,7 +18,7 @@ export default async function LabPage({ params, searchParams }: LabPageProps) {
   }
 
   const { labId } = await params;
-  const { xp, level, streak } = await searchParams;
+  const { xp, level, streak, badges } = await searchParams;
   const lab = await getLab(labId);
   const start = startLabAction.bind(null, labId);
   const complete = completeLabAction.bind(null, labId);
@@ -29,7 +29,7 @@ export default async function LabPage({ params, searchParams }: LabPageProps) {
         ← Voltar aos laboratórios
       </Link>
 
-      <XpBanner xp={xp} level={level} streak={streak} />
+      <XpBanner xp={xp} level={level} streak={streak} badges={badges} />
 
       <div>
         <p className="text-sm text-slate-500">

@@ -317,3 +317,21 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 **Decisions:** none — two scoped bug fixes, no new architectural surface.
 
 **Next steps:** decide whether to generalize the seed script's update-on-reseed fix to Lab/Question/Flashcard/Topic before the 12-topic content-authoring push starts (see `Pendencias.md`), then continue into gamification phase 2 (badges or the visual skill-tree track — Pedro to pick) per Session 14.
+
+---
+
+## 2026-09-25 — Session 16: gamification, phase 2 (badges/achievements)
+
+**Goal:** continue gamification per Session 14's roadmap. Recommended badges over the visual skill-tree track first — smaller, builds directly on the XP/streak foundation just shipped, lower design risk; Pedro accepted the recommendation.
+
+**Changes:**
+
+- Schema: `UserBadge(userId, badgeId, earnedAt)` (migration `add_user_badges`); `badgeId` is a string key into a code-level catalog, not a foreign key — see **ADR 0006** for why the catalog lives in code and not a `Badge` table, and for the other design calls (no XP-event ledger, badges award no XP, domain-level badges deferred).
+- `apps/api`: `badges.ts` (pure `BADGE_CATALOG` + `evaluateBadges`, 10 badges — first lesson/lab/question/simulation, a pass, three streak thresholds, two level thresholds) and `badges.service.ts` (`evaluateAndAward`, `getAllWithStatus`), both added to the existing `GamificationModule`. `GamificationService.awardXp` now also evaluates and awards badges right after the XP/streak update, so every one of the four existing XP call sites (lesson/lab/question/simulation) gets badge-checking for free. `GET /gamification/me` now returns the full catalog with each user's earned/locked status. 15 new unit tests (`badges.spec.ts` for the pure evaluator, plus a config change covered by the full e2e run).
+- `apps/web`: new `<BadgesSection>` on the dashboard — a grid of all 10 badges, earned ones highlighted with their icon/name/description, locked ones grayed out but still visible (so there's always a next thing to see). `<XpBanner>` and the shared query-string builder extended to surface newly-earned badges (`?badges=icon+name|icon+name`) alongside the existing XP/level/streak feedback.
+- **Found a real test-suite side effect while verifying:** badge evaluation adds ~6 more DB round trips to every XP-awarding action, which pushed the simulation-submit e2e test past Vitest's default 5000ms timeout against the real Neon dev DB. Raised `testTimeout` to 15000ms in `vitest.config.e2e.ts` rather than trying to claw the (legitimate) extra work back out.
+- Verified end-to-end in a real browser: fresh user's dashboard showed "Conquistas (0/10)" with all 10 badges visible but grayed out; completing the first lesson produced a banner reading "+15 XP 🔥 1 dia seguido / Nova conquista: 📖 Primeiros passos", and the dashboard's badge grid immediately reflected "1/10" with that badge highlighted.
+
+**Decisions:** ADR 0006 (badge catalog as code, not data; no ledger yet; no XP for badges; domain badges deferred).
+
+**Next steps:** the visual skill-tree track is the last piece of Pedro's original gamification ask (Session 14) — natural next phase once he wants it. Otherwise the standing items remain: generalize the seed script's update-on-reseed fix (Session 15), and the 12-topic content-authoring push.

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { AppNav } from '@/components/app-nav';
+import { BadgesSection } from '@/components/badges-section';
 import { GamificationHeader } from '@/components/gamification-header';
 import { getCurrentUser } from '@/lib/auth-server';
 import { getGamificationStats } from '@/lib/gamification';
@@ -33,6 +34,8 @@ export default async function DashboardPage() {
       <AppNav title={`Olá, ${user.name}`} />
 
       <GamificationHeader stats={gamificationStats} />
+
+      <BadgesSection badges={gamificationStats.badges} />
 
       <section className="rounded-lg border border-slate-200 bg-white p-5">
         <h2 className="text-lg font-semibold">{track.name}</h2>

@@ -8,7 +8,7 @@ import { markLessonComplete } from './actions';
 
 interface LessonPageProps {
   params: Promise<{ lessonId: string }>;
-  searchParams: Promise<{ xp?: string; level?: string; streak?: string }>;
+  searchParams: Promise<{ xp?: string; level?: string; streak?: string; badges?: string }>;
 }
 
 export default async function LessonPage({ params, searchParams }: LessonPageProps) {
@@ -19,7 +19,7 @@ export default async function LessonPage({ params, searchParams }: LessonPagePro
   }
 
   const { lessonId } = await params;
-  const { xp, level, streak } = await searchParams;
+  const { xp, level, streak, badges } = await searchParams;
   const lesson = await getLesson(lessonId);
   const completeAction = markLessonComplete.bind(null, lessonId);
 
@@ -29,7 +29,7 @@ export default async function LessonPage({ params, searchParams }: LessonPagePro
         ← Voltar ao painel
       </Link>
 
-      <XpBanner xp={xp} level={level} streak={streak} />
+      <XpBanner xp={xp} level={level} streak={streak} badges={badges} />
 
       <div>
         <p className="text-sm text-slate-500">
