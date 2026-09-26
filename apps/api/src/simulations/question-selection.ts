@@ -6,10 +6,13 @@ export interface DomainQuestionPool {
 
 /**
  * Picks `questionCount` question ids from `pools`, proportionally to each
- * domain's weightPercent. Degrades gracefully when there aren't enough
- * questions: caps the result to whatever is actually available instead of
- * throwing, and redistributes any shortfall (from rounding or a thin domain)
- * to whichever domains still have unused questions.
+ * domain's weightPercent. Quotas use the largest-remainder method (floor each
+ * share, then hand the leftover seats to the largest fractional parts) so they
+ * always add up to exactly the target -- rounding each share independently
+ * overshoots (e.g. 65 questions at 32/26/24/18% rounds to 66). Degrades
+ * gracefully when there aren't enough questions: caps the result to whatever
+ * is actually available instead of throwing, and redistributes any shortfall
+ * from a thin domain to whichever domains still have unused questions.
  */
 export function selectSimulationQuestionIds(
   pools: DomainQuestionPool[],
@@ -26,12 +29,23 @@ export function selectSimulationQuestionIds(
   const totalWeight =
     pools.reduce((sum, pool) => sum + pool.weightPercent, 0) || pools.length || 1;
 
+  const shares = pools.map((pool) => {
+    const exact = (pool.weightPercent / totalWeight) * targetCount;
+    return { pool, quota: Math.floor(exact), remainder: exact - Math.floor(exact) };
+  });
+
+  let seatsLeft = targetCount - shares.reduce((sum, share) => sum + share.quota, 0);
+  for (const share of [...shares].sort((a, b) => b.remainder - a.remainder)) {
+    if (seatsLeft <= 0) break;
+    share.quota += 1;
+    seatsLeft -= 1;
+  }
+
   const takeByDomain = new Map<string, number>();
   let allocated = 0;
 
-  for (const pool of pools) {
-    const rawTarget = Math.round((pool.weightPercent / totalWeight) * targetCount);
-    const take = Math.min(rawTarget, pool.questionIds.length);
+  for (const { pool, quota } of shares) {
+    const take = Math.min(quota, pool.questionIds.length);
     takeByDomain.set(pool.domainId, take);
     allocated += take;
   }
