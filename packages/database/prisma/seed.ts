@@ -4522,6 +4522,578 @@ FIM
 
   await seedFlashcards(artifactsTopic.id, artifactsFlashcardsToSeed);
 
+  // ---------------------------------------------------------------------
+  // Content-authoring push, topic 7 of 12: Domain 3 "Testes de aplicações
+  // em ambientes de desenvolvimento", to the exam-readiness bar.
+  // ---------------------------------------------------------------------
+
+  const devTestingTopic = await prisma.topic.findFirstOrThrow({
+    where: { domainId: deploymentDomain.id, name: 'Testes de aplicações em ambientes de desenvolvimento' },
+  });
+
+  const apiGatewayServiceData = {
+    shortName: 'API Gateway',
+    category: 'Networking & Content Delivery',
+    description:
+      'Cria, publica e protege APIs REST, HTTP e WebSocket, com stages, stage variables e integrações com Lambda e outros serviços.',
+  };
+  const apiGatewayService = await prisma.aWSService.upsert({
+    where: { name: 'Amazon API Gateway' },
+    update: apiGatewayServiceData,
+    create: { name: 'Amazon API Gateway', ...apiGatewayServiceData },
+  });
+
+  const versionsLessonContent = `## Objetivo
+
+Ao final desta lição você vai conseguir usar versões e aliases do Lambda e stages do API Gateway para manter ambientes de desenvolvimento, teste e produção separados, e liberar uma versão nova para uma fração do tráfego.
+
+## Versões do Lambda
+
+Toda função tem a versão \`$LATEST\`, que é mutável: cada deploy de código ou mudança de configuração altera ela. Publicar uma versão (\`PublishVersion\`, ou "Publish new version" no Console) cria um snapshot **imutável** do código e da configuração (runtime, memória, variáveis de ambiente...), identificado por um número sequencial: 1, 2, 3... Para mudar qualquer coisa numa versão publicada, publica-se uma versão nova.
+
+Cada versão tem o seu próprio ARN qualificado (\`...:function:minha-funcao:3\`). O ARN sem sufixo (não qualificado) sempre invoca \`$LATEST\` — por isso apontar um gatilho de produção para o ARN não qualificado é arriscado: qualquer deploy em desenvolvimento vai direto para produção.
+
+## Aliases
+
+Um alias é um nome que aponta para uma versão: \`prod\` → versão 5, \`homolog\` → versão 6, \`dev\` → \`$LATEST\`. O ARN do alias (\`...:function:minha-funcao:prod\`) é estável, então gatilhos, o API Gateway e outros serviços apontam para o alias, e a promoção de uma versão vira só uma mudança de ponteiro — assim como o rollback.
+
+Um alias também pode dividir o tráfego entre duas versões publicadas (**weighted alias**): por exemplo, 90% para a versão 5 e 10% para a versão 6. É a base dos deploys canary e linear do Lambda, que o CodeDeploy automatiza (tópico de CI/CD).
+
+## Stages do API Gateway
+
+No API Gateway (APIs REST), alterar recursos e métodos não muda nada para quem chama a API até que as mudanças sejam publicadas num **stage** por meio de um **deployment**. Cada stage (\`dev\`, \`homolog\`, \`prod\`) tem a própria URL (\`https://{api-id}.execute-api.{região}.amazonaws.com/dev\`), o próprio deployment, e configurações próprias de throttling, cache, logs e rastreamento.
+
+**Stage variables** são pares chave-valor por stage, disponíveis em mapping templates (\`$stageVariables.nome\`) e em integrações. O padrão clássico da prova: a integração Lambda aponta para \`minha-funcao:\${stageVariables.lambdaAlias}\`, e o stage \`dev\` define \`lambdaAlias = dev\` enquanto o stage \`prod\` define \`lambdaAlias = prod\`. Como a função é resolvida em tempo de execução, é preciso dar ao API Gateway permissão de invocar **cada alias** (uma resource-based policy por ARN qualificado) — sem isso, a chamada falha com erro 500 de permissão.
+
+Um stage também pode ter **canary release**: uma porcentagem do tráfego do stage vai para um deployment novo, enquanto o resto continua no deployment atual, até a promoção ou o descarte.
+
+## Ambientes separados
+
+Versões, aliases e stages separam ambientes dentro de uma mesma função ou API. Para isolamento mais forte, o mesmo template (SAM/CloudFormation) é implantado como **stacks separadas** por ambiente — com parâmetros (\`--parameter-overrides Stage=dev\`) ou ambientes nomeados no \`samconfig.toml\` (\`sam deploy --config-env dev\`) —, idealmente em **contas AWS separadas** para desenvolvimento e produção.
+
+## Relação com a prova DVA-C02
+
+Espere cenários sobre \`$LATEST\` vs. versões publicadas, aliases com ARN estável e divisão de tráfego, stages e a necessidade de novo deployment, stage variables apontando para aliases (e a permissão de invocação por alias), canary release em stages e stacks separadas por ambiente.`;
+
+  const testingLessonContent = `## Objetivo
+
+Ao final desta lição você vai conseguir escolher entre testes unitários com mocks, testes de integração na nuvem e execução local com o SAM CLI, e usar integrações mock do API Gateway para destravar o desenvolvimento.
+
+## Uma pirâmide de testes serverless
+
+- **Testes unitários**: testam a lógica de negócio sem chamar a AWS. As chamadas ao SDK são substituídas por mocks — em Python, \`moto\` (simula serviços em memória) ou o \`Stubber\` do botocore; em JavaScript, \`aws-sdk-client-mock\` para o SDK v3. Rodam em segundos, a cada commit.
+- **Testes de integração**: chamam recursos reais num ambiente de desenvolvimento (a função publicada, a tabela DynamoDB de dev, a fila de dev). Pegam o que mocks não pegam: permissões do IAM, formatos reais de eventos, configurações de timeout, limites de serviço.
+- **Testes de ponta a ponta**: exercitam o fluxo completo pela API pública do ambiente de teste.
+
+Uma prática que facilita tudo: manter o handler fino — ele só traduz o evento e chama funções de negócio que recebem os clientes do SDK como parâmetro (injeção de dependência), fáceis de testar com mocks.
+
+## Testando com eventos realistas
+
+Funções Lambda recebem eventos com formatos específicos de cada serviço. O Console permite salvar **test events** (inclusive compartilháveis entre usuários da conta), e o SAM CLI gera eventos de exemplo para dezenas de serviços com \`sam local generate-event\` (ex.: \`sam local generate-event s3 put\` ou \`sam local generate-event apigateway aws-proxy\`).
+
+## SAM CLI local
+
+Com o Docker instalado, o SAM CLI roda funções localmente num container que imita o ambiente do Lambda:
+
+- \`sam local invoke MinhaFuncao -e events/evento.json\` executa a função uma vez com um evento.
+- \`sam local start-api\` sobe um servidor HTTP local que emula o API Gateway, com as rotas do template.
+- \`sam local start-lambda\` expõe um endpoint local compatível com a API do Lambda, útil para testes automatizados que usam o SDK.
+
+Execução local acelera o ciclo de desenvolvimento, mas continua chamando os serviços **reais** da AWS que a função usa (com as credenciais locais) — não é um ambiente isolado. Para iterar direto na nuvem, \`sam sync --watch\` (SAM Accelerate) envia mudanças de código para a stack de desenvolvimento em segundos, sem um deploy completo do CloudFormation — recomendado só para ambientes de desenvolvimento.
+
+## Integração mock do API Gateway
+
+Uma integração do tipo **Mock** faz o API Gateway responder sem nenhum backend: o mapping template da requisição define o status (\`{"statusCode": 200}\`) e o da resposta define o corpo. Serve para o time de frontend desenvolver contra o contrato da API antes de o backend existir, para testes de contrato, e para respostas fixas (ex.: um endpoint de health check ou respostas de CORS).
+
+## Relação com a prova DVA-C02
+
+Espere cenários pedindo mocks do SDK para testes unitários, integração mock do API Gateway para desbloquear o frontend, \`sam local invoke\`/\`start-api\`/\`generate-event\` para testar localmente, e \`sam sync\` para iterar rápido em desenvolvimento.`;
+
+  const devTestingLessons: LessonSeed[] = [
+    {
+      order: 1,
+      estimatedMinutes: 12,
+      title: 'Versões, aliases e stages: ambientes de desenvolvimento na AWS',
+      content: versionsLessonContent,
+      resources: [
+        {
+          title: 'Aliases de funções Lambda — documentação oficial',
+          url: 'https://docs.aws.amazon.com/lambda/latest/dg/configuration-aliases.html',
+        },
+        {
+          title: 'Stage variables no API Gateway — documentação oficial',
+          url: 'https://docs.aws.amazon.com/apigateway/latest/developerguide/stage-variables.html',
+        },
+      ],
+    },
+    {
+      order: 2,
+      estimatedMinutes: 10,
+      title: 'Testando aplicações serverless: mocks, integração e SAM local',
+      content: testingLessonContent,
+      resources: [
+        {
+          title: 'Testes locais com o SAM CLI — documentação oficial',
+          url: 'https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/using-sam-cli-local.html',
+        },
+        {
+          title: 'Integrações mock no API Gateway — documentação oficial',
+          url: 'https://docs.aws.amazon.com/apigateway/latest/developerguide/how-to-mock-integration.html',
+        },
+      ],
+    },
+  ];
+
+  await seedLessons(devTestingTopic.id, devTestingLessons);
+
+  const weightedAliasInstructions = `No Console, edite o alias \`prod\`: mantenha a versão 1 e, em "Weighted alias", escolha a versão 2 com peso de 20%. Salve e, no CloudShell, invoque o alias 20 vezes contando as respostas:
+
+\`\`\`bash
+for i in $(seq 1 20); do
+  aws lambda invoke --function-name devlab-versoes --qualifier prod saida.json > /dev/null
+  cat saida.json; echo
+done | sort | uniq -c
+\`\`\``;
+
+  const mockTemplateInstructions = `No Console do API Gateway, crie uma **REST API** chamada \`devlab-api\`. Crie o recurso \`/status\` e, nele, um método \`GET\` com tipo de integração **Mock**. Na aba "Integration response" do método, edite a resposta padrão e adicione um mapping template para \`application/json\` com:
+
+\`\`\`json
+{"ambiente": "$stageVariables.ambiente", "status": "ok"}
+\`\`\``;
+
+  const devTestingLabs: LabSeed[] = [
+    {
+      title: 'Versões e aliases do Lambda, com divisão de tráfego',
+      data: {
+        level: 2,
+        order: 1,
+        estimatedMinutes: 25,
+        objective:
+          'Ao final deste laboratório você terá publicado duas versões imutáveis de uma função Lambda, criado aliases `dev` e `prod` apontando para versões diferentes, e configurado o alias `prod` para mandar 20% do tráfego para a versão nova.',
+        prerequisites:
+          'Conta AWS com acesso ao Console e ao AWS CloudShell. Ter lido a lição "Versões, aliases e stages: ambientes de desenvolvimento na AWS" ajuda.',
+        context:
+          'Um time faz deploy direto em `$LATEST`, e o gatilho de produção aponta para o ARN não qualificado da função — cada deploy de desenvolvimento chega aos clientes na hora. Você vai separar os ambientes com versões e aliases e liberar a versão nova só para uma parte do tráfego.',
+        troubleshooting:
+          'As invocações do passo 5 sempre retornam v1: com 20 chamadas, é possível (mas raro) nenhuma cair na versão 2 — rode o laço de novo; confira também se o peso foi salvo no alias `prod`. \n\n"Publish new version" não cria versão nova: o Lambda só publica se o código ou a configuração mudaram desde a última versão — confira se clicou em "Deploy" depois de editar o código. \n\n`ResourceNotFoundException` ao invocar com `--qualifier`: o alias precisa existir com esse nome exato (`dev` ou `prod`) na mesma região do CloudShell.',
+        cleanup:
+          'Exclua a função `devlab-versoes` (isso remove as versões e os aliases) e, se quiser, o log group `/aws/lambda/devlab-versoes`.',
+        costWarning: 'As poucas dezenas de invocações ficam dentro do Free Tier do Lambda.',
+      },
+      steps: [
+        {
+          order: 1,
+          title: 'Criar a função (v1)',
+          instructions:
+            'No Console do Lambda, crie a função `devlab-versoes` com Python 3.13. Substitua o código por:\n\n```python\ndef lambda_handler(event, context):\n    return {"versao": "v1"}\n```\n\nClique em "Deploy".',
+          validation: 'Um teste com o evento padrão devolve `{"versao": "v1"}`.',
+        },
+        {
+          order: 2,
+          title: 'Publicar a versão 1',
+          instructions:
+            'Na aba "Versions", clique em "Publish new version" com a descrição `primeira versao`.',
+          validation:
+            'A versão 1 aparece na lista com um ARN terminando em `:devlab-versoes:1`. Abrindo a versão, o editor de código fica somente leitura — versões publicadas são imutáveis.',
+        },
+        {
+          order: 3,
+          title: 'Criar a v2 e publicar a versão 2',
+          instructions:
+            'Volte para a função (`$LATEST`), troque `"v1"` por `"v2"` no código, clique em "Deploy" e publique uma nova versão com a descrição `segunda versao`.',
+          validation: 'A aba "Versions" lista as versões 1 e 2, além de `$LATEST`.',
+        },
+        {
+          order: 4,
+          title: 'Criar os aliases dev e prod',
+          instructions:
+            'Na aba "Aliases", crie o alias `prod` apontando para a versão 1 e o alias `dev` apontando para a versão 2. Depois, no CloudShell, invoque cada um:\n\n```bash\naws lambda invoke --function-name devlab-versoes --qualifier prod saida.json > /dev/null && cat saida.json\naws lambda invoke --function-name devlab-versoes --qualifier dev saida.json > /dev/null && cat saida.json\n```',
+          validation:
+            '`prod` responde `{"versao": "v1"}` e `dev` responde `{"versao": "v2"}` — a mesma função, dois ambientes, cada um com um ARN estável.',
+        },
+        {
+          order: 5,
+          title: 'Mandar 20% do tráfego de prod para a v2',
+          instructions: weightedAliasInstructions,
+          validation:
+            'A contagem mostra a maioria das respostas `v1` e algumas `v2` (em torno de 4 em 20) — o alias `prod` está dividindo o tráfego, como num deploy canary. Para promover, basta apontar o alias para a versão 2; para desfazer, remover o peso.',
+        },
+      ],
+    },
+    {
+      title: 'Stages do API Gateway com stage variables e integração mock',
+      data: {
+        level: 2,
+        order: 2,
+        estimatedMinutes: 30,
+        objective:
+          'Ao final deste laboratório você terá criado uma API REST com integração mock, publicado a API em dois stages com stage variables diferentes, e comprovado que uma mudança só chega a um stage quando ela é implantada nele.',
+        prerequisites:
+          'Conta AWS com acesso ao Console e ao AWS CloudShell. Ter lido as duas lições deste tópico ajuda.',
+        context:
+          'O time de frontend precisa começar a integrar com um endpoint `/status` antes de o backend existir, e o time quer ambientes `dev` e `prod` separados na mesma API. Você vai atender os dois com uma integração mock e stages.',
+        troubleshooting:
+          'A resposta vem vazia ou sem o JSON: o mapping template precisa estar na "Integration response" (não na "Method response") e com o content type `application/json`. \n\n`"ambiente": ""`: a stage variable não foi criada no stage chamado, ou o nome não é exatamente `ambiente`. \n\n`{"message":"Missing Authentication Token"}`: a URL está errada — confira o nome do stage e o caminho `/status` no fim. \n\nA mudança do passo 5 não aparece em nenhum stage: é o esperado até você fazer o deploy; depois do deploy no `dev`, espere alguns segundos e chame de novo.',
+        cleanup: 'No Console do API Gateway, selecione `devlab-api` e use "Delete API". Isso remove os stages e os deployments.',
+        costWarning:
+          'APIs REST são cobradas por milhão de chamadas; as poucas chamadas deste laboratório custam frações de centavo (e ficam dentro do Free Tier de contas elegíveis).',
+      },
+      steps: [
+        {
+          order: 1,
+          title: 'Criar a API com integração mock',
+          instructions: mockTemplateInstructions,
+          validation:
+            'O método `GET /status` aparece com integração "Mock". O botão "Test" do Console devolve status 200 com `"ambiente": ""` — ainda não há stage, então a stage variable está vazia.',
+        },
+        {
+          order: 2,
+          title: 'Publicar no stage dev',
+          instructions:
+            'Clique em "Deploy API", escolha "New stage" com o nome `dev`. Depois, na página do stage `dev`, abra "Stage variables" e adicione `ambiente` com o valor `dev`. Copie a "Invoke URL" do stage.',
+          validation: 'O stage `dev` aparece com a stage variable `ambiente = dev` e uma Invoke URL terminando em `/dev`.',
+        },
+        {
+          order: 3,
+          title: 'Publicar no stage prod',
+          instructions:
+            'Faça "Deploy API" de novo, agora num novo stage `prod`, e adicione a stage variable `ambiente` com o valor `prod`.',
+          validation: 'Existem dois stages, `dev` e `prod`, cada um com sua Invoke URL e seu valor de `ambiente`.',
+        },
+        {
+          order: 4,
+          title: 'Chamar os dois stages',
+          instructions:
+            'No CloudShell, chame os dois stages, trocando `URL-DEV` e `URL-PROD` pelas Invoke URLs:\n\n```bash\ncurl URL-DEV/status; echo\ncurl URL-PROD/status; echo\n```',
+          validation:
+            'O `dev` responde `{"ambiente": "dev", "status": "ok"}` e o `prod` responde `{"ambiente": "prod", "status": "ok"}` — mesma definição de API, configuração diferente por stage, e nenhum backend envolvido.',
+        },
+        {
+          order: 5,
+          title: 'Mudar a API e implantar só no dev',
+          instructions:
+            'Edite o mapping template da integration response para `{"ambiente": "$stageVariables.ambiente", "status": "ok", "versao": "2"}` e salve. Chame os dois stages de novo. Depois faça "Deploy API" **só** no stage `dev` e chame os dois mais uma vez.',
+          validation:
+            'Logo após salvar, nenhum stage mostra `versao`. Depois do deploy no `dev`, só o `dev` responde com `"versao": "2"`; o `prod` continua igual — cada stage serve o deployment que foi implantado nele.',
+        },
+      ],
+    },
+  ];
+
+  await seedLabs(devTestingTopic.id, devTestingLabs);
+
+  const devTestingQuestionsToSeed: QuestionSeed[] = [
+    {
+      prompt: 'Qual é a diferença entre a versão $LATEST de uma função Lambda e uma versão publicada?',
+      type: 'KNOWLEDGE',
+      difficulty: 'EASY',
+      explanation:
+        '$LATEST é mutável e muda a cada deploy. Uma versão publicada é um snapshot imutável do código e da configuração, com número e ARN próprios.',
+      officialReferences: 'https://docs.aws.amazon.com/lambda/latest/dg/configuration-versions.html',
+      options: [
+        {
+          text: '$LATEST é mutável; uma versão publicada é um snapshot imutável de código e configuração.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        {
+          text: 'Versões publicadas podem ter o código editado no Console; $LATEST não.',
+          isCorrect: false,
+          explanation: 'É o contrário: só $LATEST é editável.',
+        },
+        {
+          text: 'Não há diferença; são nomes para o mesmo código.',
+          isCorrect: false,
+          explanation: 'Uma versão publicada congela o estado no momento da publicação.',
+        },
+        {
+          text: '$LATEST só existe para funções empacotadas como imagem de container.',
+          isCorrect: false,
+          explanation: 'Toda função tem $LATEST.',
+        },
+      ],
+    },
+    {
+      prompt: 'O que é um alias do Lambda?',
+      type: 'KNOWLEDGE',
+      difficulty: 'EASY',
+      explanation:
+        'Um alias é um ponteiro nomeado (com ARN estável) para uma versão da função, e pode dividir o tráfego entre duas versões publicadas.',
+      options: [
+        {
+          text: 'Um nome com ARN estável que aponta para uma versão da função (e pode dividir tráfego entre duas versões).',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'Uma cópia independente da função com outro nome.', isCorrect: false, explanation: 'Um alias não copia código; só aponta para uma versão.' },
+        { text: 'Um nome de domínio customizado para a função.', isCorrect: false, explanation: 'Isso seria uma function URL com domínio próprio ou o API Gateway.' },
+        { text: 'Uma variável de ambiente compartilhada entre funções.', isCorrect: false, explanation: 'Não tem relação com variáveis de ambiente.' },
+      ],
+    },
+    {
+      prompt:
+        'Um desenvolvedor alterou um método de uma API REST no Console do API Gateway, mas quem chama a URL do stage prod continua recebendo o comportamento antigo. Por quê?',
+      type: 'KNOWLEDGE',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Mudanças numa API REST só chegam a um stage quando um novo deployment é feito para ele. Cada stage serve o deployment que foi implantado nele.',
+      options: [
+        {
+          text: 'As mudanças precisam ser publicadas num deployment para o stage prod.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'O API Gateway leva até uma hora para propagar mudanças.', isCorrect: false, explanation: 'Não há propagação automática: é preciso fazer o deploy.' },
+        { text: 'O cache do navegador guarda a resposta antiga.', isCorrect: false, explanation: 'O problema é a ausência de deployment, não o cliente.' },
+        { text: 'Stages só podem ser alterados via CloudFormation.', isCorrect: false, explanation: 'O Console também faz deployments.' },
+      ],
+    },
+    {
+      prompt:
+        'Uma API REST tem os stages dev e prod e uma integração com uma função Lambda que tem os aliases dev e prod. Como fazer cada stage invocar o alias correspondente usando uma única definição de integração?',
+      type: 'APPLICATION',
+      difficulty: 'MEDIUM',
+      explanation:
+        'A integração aponta para minha-funcao:${stageVariables.lambdaAlias}, e cada stage define a stage variable lambdaAlias com o nome do seu alias. É preciso também permitir que o API Gateway invoque cada alias.',
+      officialReferences: 'https://docs.aws.amazon.com/apigateway/latest/developerguide/stage-variables.html',
+      options: [
+        {
+          text: 'Usar uma stage variable (ex.: lambdaAlias) no ARN da integração e defini-la em cada stage.',
+          isCorrect: true,
+          explanation: 'Correto: o alias é resolvido em tempo de execução, por stage.',
+        },
+        { text: 'Criar duas APIs separadas, uma por alias.', isCorrect: false, explanation: 'Funciona, mas duplica a definição da API — o oposto do pedido.' },
+        { text: 'Usar o ARN não qualificado da função.', isCorrect: false, explanation: 'Sempre invocaria $LATEST, nos dois stages.' },
+        { text: 'Definir uma variável de ambiente na função com o nome do stage.', isCorrect: false, explanation: 'Não muda qual alias o API Gateway invoca.' },
+      ],
+    },
+    {
+      prompt:
+        'O time de frontend precisa começar a desenvolver contra um endpoint da API que o backend ainda não implementou. Qual recurso do API Gateway permite isso sem código de backend?',
+      type: 'APPLICATION',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Uma integração do tipo Mock devolve uma resposta definida por mapping templates, sem nenhum backend.',
+      officialReferences: 'https://docs.aws.amazon.com/apigateway/latest/developerguide/how-to-mock-integration.html',
+      options: [
+        { text: 'Integração Mock.', isCorrect: true, explanation: 'Correto.' },
+        { text: 'Integração Lambda proxy.', isCorrect: false, explanation: 'Exige uma função Lambda de backend.' },
+        { text: 'Integração HTTP com o próprio frontend.', isCorrect: false, explanation: 'Não resolve a ausência do backend.' },
+        { text: 'Cache do stage habilitado.', isCorrect: false, explanation: 'O cache guarda respostas de um backend existente.' },
+      ],
+    },
+    {
+      prompt:
+        'Testes unitários de uma função Python que grava no DynamoDB estão criando itens na tabela real de desenvolvimento e ficam lentos e instáveis. Qual é a abordagem recomendada para os testes unitários?',
+      type: 'APPLICATION',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Testes unitários devem isolar a lógica, substituindo as chamadas ao SDK por mocks (ex.: moto ou o Stubber do botocore). Chamadas reais ficam para os testes de integração, num ambiente de desenvolvimento.',
+      options: [
+        {
+          text: 'Mockar as chamadas ao SDK (ex.: moto ou Stubber) nos testes unitários e deixar a tabela real para os testes de integração.',
+          isCorrect: true,
+          explanation: 'Correto: cada nível de teste com o seu propósito.',
+        },
+        { text: 'Rodar os testes unitários contra a tabela de produção.', isCorrect: false, explanation: 'Arrisca dados reais e mantém a lentidão.' },
+        { text: 'Remover os testes da camada de dados.', isCorrect: false, explanation: 'Perde cobertura em vez de isolar dependências.' },
+        { text: 'Aumentar a capacidade da tabela de desenvolvimento.', isCorrect: false, explanation: 'Não resolve o acoplamento dos testes unitários a recursos reais.' },
+      ],
+    },
+    {
+      prompt:
+        'Um desenvolvedor quer executar localmente, na própria máquina, uma função definida num template SAM, simulando um evento de upload no S3. Qual combinação do SAM CLI atende?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'sam local generate-event s3 put gera um evento de exemplo, e sam local invoke executa a função num container local (Docker) com esse evento.',
+      options: [
+        {
+          text: 'sam local generate-event s3 put para gerar o evento e sam local invoke -e com ele.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'sam deploy seguido de um upload real no S3.', isCorrect: false, explanation: 'Isso testa na nuvem, não localmente.' },
+        { text: 'sam local start-api.', isCorrect: false, explanation: 'Emula o API Gateway, não um evento do S3.' },
+        { text: 'sam package com o evento no template.', isCorrect: false, explanation: 'package só empacota artefatos para o S3.' },
+      ],
+    },
+    {
+      prompt:
+        'Um time quer mandar 10% do tráfego de uma função Lambda para uma versão nova, mantendo o mesmo ARN que o gatilho de produção usa, e poder voltar atrás instantaneamente. Qual recurso atende?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Um alias com divisão de tráfego (weighted alias) mantém o ARN estável para o gatilho e divide as invocações entre duas versões publicadas; o rollback é só remover o peso.',
+      options: [
+        { text: 'Um alias com peso de 10% para a versão nova.', isCorrect: true, explanation: 'Correto.' },
+        { text: 'Duas funções separadas com o gatilho duplicado.', isCorrect: false, explanation: 'Cada gatilho receberia 100% dos eventos.' },
+        { text: 'Concorrência reservada de 10% para a versão nova.', isCorrect: false, explanation: 'Concorrência limita execuções simultâneas; não roteia tráfego.' },
+        { text: 'Publicar a versão nova em $LATEST.', isCorrect: false, explanation: '$LATEST não divide tráfego.' },
+      ],
+    },
+    {
+      prompt:
+        'Um bug chegou a produção logo após um deploy de teste feito por um desenvolvedor. A investigação mostra que a fila de produção dispara a função Lambda pelo ARN não qualificado. Qual é a correção?',
+      type: 'SCENARIO',
+      difficulty: 'HARD',
+      explanation:
+        'O ARN não qualificado invoca $LATEST, que muda a cada deploy. O gatilho de produção deve apontar para um alias (ex.: prod) que referencia uma versão publicada e testada.',
+      options: [
+        {
+          text: 'Apontar o gatilho de produção para um alias prod que referencia uma versão publicada.',
+          isCorrect: true,
+          explanation: 'Correto: deploys em $LATEST deixam de afetar produção.',
+        },
+        { text: 'Proibir deploys fora do horário comercial.', isCorrect: false, explanation: 'Não elimina o acoplamento entre dev e produção.' },
+        { text: 'Apontar o gatilho para $LATEST explicitamente.', isCorrect: false, explanation: 'É o mesmo comportamento do ARN não qualificado.' },
+        { text: 'Aumentar o timeout da função.', isCorrect: false, explanation: 'Não tem relação com o problema.' },
+      ],
+    },
+    {
+      prompt:
+        'Um time quer ambientes dev e prod isolados para uma aplicação SAM, com a mesma definição de infraestrutura. Qual abordagem é a recomendada?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'O mesmo template é implantado como stacks separadas por ambiente, com parâmetros ou ambientes nomeados no samconfig.toml (sam deploy --config-env) — idealmente em contas AWS separadas.',
+      options: [
+        {
+          text: 'Implantar o mesmo template como stacks separadas por ambiente (parâmetros ou --config-env), de preferência em contas separadas.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'Manter dois templates copiados e editados à mão.', isCorrect: false, explanation: 'As cópias divergem com o tempo.' },
+        { text: 'Usar uma única stack e trocar valores manualmente no Console.', isCorrect: false, explanation: 'Mistura ambientes e cria drift.' },
+        { text: 'Criar os recursos de dev pelo Console e só os de prod pelo template.', isCorrect: false, explanation: 'Dev deixaria de representar prod.' },
+      ],
+    },
+    {
+      prompt:
+        'Uma integração do API Gateway usa minha-funcao:${stageVariables.lambdaAlias}. O stage prod funciona, mas o stage dev (lambdaAlias = dev) retorna erro 500 de permissões inválidas na função Lambda. Qual é a causa mais provável?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'HARD',
+      explanation:
+        'Com stage variables, o API Gateway precisa de permissão de invocação (resource-based policy, lambda:InvokeFunction) para cada ARN qualificado. Falta a permissão para o alias dev.',
+      options: [
+        {
+          text: 'Falta a permissão lambda:InvokeFunction para o API Gateway no ARN do alias dev.',
+          isCorrect: true,
+          explanation: 'Correto: cada alias precisa da sua própria permissão.',
+        },
+        { text: 'Stage variables não funcionam com aliases.', isCorrect: false, explanation: 'Esse é justamente o padrão recomendado.' },
+        { text: 'O alias dev precisa apontar para uma versão publicada.', isCorrect: false, explanation: 'Um alias pode apontar para $LATEST; o erro é de permissão.' },
+        { text: 'O stage dev precisa de uma chave de API.', isCorrect: false, explanation: 'Isso gera erro 403 para o cliente, não 500 de permissão na função.' },
+      ],
+    },
+    {
+      prompt:
+        'Um time quer testar um novo deployment de uma API REST com 5% do tráfego real do stage prod antes de promovê-lo para todos. Qual recurso do API Gateway atende?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'HARD',
+      explanation:
+        'As configurações de canary release de um stage mandam uma porcentagem do tráfego para um deployment canary, que depois é promovido ou descartado.',
+      officialReferences: 'https://docs.aws.amazon.com/apigateway/latest/developerguide/canary-release.html',
+      options: [
+        { text: 'Canary release no stage prod.', isCorrect: true, explanation: 'Correto.' },
+        { text: 'Criar um stage prod2 e divulgar a URL a 5% dos clientes.', isCorrect: false, explanation: 'Não divide o tráfego do stage de forma transparente.' },
+        { text: 'Usage plans com limite de 5%.', isCorrect: false, explanation: 'Usage plans limitam consumo por chave de API.' },
+        { text: 'Cache do stage com TTL de 5%.', isCorrect: false, explanation: 'Cache não divide tráfego entre deployments.' },
+      ],
+    },
+    {
+      prompt:
+        'Durante o desenvolvimento, um programador quer que cada alteração salva no código seja enviada em segundos para a stack de desenvolvimento na AWS, sem esperar um deploy completo do CloudFormation. Qual comando atende?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'MEDIUM',
+      explanation:
+        'sam sync --watch (SAM Accelerate) observa os arquivos e sincroniza mudanças de código diretamente com os recursos da stack de desenvolvimento. Não é recomendado para produção.',
+      options: [
+        { text: 'sam sync --watch', isCorrect: true, explanation: 'Correto: iteração rápida na nuvem, só em desenvolvimento.' },
+        { text: 'sam deploy --guided', isCorrect: false, explanation: 'Faz um deploy completo via CloudFormation.' },
+        { text: 'sam local start-api', isCorrect: false, explanation: 'Roda localmente, não sincroniza com a nuvem.' },
+        { text: 'aws cloudformation package', isCorrect: false, explanation: 'Só empacota artefatos para o S3.' },
+      ],
+    },
+  ];
+
+  await seedQuestions(devTestingTopic.id, devTestingQuestionsToSeed);
+
+  const devTestingFlashcardsToSeed: FlashcardSeed[] = [
+    {
+      conceptName: '$LATEST e versões publicadas',
+      conceptDescription: 'Mutabilidade de $LATEST e imutabilidade das versões publicadas do Lambda.',
+      serviceId: lambdaService.id,
+      front: 'Qual a diferença entre $LATEST e uma versão publicada do Lambda?',
+      back: '$LATEST é mutável e muda a cada deploy. Uma versão publicada é um snapshot imutável de código e configuração, com número e ARN próprios. O ARN não qualificado invoca $LATEST.',
+    },
+    {
+      conceptName: 'Aliases do Lambda',
+      conceptDescription: 'Ponteiros nomeados e estáveis para versões de uma função.',
+      serviceId: lambdaService.id,
+      front: 'Para que servem os aliases do Lambda?',
+      back: 'Dão um ARN estável (ex.: :prod) que aponta para uma versão. Promoção e rollback viram mudanças de ponteiro; gatilhos e o API Gateway apontam para o alias.',
+    },
+    {
+      conceptName: 'Weighted alias',
+      conceptDescription: 'Divisão de tráfego de um alias entre duas versões publicadas.',
+      serviceId: lambdaService.id,
+      front: 'Como mandar uma porcentagem do tráfego de uma função para uma versão nova?',
+      back: 'Com um weighted alias: o alias aponta para a versão atual e manda um peso (ex.: 10%) para a nova. É a base dos deploys canary/linear do CodeDeploy para Lambda.',
+    },
+    {
+      conceptName: 'Stages e deployments do API Gateway',
+      conceptDescription: 'Relação entre mudanças numa API REST, deployments e stages.',
+      serviceId: apiGatewayService.id,
+      front: 'Quando uma mudança numa API REST do API Gateway chega aos clientes?',
+      back: 'Só depois de um deployment para o stage. Cada stage (dev, prod...) tem URL, deployment e configurações próprias (throttling, cache, logs).',
+    },
+    {
+      conceptName: 'Stage variables',
+      conceptDescription: 'Configuração por stage no API Gateway.',
+      serviceId: apiGatewayService.id,
+      front: 'Como fazer cada stage do API Gateway invocar um alias diferente da mesma função?',
+      back: 'Integração apontando para minha-funcao:${stageVariables.lambdaAlias}, com lambdaAlias definido em cada stage — e permissão lambda:InvokeFunction para cada alias.',
+    },
+    {
+      conceptName: 'Canary release no API Gateway',
+      conceptDescription: 'Liberação de um deployment novo para parte do tráfego de um stage.',
+      serviceId: apiGatewayService.id,
+      front: 'Como testar um deployment novo de uma API REST com parte do tráfego de produção?',
+      back: 'Com canary release no stage: uma porcentagem vai para o deployment canary, que depois é promovido ou descartado.',
+    },
+    {
+      conceptName: 'Integração mock',
+      conceptDescription: 'Integração do API Gateway que responde sem backend.',
+      serviceId: apiGatewayService.id,
+      front: 'Para que serve uma integração Mock no API Gateway?',
+      back: 'Responder sem backend, com status e corpo definidos por mapping templates — para o frontend avançar antes do backend, testes de contrato e respostas fixas.',
+    },
+    {
+      conceptName: 'Mocks do SDK em testes unitários',
+      conceptDescription: 'Substituição de chamadas à AWS em testes unitários.',
+      serviceId: lambdaService.id,
+      front: 'Como testar unitariamente código que chama serviços da AWS sem recursos reais?',
+      back: 'Mockando o SDK: moto ou Stubber do botocore (Python), aws-sdk-client-mock (JavaScript v3). Recursos reais ficam para os testes de integração em dev.',
+    },
+    {
+      conceptName: 'SAM CLI local',
+      conceptDescription: 'Comandos do SAM CLI para executar e testar funções localmente.',
+      serviceId: cloudFormationService.id,
+      front: 'Quais comandos do SAM CLI testam uma função localmente?',
+      back: 'sam local invoke -e evento.json (uma execução), sam local start-api (emula o API Gateway), sam local generate-event (eventos de exemplo). Exigem Docker e chamam os serviços reais da AWS.',
+    },
+    {
+      conceptName: 'sam sync',
+      conceptDescription: 'Sincronização rápida de mudanças com a stack de desenvolvimento.',
+      serviceId: cloudFormationService.id,
+      front: 'Como iterar rápido na nuvem sem esperar deploys completos do CloudFormation?',
+      back: 'sam sync --watch (SAM Accelerate): envia mudanças de código para a stack de desenvolvimento em segundos. Não é para produção.',
+    },
+  ];
+
+  await seedFlashcards(devTestingTopic.id, devTestingFlashcardsToSeed);
+
   const domainCount = await prisma.domain.count({ where: { examVersionId: examVersion.id } });
   const topicCount = await prisma.topic.count({ where: { domain: { examVersionId: examVersion.id } } });
 

@@ -503,3 +503,24 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 **Decisions:** none architectural.
 
 **Next steps:** Domain 3 topic 2, "Testes de aplicações em ambientes de desenvolvimento" (Lambda versions/aliases, API Gateway stages, mocks, SAM local).
+
+---
+
+## 2026-09-26 — Session 25: content topic 7 of 12 (testing in dev environments)
+
+**Goal:** Pedro merged #34 and asked to continue; next is Domain 3's "Testes de aplicações em ambientes de desenvolvimento".
+
+**Changes:**
+
+- `packages/database/prisma/seed.ts`, to the exam-readiness bar:
+  - **Lesson 1** "Versões, aliases e stages: ambientes de desenvolvimento na AWS" (12 min) and **Lesson 2** "Testando aplicações serverless: mocks, integração e SAM local" (10 min).
+  - **Lab 1** "Versões e aliases do Lambda, com divisão de tráfego" (Level 2, 5 steps): v1/v2 published versions, `prod`/`dev` aliases invoked with `--qualifier`, then a 20% weighted alias counted over 20 invocations from CloudShell.
+  - **Lab 2** "Stages do API Gateway com stage variables e integração mock" (Level 2, 5 steps): a mock `GET /status` whose response template reads `$stageVariables.ambiente`, deployed to `dev` and `prod`; then a template change that only reaches `dev` after deploying there. Needs no backend, so it exercises stages without Lambda permissions getting in the way.
+  - **13 questions**, **10 flashcards**; new `AWSService` row Amazon API Gateway.
+- Docs: checklist (84 questions, 63 flashcards; 5 topics left) and Pendências.
+- Verified: typecheck clean; seed twice with no duplicates (2 lessons, 2 labs/10 steps, 13 questions, 10 flashcards); the lesson's literal `${stageVariables.lambdaAlias}` survived the template literal (checked in the seeded row); API suite (26 unit + 39 e2e) green.
+- Keep-alive: still no `schedule` run of `keep-api-warm.yml` by 13:08 Brasília (~47 min after activation), only the manual one. Raised with Pedro, with an external pinger as the fallback.
+
+**Decisions:** none architectural.
+
+**Next steps:** Domain 3 topic 3, "Automação de testes de deploy"; decide on the keep-alive fallback if GitHub's schedule still hasn't fired.
