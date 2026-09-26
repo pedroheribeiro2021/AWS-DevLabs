@@ -131,6 +131,79 @@ async function seedFlashcards(topicId: string, cards: FlashcardSeed[]) {
   }
 }
 
+type LessonSeed = {
+  order: number;
+  estimatedMinutes: number;
+  title: string;
+  content: string;
+  resources: { title: string; url: string }[];
+};
+
+/**
+ * Seeds a topic's lessons with the update-or-create pattern (matched by
+ * title); resources are only created once, like question options.
+ */
+async function seedLessons(topicId: string, lessons: LessonSeed[]) {
+  for (const lessonDef of lessons) {
+    const existingLesson = await prisma.lesson.findFirst({ where: { topicId, title: lessonDef.title } });
+
+    if (existingLesson) {
+      await prisma.lesson.update({
+        where: { id: existingLesson.id },
+        data: { order: lessonDef.order, estimatedMinutes: lessonDef.estimatedMinutes, content: lessonDef.content },
+      });
+    } else {
+      await prisma.lesson.create({
+        data: {
+          topicId,
+          order: lessonDef.order,
+          estimatedMinutes: lessonDef.estimatedMinutes,
+          title: lessonDef.title,
+          content: lessonDef.content,
+          resources: {
+            create: lessonDef.resources.map((resource, index) => ({
+              ...resource,
+              type: 'documentation',
+              order: index + 1,
+            })),
+          },
+        },
+      });
+    }
+  }
+}
+
+type LabSeed = {
+  title: string;
+  data: {
+    level: number;
+    order: number;
+    estimatedMinutes: number;
+    objective: string;
+    prerequisites: string;
+    context: string;
+    troubleshooting: string;
+    cleanup: string;
+    costWarning: string;
+  };
+  steps: { order: number; title: string; instructions: string; validation: string }[];
+};
+
+/** Seeds a topic's labs (matched by title); steps are only created once. */
+async function seedLabs(topicId: string, labs: LabSeed[]) {
+  for (const labDef of labs) {
+    const existingLab = await prisma.lab.findFirst({ where: { topicId, title: labDef.title } });
+
+    if (existingLab) {
+      await prisma.lab.update({ where: { id: existingLab.id }, data: labDef.data });
+    } else {
+      await prisma.lab.create({
+        data: { topicId, title: labDef.title, ...labDef.data, steps: { create: labDef.steps } },
+      });
+    }
+  }
+}
+
 async function main() {
   // Every upsert below passes the same fields to `update` and `create` (rather
   // than `update: {}`), so a wording/value edit made here actually reaches an
@@ -1716,7 +1789,7 @@ Uma lifecycle rule automatiza ações sobre objetos (de um bucket inteiro ou fil
 
 Espere cenários pedindo a estratégia de cache certa para um requisito ("dados nunca desatualizados" → write-through; "só cachear o que é lido" → lazy loading), DAX vs. ElastiCache, Redis vs. Memcached, e desenhar uma lifecycle rule a partir de um padrão de acesso e de um prazo de retenção.`;
 
-  const storageLessons = [
+  const storageLessons: LessonSeed[] = [
     {
       order: 1,
       estimatedMinutes: 13,
@@ -1751,37 +1824,9 @@ Espere cenários pedindo a estratégia de cache certa para um requisito ("dados 
     },
   ];
 
-  for (const lessonDef of storageLessons) {
-    const existingLesson = await prisma.lesson.findFirst({
-      where: { topicId: storageTopic.id, title: lessonDef.title },
-    });
+  await seedLessons(storageTopic.id, storageLessons);
 
-    if (existingLesson) {
-      await prisma.lesson.update({
-        where: { id: existingLesson.id },
-        data: { order: lessonDef.order, estimatedMinutes: lessonDef.estimatedMinutes, content: lessonDef.content },
-      });
-    } else {
-      await prisma.lesson.create({
-        data: {
-          topicId: storageTopic.id,
-          order: lessonDef.order,
-          estimatedMinutes: lessonDef.estimatedMinutes,
-          title: lessonDef.title,
-          content: lessonDef.content,
-          resources: {
-            create: lessonDef.resources.map((resource, index) => ({
-              ...resource,
-              type: 'documentation',
-              order: index + 1,
-            })),
-          },
-        },
-      });
-    }
-  }
-
-  const storageLabs = [
+  const storageLabs: LabSeed[] = [
     {
       title: 'Modelar uma tabela DynamoDB: Query, Scan e um GSI',
       data: {
@@ -1897,24 +1942,7 @@ Espere cenários pedindo a estratégia de cache certa para um requisito ("dados 
     },
   ];
 
-  for (const labDef of storageLabs) {
-    const existingLab = await prisma.lab.findFirst({
-      where: { topicId: storageTopic.id, title: labDef.title },
-    });
-
-    if (existingLab) {
-      await prisma.lab.update({ where: { id: existingLab.id }, data: labDef.data });
-    } else {
-      await prisma.lab.create({
-        data: {
-          topicId: storageTopic.id,
-          title: labDef.title,
-          ...labDef.data,
-          steps: { create: labDef.steps },
-        },
-      });
-    }
-  }
+  await seedLabs(storageTopic.id, storageLabs);
 
   const storageQuestionsToSeed: QuestionSeed[] = [
     {
@@ -2483,7 +2511,7 @@ O AWS Certificate Manager emite certificados TLS públicos gratuitos para uso em
 
 Espere cenários pedindo SSE-KMS quando o requisito é auditoria ou controle de acesso à chave, SSE-C quando o cliente precisa manter a chave, bucket policies com \`aws:SecureTransport\` ou com o cabeçalho de criptografia, criptografar um RDS existente via snapshot, e certificados do ACM (inclusive a região us-east-1 para o CloudFront).`;
 
-  const encryptionLessons = [
+  const encryptionLessons: LessonSeed[] = [
     {
       order: 1,
       estimatedMinutes: 12,
@@ -2518,37 +2546,9 @@ Espere cenários pedindo SSE-KMS quando o requisito é auditoria ou controle de 
     },
   ];
 
-  for (const lessonDef of encryptionLessons) {
-    const existingLesson = await prisma.lesson.findFirst({
-      where: { topicId: encryptionTopic.id, title: lessonDef.title },
-    });
+  await seedLessons(encryptionTopic.id, encryptionLessons);
 
-    if (existingLesson) {
-      await prisma.lesson.update({
-        where: { id: existingLesson.id },
-        data: { order: lessonDef.order, estimatedMinutes: lessonDef.estimatedMinutes, content: lessonDef.content },
-      });
-    } else {
-      await prisma.lesson.create({
-        data: {
-          topicId: encryptionTopic.id,
-          order: lessonDef.order,
-          estimatedMinutes: lessonDef.estimatedMinutes,
-          title: lessonDef.title,
-          content: lessonDef.content,
-          resources: {
-            create: lessonDef.resources.map((resource, index) => ({
-              ...resource,
-              type: 'documentation',
-              order: index + 1,
-            })),
-          },
-        },
-      });
-    }
-  }
-
-  const encryptionLabs = [
+  const encryptionLabs: LabSeed[] = [
     {
       title: 'Criptografar e descriptografar com o KMS pelo CloudShell',
       data: {
@@ -2673,24 +2673,7 @@ Espere cenários pedindo SSE-KMS quando o requisito é auditoria ou controle de 
     },
   ];
 
-  for (const labDef of encryptionLabs) {
-    const existingLab = await prisma.lab.findFirst({
-      where: { topicId: encryptionTopic.id, title: labDef.title },
-    });
-
-    if (existingLab) {
-      await prisma.lab.update({ where: { id: existingLab.id }, data: labDef.data });
-    } else {
-      await prisma.lab.create({
-        data: {
-          topicId: encryptionTopic.id,
-          title: labDef.title,
-          ...labDef.data,
-          steps: { create: labDef.steps },
-        },
-      });
-    }
-  }
+  await seedLabs(encryptionTopic.id, encryptionLabs);
 
   const encryptionQuestionsToSeed: QuestionSeed[] = [
     {
@@ -3090,6 +3073,723 @@ Espere cenários pedindo SSE-KMS quando o requisito é auditoria ou controle de 
   ];
 
   await seedFlashcards(encryptionTopic.id, encryptionFlashcardsToSeed);
+
+  // ---------------------------------------------------------------------
+  // Content-authoring push, topic 5 of 12: Domain 2 "Dados sensíveis no
+  // código da aplicação", to the exam-readiness bar.
+  // ---------------------------------------------------------------------
+
+  const sensitiveDataTopic = await prisma.topic.findFirstOrThrow({
+    where: { domainId: securityDomain.id, name: 'Dados sensíveis no código da aplicação' },
+  });
+
+  const secretsManagerServiceData = {
+    shortName: 'Secrets Manager',
+    category: 'Security, Identity, & Compliance',
+    description:
+      'Armazena, recupera e rotaciona automaticamente segredos como credenciais de banco de dados e chaves de API.',
+  };
+  const secretsManagerService = await prisma.aWSService.upsert({
+    where: { name: 'AWS Secrets Manager' },
+    update: secretsManagerServiceData,
+    create: { name: 'AWS Secrets Manager', ...secretsManagerServiceData },
+  });
+
+  const systemsManagerServiceData = {
+    shortName: 'Systems Manager',
+    category: 'Management & Governance',
+    description:
+      'Conjunto de ferramentas de operação; inclui o Parameter Store, que guarda configurações e segredos (SecureString) em hierarquias.',
+  };
+  const systemsManagerService = await prisma.aWSService.upsert({
+    where: { name: 'AWS Systems Manager' },
+    update: systemsManagerServiceData,
+    create: { name: 'AWS Systems Manager', ...systemsManagerServiceData },
+  });
+
+  const macieServiceData = {
+    shortName: 'Macie',
+    category: 'Security, Identity, & Compliance',
+    description: 'Descobre e classifica dados sensíveis (como PII) armazenados no Amazon S3 usando machine learning.',
+  };
+  const macieService = await prisma.aWSService.upsert({
+    where: { name: 'Amazon Macie' },
+    update: macieServiceData,
+    create: { name: 'Amazon Macie', ...macieServiceData },
+  });
+
+  const cloudWatchServiceData = {
+    shortName: 'CloudWatch',
+    category: 'Management & Governance',
+    description: 'Coleta métricas, logs e alarmes das aplicações e dos serviços da AWS.',
+  };
+  const cloudWatchService = await prisma.aWSService.upsert({
+    where: { name: 'Amazon CloudWatch' },
+    update: cloudWatchServiceData,
+    create: { name: 'Amazon CloudWatch', ...cloudWatchServiceData },
+  });
+
+  const secretsLessonContent = `## Objetivo
+
+Ao final desta lição você vai conseguir escolher entre o AWS Secrets Manager e o Parameter Store do AWS Systems Manager, organizar parâmetros em hierarquias, entender a rotação de segredos e injetar segredos em infraestrutura como código sem expô-los.
+
+## O problema: segredos no código
+
+Senhas de banco, chaves de API e tokens escritos no código-fonte (ou em arquivos de configuração versionados) acabam no histórico do Git, em logs de build e nas máquinas de todos que clonam o repositório — e trocar um segredo passa a exigir um novo deploy. A regra é: o código guarda só o **nome** do segredo, e o valor é buscado em tempo de execução num serviço feito para isso, com acesso controlado pelo IAM. E, para acessar serviços da AWS, nem segredo deve existir: a aplicação usa a IAM role do ambiente (role de execução do Lambda, instance profile do EC2, task role do ECS), e o SDK obtém credenciais temporárias sozinho — nunca access keys no código.
+
+## Parameter Store
+
+O Parameter Store guarda valores de configuração e segredos em três tipos: \`String\`, \`StringList\` e \`SecureString\` — este último criptografado com uma chave do KMS (a AWS managed \`aws/ssm\` ou uma customer managed). Ler um \`SecureString\` em claro exige \`--with-decryption\` e permissão de \`kms:Decrypt\` na chave, além de \`ssm:GetParameter\`.
+
+Parâmetros são organizados em hierarquias por caminho, como \`/minha-app/prod/db/senha\`, e \`GetParametersByPath\` (com \`Recursive\`) lê uma árvore inteira numa chamada — e as policies do IAM podem restringir o acesso por caminho. Cada alteração gera uma nova versão, e versões podem receber labels.
+
+Há dois níveis: **Standard** (gratuito, até 10.000 parâmetros por conta e região, valores de até 4 KB, sem parameter policies) e **Advanced** (pago por parâmetro, até 100.000, valores de até 8 KB, e parameter policies como expiração e notificações).
+
+## Secrets Manager
+
+O Secrets Manager é feito especificamente para segredos: guarda valores de até 64 KB (normalmente um JSON com usuário e senha), sempre criptografados com o KMS, e cobra por segredo por mês e por chamadas de API. O que o diferencia é a **rotação automática**: para Amazon RDS, Aurora, Redshift e DocumentDB há rotação pronta, executada por uma função Lambda num agendamento (para outros tipos de segredo, você escreve a função de rotação). Ele também replica segredos entre regiões e aceita resource-based policies (inclusive para acesso entre contas).
+
+Cada versão de um segredo carrega staging labels: \`AWSCURRENT\` (a versão atual — é a que \`GetSecretValue\` devolve por padrão), \`AWSPENDING\` (a versão sendo criada durante uma rotação) e \`AWSPREVIOUS\` (a versão anterior, útil para rollback). Excluir um segredo agenda a exclusão com uma janela de recuperação de 7 a 30 dias.
+
+## Qual escolher
+
+- Precisa de **rotação automática** (sobretudo de credenciais de banco) ou de replicação entre regiões → **Secrets Manager**.
+- Configurações e segredos sem rotação, com foco em **custo** e organização hierárquica → **Parameter Store** (\`SecureString\` no nível Standard é gratuito).
+
+## Segredos em infraestrutura como código
+
+No CloudFormation, dynamic references resolvem o valor no momento do deploy sem que ele apareça no template: \`{{resolve:secretsmanager:nome-do-segredo:SecretString:senha}}\` para o Secrets Manager e \`{{resolve:ssm-secure:/caminho/do/parametro}}\` para um \`SecureString\` (este último só em propriedades que o suportam). Para o RDS, a opção de o próprio serviço gerenciar a senha mestre no Secrets Manager dispensa até isso.
+
+## Relação com a prova DVA-C02
+
+Espere cenários de Secrets Manager vs. Parameter Store (rotação vs. custo), \`SecureString\` e a permissão de \`kms:Decrypt\`, \`GetParametersByPath\`, níveis Standard vs. Advanced, staging labels da rotação, e dynamic references no CloudFormation.`;
+
+  const sensitiveDataLessonContent = `## Objetivo
+
+Ao final desta lição você vai conseguir classificar dados sensíveis, proteger variáveis de ambiente do Lambda, buscar segredos em tempo de execução com eficiência e evitar que dados sensíveis vazem em logs.
+
+## Classificando dados sensíveis
+
+Antes de proteger, é preciso saber o que é sensível. As categorias mais comuns: **PII** (informação pessoal identificável — nome, CPF, e-mail, endereço), **PHI** (informação de saúde protegida, sob regras como a HIPAA) e **dados de cartão** (sob o PCI DSS), além de credenciais e segredos da própria aplicação. A classificação define onde o dado pode ser armazenado, quem acessa, por quanto tempo é retido e se pode aparecer em logs. Para descobrir dados sensíveis já espalhados em buckets S3, o **Amazon Macie** usa machine learning e padrões para identificar PII e gera findings por bucket e objeto.
+
+## Variáveis de ambiente do Lambda
+
+Variáveis de ambiente do Lambda (até 4 KB no total por função) são criptografadas em repouso com a chave AWS managed \`aws/lambda\` por padrão, ou com uma customer managed key que você escolher. Mas quem tem permissão de ver a configuração da função vê os valores em claro no Console e na API. Os **encryption helpers** do Console criptografam o valor no lado do cliente antes de salvá-lo, de modo que a configuração guarda só o texto cifrado — e o código precisa chamar \`kms:Decrypt\` para usá-lo.
+
+Na prática, a abordagem preferida é outra: guardar na variável de ambiente só o **nome** do segredo (ex.: \`SECRET_ID=minha-app/prod/db\`) e buscar o valor no Secrets Manager ou no Parameter Store, com a permissão dada à role de execução da função.
+
+## Buscando segredos com eficiência
+
+Buscar o segredo a cada invocação adiciona latência, custo por chamada de API e risco de throttling. O padrão é buscar uma vez e manter em cache: no Lambda, uma variável fora do handler sobrevive entre invocações do mesmo ambiente de execução (warm start). A **AWS Parameters and Secrets Lambda Extension** faz isso pronto: roda como layer, expõe um endpoint HTTP local (porta 2773) e mantém um cache com TTL configurável para parâmetros e segredos. Para linguagens fora do Lambda, os clientes de cache do Secrets Manager cumprem o mesmo papel. Com rotação habilitada, o TTL do cache define por quanto tempo a aplicação pode usar um valor antigo — trate erros de autenticação relendo o segredo.
+
+## Dados sensíveis em logs
+
+Um \`console.log(event)\` inocente pode gravar CPF, e-mail ou tokens no CloudWatch Logs, onde muito mais gente tem acesso do que ao banco. Boas práticas: logar só identificadores necessários, mascarar valores (\`abc***\`) antes de logar, e nunca logar segredos. Como rede de proteção, as **data protection policies do CloudWatch Logs** detectam e mascaram dados sensíveis (e-mails, números de cartão, credenciais etc.) nos log groups — só principais com a permissão \`logs:Unmask\` veem os valores originais.
+
+## Relação com a prova DVA-C02
+
+Espere cenários sobre remover credenciais do código (IAM role + Secrets Manager), permissões necessárias para ler um segredo ou um \`SecureString\` (incluindo \`kms:Decrypt\` com customer managed key), cache de segredos no Lambda, encryption helpers, Macie para encontrar PII no S3, e mascaramento de dados sensíveis em logs.`;
+
+  const sensitiveDataLessons: LessonSeed[] = [
+    {
+      order: 1,
+      estimatedMinutes: 12,
+      title: 'Secrets Manager e Parameter Store',
+      content: secretsLessonContent,
+      resources: [
+        {
+          title: 'AWS Secrets Manager — documentação oficial',
+          url: 'https://docs.aws.amazon.com/secretsmanager/latest/userguide/intro.html',
+        },
+        {
+          title: 'AWS Systems Manager Parameter Store — documentação oficial',
+          url: 'https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-parameter-store.html',
+        },
+      ],
+    },
+    {
+      order: 2,
+      estimatedMinutes: 9,
+      title: 'Dados sensíveis na aplicação: Lambda, cache e logs',
+      content: sensitiveDataLessonContent,
+      resources: [
+        {
+          title: 'Usar segredos do Secrets Manager em funções Lambda — documentação oficial',
+          url: 'https://docs.aws.amazon.com/secretsmanager/latest/userguide/retrieving-secrets_lambda.html',
+        },
+        {
+          title: 'Mascarar dados sensíveis no CloudWatch Logs — documentação oficial',
+          url: 'https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/mask-sensitive-log-data.html',
+        },
+      ],
+    },
+  ];
+
+  await seedLessons(sensitiveDataTopic.id, sensitiveDataLessons);
+
+  const lambdaSecretCode = `Em "Code", substitua o conteúdo de \`lambda_function.py\` pelo código abaixo e clique em "Deploy":
+
+\`\`\`python
+import json
+import os
+
+import boto3
+
+client = boto3.client("secretsmanager")
+_cache = {}
+
+
+def get_secret(secret_id):
+    # Fora do handler: o cache sobrevive entre invocações do mesmo ambiente (warm start).
+    if secret_id not in _cache:
+        response = client.get_secret_value(SecretId=secret_id)
+        _cache[secret_id] = json.loads(response["SecretString"])
+    return _cache[secret_id]
+
+
+def lambda_handler(event, context):
+    secret = get_secret(os.environ["SECRET_ID"])
+    # Nunca devolva nem logue o segredo inteiro: só uma versão mascarada.
+    return {"apiKeyMascarada": secret["apiKey"][:3] + "***"}
+\`\`\``;
+
+  const sensitiveDataLabs: LabSeed[] = [
+    {
+      title: 'Parameter Store e Secrets Manager pela AWS CLI',
+      data: {
+        level: 1,
+        order: 1,
+        estimatedMinutes: 25,
+        objective:
+          'Ao final deste laboratório você terá criado parâmetros String e SecureString numa hierarquia do Parameter Store, lido a hierarquia inteira numa chamada, e criado um segredo no Secrets Manager cuja atualização gera as versões AWSCURRENT e AWSPREVIOUS.',
+        prerequisites:
+          'Conta AWS com acesso ao Console e ao AWS CloudShell. Ter lido a lição "Secrets Manager e Parameter Store" ajuda.',
+        context:
+          'Uma aplicação guarda a senha do banco e o nível de log num arquivo de configuração versionado no Git. O time decidiu tirar isso do código: configurações e a senha vão para o Parameter Store, e uma chave de API de um parceiro, que será rotacionada, vai para o Secrets Manager.',
+        troubleshooting:
+          'ParameterAlreadyExists: o parâmetro já existe (talvez de uma tentativa anterior) — acrescente `--overwrite` ao `put-parameter`. \n\nO valor do SecureString aparece como um texto longo e ilegível: é o valor criptografado — faltou `--with-decryption`. \n\nResourceExistsException ao criar o segredo: um segredo com esse nome existe ou está agendado para exclusão — use outro nome ou restaure-o com `aws secretsmanager restore-secret`. \n\nErro de sintaxe no JSON do segredo: no CloudShell, mantenha o JSON entre aspas simples, como no exemplo.',
+        cleanup:
+          'No CloudShell, rode `aws ssm delete-parameters --names /devlab/prod/app/log-level /devlab/prod/db/senha` e `aws secretsmanager delete-secret --secret-id devlab/prod/parceiro --force-delete-without-recovery` (sem a flag, o segredo fica agendado para exclusão por 30 dias).',
+        costWarning:
+          'Parâmetros Standard do Parameter Store são gratuitos. No Secrets Manager, segredos novos têm um período de teste gratuito de 30 dias; fora dele, custam US$ 0,40 por mês (proporcional) mais US$ 0,05 por 10.000 chamadas. Exclua o segredo ao final.',
+      },
+      steps: [
+        {
+          order: 1,
+          title: 'Criar os parâmetros',
+          instructions:
+            'Abra o AWS CloudShell e crie um parâmetro comum e um SecureString (criptografado com a chave `aws/ssm`):\n\n```bash\naws ssm put-parameter --name /devlab/prod/app/log-level --type String --value INFO\naws ssm put-parameter --name /devlab/prod/db/senha --type SecureString --value \'SenhaDeTeste123!\'\n```',
+          validation:
+            'No Console do Systems Manager, em "Parameter Store", aparecem os dois parâmetros; `/devlab/prod/db/senha` tem tipo `SecureString` e a chave `alias/aws/ssm`.',
+        },
+        {
+          order: 2,
+          title: 'Ler o SecureString com e sem descriptografia',
+          instructions:
+            'Rode `aws ssm get-parameter --name /devlab/prod/db/senha --query Parameter.Value` e depois o mesmo comando com `--with-decryption`.',
+          validation:
+            'Sem a flag, o valor volta criptografado (texto longo e ilegível); com `--with-decryption`, volta `SenhaDeTeste123!` — o KMS descriptografou porque você tem `kms:Decrypt` na chave.',
+        },
+        {
+          order: 3,
+          title: 'Ler a hierarquia inteira',
+          instructions:
+            'Rode:\n\n```bash\naws ssm get-parameters-by-path --path /devlab/prod --recursive --with-decryption --query "Parameters[].{Nome:Name,Valor:Value}"\n```',
+          validation:
+            'Os dois parâmetros voltam numa única chamada, com nome e valor — é assim que uma aplicação carrega toda a sua configuração de um ambiente (`/devlab/prod`) de uma vez.',
+        },
+        {
+          order: 4,
+          title: 'Criar um segredo no Secrets Manager',
+          instructions:
+            'Rode:\n\n```bash\naws secretsmanager create-secret --name devlab/prod/parceiro --secret-string \'{"apiKey":"chave-inicial","usuario":"devlab"}\'\n```\n\nDepois leia o segredo com `aws secretsmanager get-secret-value --secret-id devlab/prod/parceiro`.',
+          validation:
+            'A leitura devolve `SecretString` com o JSON e `VersionStages` igual a `["AWSCURRENT"]`.',
+        },
+        {
+          order: 5,
+          title: 'Atualizar o segredo e ver as versões',
+          instructions:
+            'Grave um novo valor e liste as versões:\n\n```bash\naws secretsmanager put-secret-value --secret-id devlab/prod/parceiro --secret-string \'{"apiKey":"chave-nova","usuario":"devlab"}\'\naws secretsmanager list-secret-version-ids --secret-id devlab/prod/parceiro\n```',
+          validation:
+            'Aparecem duas versões: a nova com `AWSCURRENT` e a anterior com `AWSPREVIOUS`. Um `get-secret-value` sem opções agora devolve `chave-nova`; com `--version-stage AWSPREVIOUS`, devolve `chave-inicial` — o mesmo mecanismo que a rotação automática usa.',
+        },
+      ],
+    },
+    {
+      title: 'Função Lambda lendo um segredo com cache e menor privilégio',
+      data: {
+        level: 2,
+        order: 2,
+        estimatedMinutes: 30,
+        objective:
+          'Ao final deste laboratório você terá uma função Lambda que busca uma chave de API no Secrets Manager em tempo de execução, com o nome do segredo numa variável de ambiente, permissão restrita a esse único segredo e cache entre invocações.',
+        prerequisites:
+          'Conta AWS com acesso ao Console. Ter feito o laboratório de Lambda do tópico "Fundamentos do AWS Lambda" e lido a lição "Dados sensíveis na aplicação: Lambda, cache e logs" ajuda.',
+        context:
+          'Uma função Lambda chama a API de um parceiro e, hoje, a chave está escrita no código. Você vai movê-la para o Secrets Manager, dar à função permissão só para ler aquele segredo, e evitar uma chamada ao Secrets Manager a cada invocação.',
+        troubleshooting:
+          'AccessDeniedException no passo 4: é o esperado — a role ainda não tem permissão. Se o erro continuar depois do passo 5, confira se o `Resource` da policy é o ARN completo do segredo (termina com um sufixo de 6 caracteres aleatórios, ex.: `devlab/prod/lambda-api-AbC123`). \n\nKeyError: \'SECRET_ID\': a variável de ambiente não foi salva ou tem outro nome — confira em "Configuration" > "Environment variables". \n\nTask timed out: aumente o timeout da função em "Configuration" > "General configuration" (ex.: 10 segundos) — a primeira chamada inclui a inicialização do SDK.',
+        cleanup:
+          'Exclua a função `devlab-le-segredo`, o log group `/aws/lambda/devlab-le-segredo` no CloudWatch Logs e a role de execução criada para ela (no IAM). Exclua o segredo com `aws secretsmanager delete-secret --secret-id devlab/prod/lambda-api --force-delete-without-recovery`.',
+        costWarning:
+          'As invocações ficam dentro do Free Tier do Lambda. O segredo novo tem período de teste gratuito de 30 dias no Secrets Manager (depois, US$ 0,40 por mês, proporcional) — exclua-o ao final.',
+      },
+      steps: [
+        {
+          order: 1,
+          title: 'Criar o segredo',
+          instructions:
+            'No CloudShell, rode:\n\n```bash\naws secretsmanager create-secret --name devlab/prod/lambda-api --secret-string \'{"apiKey":"abc123-chave-secreta"}\'\n```\n\nCopie o `ARN` da resposta.',
+          validation: 'A resposta traz o `ARN` do segredo, terminando em `devlab/prod/lambda-api-` seguido de 6 caracteres.',
+        },
+        {
+          order: 2,
+          title: 'Criar a função e a variável de ambiente',
+          instructions:
+            'No Console do Lambda, crie a função `devlab-le-segredo` com a versão mais recente de Python e a opção padrão de criar uma nova role de execução. Em "Configuration" > "Environment variables", adicione `SECRET_ID` com o valor `devlab/prod/lambda-api` — o **nome** do segredo, não o valor.',
+          validation: 'A função aparece criada, e a variável `SECRET_ID` está listada com o nome do segredo.',
+        },
+        {
+          order: 3,
+          title: 'Escrever o código',
+          instructions: lambdaSecretCode,
+          validation: 'O Console mostra que o deploy foi concluído ("Successfully updated the function").',
+        },
+        {
+          order: 4,
+          title: 'Testar sem permissão',
+          instructions:
+            'Na aba "Test", crie um evento de teste qualquer (o conteúdo padrão serve) e execute.',
+          validation:
+            'A execução falha com `AccessDeniedException` citando `secretsmanager:GetSecretValue` — a role de execução só tem permissão para gravar logs, e o menor privilégio está funcionando.',
+        },
+        {
+          order: 5,
+          title: 'Dar permissão só para este segredo',
+          instructions:
+            'Em "Configuration" > "Permissions", abra a role de execução no IAM, clique em "Add permissions" > "Create inline policy", escolha o editor JSON e cole a policy abaixo, trocando `ARN-DO-SEGREDO` pelo ARN copiado no passo 1:\n\n```json\n{\n  "Version": "2012-10-17",\n  "Statement": [\n    {\n      "Effect": "Allow",\n      "Action": "secretsmanager:GetSecretValue",\n      "Resource": "ARN-DO-SEGREDO"\n    }\n  ]\n}\n```\n\nSalve com o nome `devlab-le-segredo-policy`.',
+          validation: 'A role passa a listar a policy inline `devlab-le-segredo-policy`.',
+        },
+        {
+          order: 6,
+          title: 'Testar de novo e observar o cache',
+          instructions:
+            'Volte à função e execute o teste duas vezes seguidas. Compare a duração ("Duration") mostrada em cada execução.',
+          validation:
+            'As duas execuções devolvem `{"apiKeyMascarada": "abc***"}`. A segunda é bem mais rápida: o segredo veio do cache fora do handler, sem nova chamada ao Secrets Manager. Como o segredo usa a chave AWS managed `aws/secretsmanager`, não foi preciso dar `kms:Decrypt` explicitamente à role.',
+        },
+      ],
+    },
+  ];
+
+  await seedLabs(sensitiveDataTopic.id, sensitiveDataLabs);
+
+  const sensitiveDataQuestionsToSeed: QuestionSeed[] = [
+    {
+      prompt: 'Qual serviço oferece rotação automática nativa de credenciais de um banco Amazon RDS?',
+      type: 'KNOWLEDGE',
+      difficulty: 'EASY',
+      explanation:
+        'O AWS Secrets Manager tem rotação automática pronta para RDS, Aurora, Redshift e DocumentDB, executada por uma função Lambda num agendamento. O Parameter Store não tem rotação nativa.',
+      officialReferences: 'https://docs.aws.amazon.com/secretsmanager/latest/userguide/rotating-secrets.html',
+      options: [
+        { text: 'AWS Secrets Manager', isCorrect: true, explanation: 'Correto: rotação nativa é o principal diferencial dele.' },
+        { text: 'Parameter Store do AWS Systems Manager', isCorrect: false, explanation: 'O Parameter Store não rotaciona valores automaticamente.' },
+        { text: 'AWS KMS', isCorrect: false, explanation: 'O KMS rotaciona chaves criptográficas, não senhas de banco.' },
+        { text: 'Amazon Macie', isCorrect: false, explanation: 'O Macie descobre dados sensíveis no S3; não gerencia credenciais.' },
+      ],
+    },
+    {
+      prompt: 'Qual tipo de parâmetro do Parameter Store armazena o valor criptografado com uma chave do KMS?',
+      type: 'KNOWLEDGE',
+      difficulty: 'EASY',
+      explanation: 'SecureString criptografa o valor com uma chave do KMS (aws/ssm ou customer managed). String e StringList são armazenados em texto claro.',
+      options: [
+        { text: 'SecureString', isCorrect: true, explanation: 'Correto.' },
+        { text: 'String', isCorrect: false, explanation: 'Armazenado em texto claro.' },
+        { text: 'StringList', isCorrect: false, explanation: 'Lista de valores separados por vírgula, em texto claro.' },
+        { text: 'EncryptedString', isCorrect: false, explanation: 'Esse tipo não existe no Parameter Store.' },
+      ],
+    },
+    {
+      prompt: 'Por padrão, como as variáveis de ambiente de uma função Lambda são protegidas em repouso?',
+      type: 'KNOWLEDGE',
+      difficulty: 'MEDIUM',
+      explanation:
+        'O Lambda criptografa as variáveis de ambiente em repouso com a chave AWS managed aws/lambda por padrão (ou com uma customer managed key, se configurada). Quem pode ver a configuração da função, porém, vê os valores em claro — por isso segredos devem ficar no Secrets Manager ou no Parameter Store.',
+      options: [
+        {
+          text: 'São criptografadas com a chave AWS managed aws/lambda do KMS.',
+          isCorrect: true,
+          explanation: 'Correto: criptografia em repouso padrão, sem configuração.',
+        },
+        {
+          text: 'Não são criptografadas; ficam em texto claro.',
+          isCorrect: false,
+          explanation: 'Elas são criptografadas em repouso por padrão.',
+        },
+        {
+          text: 'São armazenadas automaticamente no Secrets Manager.',
+          isCorrect: false,
+          explanation: 'O Lambda não move variáveis de ambiente para o Secrets Manager.',
+        },
+        {
+          text: 'São criptografadas só se os encryption helpers forem usados.',
+          isCorrect: false,
+          explanation: 'Os encryption helpers adicionam criptografia no lado do cliente; a criptografia em repouso existe sempre.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Uma aplicação precisa guardar 30 valores de configuração e 3 senhas que nunca são rotacionadas, com o menor custo possível e criptografia para as senhas. Qual solução atende?',
+      type: 'APPLICATION',
+      difficulty: 'MEDIUM',
+      explanation:
+        'O Parameter Store no nível Standard é gratuito: os valores de configuração vão como String e as senhas como SecureString (criptografadas com o KMS). O Secrets Manager cobraria por segredo sem que a rotação, seu diferencial, seja necessária.',
+      options: [
+        {
+          text: 'Parameter Store (nível Standard), com as senhas como SecureString.',
+          isCorrect: true,
+          explanation: 'Correto: gratuito e com criptografia para as senhas.',
+        },
+        {
+          text: 'Secrets Manager para os 33 valores.',
+          isCorrect: false,
+          explanation: 'Cobraria por segredo sem necessidade de rotação.',
+        },
+        {
+          text: 'Variáveis de ambiente em texto claro no código.',
+          isCorrect: false,
+          explanation: 'Senhas no código ficam expostas no repositório.',
+        },
+        {
+          text: 'Parameter Store no nível Advanced.',
+          isCorrect: false,
+          explanation: 'Advanced é cobrado e só é necessário para valores acima de 4 KB, muitos parâmetros ou parameter policies.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Uma aplicação guarda sua configuração em parâmetros como /loja/prod/db/host, /loja/prod/db/senha e /loja/prod/api/url. Como carregar todos os parâmetros do ambiente prod numa única chamada, já descriptografados?',
+      type: 'APPLICATION',
+      difficulty: 'MEDIUM',
+      explanation:
+        'GetParametersByPath com Path=/loja/prod, Recursive=true e WithDecryption=true lê toda a hierarquia numa chamada (paginada, se houver muitos parâmetros), descriptografando os SecureString.',
+      options: [
+        {
+          text: 'GetParametersByPath com Path /loja/prod, Recursive e WithDecryption.',
+          isCorrect: true,
+          explanation: 'Correto: é o propósito das hierarquias do Parameter Store.',
+        },
+        {
+          text: 'GetParameter com o nome /loja/prod/*.',
+          isCorrect: false,
+          explanation: 'GetParameter não aceita curingas; lê um parâmetro por nome.',
+        },
+        {
+          text: 'DescribeParameters com WithDecryption.',
+          isCorrect: false,
+          explanation: 'DescribeParameters lista metadados, não valores.',
+        },
+        {
+          text: 'GetSecretValue com o prefixo /loja/prod.',
+          isCorrect: false,
+          explanation: 'GetSecretValue é do Secrets Manager e lê um segredo por vez.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Durante uma revisão, descobre-se que a senha do banco de produção está escrita no código-fonte de uma função Lambda e já foi enviada ao repositório Git. Qual é a resposta mais adequada?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'A senha já vazou para o histórico do Git, então precisa ser trocada. Em seguida, ela vai para o Secrets Manager (com rotação, se possível) e a função passa a buscá-la em tempo de execução, com permissão dada pela role de execução.',
+      options: [
+        {
+          text: 'Trocar a senha, guardá-la no Secrets Manager e fazer a função buscá-la em tempo de execução usando a role de execução.',
+          isCorrect: true,
+          explanation: 'Correto: remediar o vazamento e eliminar o segredo do código.',
+        },
+        {
+          text: 'Apagar a linha do código e fazer um novo commit.',
+          isCorrect: false,
+          explanation: 'A senha continua no histórico do Git e continua válida.',
+        },
+        {
+          text: 'Mover a senha para uma variável de ambiente da função.',
+          isCorrect: false,
+          explanation: 'Melhora pouco (fica visível na configuração) e não resolve a senha que já vazou.',
+        },
+        {
+          text: 'Tornar o repositório privado.',
+          isCorrect: false,
+          explanation: 'Quem já teve acesso ainda tem a senha, e ela continua no histórico.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Uma função Lambda chama GetSecretValue a cada invocação. Com o aumento do tráfego, a latência subiu e o custo de chamadas ao Secrets Manager cresceu. Qual é a melhor correção?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Manter o segredo em cache entre invocações — numa variável fora do handler ou com a AWS Parameters and Secrets Lambda Extension, que tem cache com TTL — elimina a maior parte das chamadas.',
+      officialReferences: 'https://docs.aws.amazon.com/secretsmanager/latest/userguide/retrieving-secrets_lambda.html',
+      options: [
+        {
+          text: 'Fazer cache do segredo entre invocações (fora do handler ou com a Parameters and Secrets Lambda Extension).',
+          isCorrect: true,
+          explanation: 'Correto: menos chamadas, menos latência e menos custo.',
+        },
+        {
+          text: 'Copiar o valor do segredo para uma variável de ambiente.',
+          isCorrect: false,
+          explanation: 'Expõe o segredo na configuração da função e quebra com a rotação.',
+        },
+        {
+          text: 'Aumentar a memória da função.',
+          isCorrect: false,
+          explanation: 'Não reduz o número de chamadas ao Secrets Manager.',
+        },
+        {
+          text: 'Trocar o Secrets Manager por um arquivo no pacote de deploy.',
+          isCorrect: false,
+          explanation: 'Volta a colocar o segredo junto do código.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Uma função Lambda lê um parâmetro SecureString criptografado com uma customer managed key e recebe AccessDeniedException, embora sua role tenha ssm:GetParameter no parâmetro. Qual é a causa mais provável?',
+      type: 'SCENARIO',
+      difficulty: 'HARD',
+      explanation:
+        'Para descriptografar um SecureString, a role precisa também de kms:Decrypt na chave usada (e a key policy precisa permitir). Com uma customer managed key, isso não vem por padrão.',
+      options: [
+        {
+          text: 'Falta a permissão kms:Decrypt na customer managed key.',
+          isCorrect: true,
+          explanation: 'Correto: ler em claro exige acesso ao parâmetro e à chave.',
+        },
+        {
+          text: 'SecureString não pode ser lido por funções Lambda.',
+          isCorrect: false,
+          explanation: 'Pode, com as permissões certas.',
+        },
+        {
+          text: 'O parâmetro precisa estar no nível Advanced.',
+          isCorrect: false,
+          explanation: 'SecureString existe nos dois níveis.',
+        },
+        {
+          text: 'Falta a permissão secretsmanager:GetSecretValue.',
+          isCorrect: false,
+          explanation: 'O parâmetro está no Parameter Store, não no Secrets Manager.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Uma empresa precisa descobrir quais buckets S3, entre centenas, contêm arquivos com dados pessoais (PII) como CPF e e-mail. Qual serviço atende com menos esforço?',
+      type: 'SCENARIO',
+      difficulty: 'EASY',
+      explanation:
+        'O Amazon Macie analisa objetos no S3 com machine learning e identificadores de dados para encontrar PII, gerando findings por bucket e objeto.',
+      options: [
+        { text: 'Amazon Macie', isCorrect: true, explanation: 'Correto: é o serviço de descoberta de dados sensíveis no S3.' },
+        { text: 'AWS Secrets Manager', isCorrect: false, explanation: 'Guarda segredos; não varre buckets.' },
+        { text: 'AWS KMS', isCorrect: false, explanation: 'Criptografa dados; não os classifica.' },
+        { text: 'S3 Inventory', isCorrect: false, explanation: 'Lista objetos e metadados, sem analisar o conteúdo.' },
+      ],
+    },
+    {
+      prompt:
+        'Após uma rotação automática no Secrets Manager, um sistema legado precisa temporariamente ler o valor anterior do segredo para concluir um rollback. Qual staging label ele deve pedir?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'HARD',
+      explanation:
+        'AWSPREVIOUS marca a versão anterior depois de uma rotação. AWSCURRENT é a versão atual (o padrão de GetSecretValue) e AWSPENDING é a versão em criação durante a rotação.',
+      options: [
+        { text: 'AWSPREVIOUS', isCorrect: true, explanation: 'Correto: é a versão que era atual antes da rotação.' },
+        { text: 'AWSCURRENT', isCorrect: false, explanation: 'É o valor novo, após a rotação.' },
+        { text: 'AWSPENDING', isCorrect: false, explanation: 'Marca a versão em criação durante a rotação.' },
+        { text: 'AWSLATEST', isCorrect: false, explanation: 'Esse staging label não existe.' },
+      ],
+    },
+    {
+      prompt:
+        'Um template do CloudFormation cria uma instância RDS e hoje recebe a senha mestre como um parâmetro em texto claro. Como passar a senha guardada no Secrets Manager sem que ela apareça no template?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'HARD',
+      explanation:
+        'Uma dynamic reference como {{resolve:secretsmanager:nome-do-segredo:SecretString:password}} faz o CloudFormation buscar o valor no momento do deploy, sem que ele apareça no template nem na saída da stack.',
+      officialReferences:
+        'https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/dynamic-references.html',
+      options: [
+        {
+          text: 'Usar uma dynamic reference {{resolve:secretsmanager:...}} na propriedade da senha.',
+          isCorrect: true,
+          explanation: 'Correto: o valor é resolvido no deploy, sem ficar no template.',
+        },
+        {
+          text: 'Usar um parâmetro do template com NoEcho e digitar a senha em cada deploy.',
+          isCorrect: false,
+          explanation: 'Esconde o valor na saída, mas a senha continua sendo digitada e não vem do Secrets Manager.',
+        },
+        {
+          text: 'Colocar a senha num Output da stack.',
+          isCorrect: false,
+          explanation: 'Outputs expõem valores.',
+        },
+        {
+          text: 'Usar Fn::GetAtt no segredo.',
+          isCorrect: false,
+          explanation: 'GetAtt não devolve o valor do segredo.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Os logs de uma aplicação no CloudWatch Logs estão registrando e-mails e números de cartão dos clientes. Enquanto o código é corrigido, como evitar que quem consulta os logs veja esses valores?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'HARD',
+      explanation:
+        'Uma data protection policy no log group detecta e mascara dados sensíveis (e-mails, números de cartão etc.) nos eventos de log. Só principais com a permissão logs:Unmask veem os valores originais.',
+      officialReferences: 'https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/mask-sensitive-log-data.html',
+      options: [
+        {
+          text: 'Aplicar uma data protection policy no log group, que mascara os dados sensíveis (só quem tem logs:Unmask vê os originais).',
+          isCorrect: true,
+          explanation: 'Correto: é a proteção nativa do CloudWatch Logs para esse caso.',
+        },
+        {
+          text: 'Criptografar o log group com uma chave do KMS.',
+          isCorrect: false,
+          explanation: 'Protege em repouso, mas quem pode ler os logs continua vendo os valores.',
+        },
+        {
+          text: 'Reduzir a retenção do log group para 1 dia.',
+          isCorrect: false,
+          explanation: 'Diminui a exposição no tempo, mas os valores continuam visíveis.',
+        },
+        {
+          text: 'Habilitar o Amazon Macie no log group.',
+          isCorrect: false,
+          explanation: 'O Macie analisa objetos no S3, não log groups do CloudWatch Logs.',
+        },
+      ],
+    },
+    {
+      prompt: 'Em qual situação um parâmetro do Parameter Store precisa usar o nível Advanced em vez do Standard?',
+      type: 'KNOWLEDGE',
+      difficulty: 'MEDIUM',
+      explanation:
+        'O nível Advanced é necessário para valores acima de 4 KB (até 8 KB), para mais de 10.000 parâmetros por conta e região, ou para usar parameter policies (como expiração).',
+      options: [
+        {
+          text: 'Quando o valor passa de 4 KB ou quando se quer uma parameter policy de expiração.',
+          isCorrect: true,
+          explanation: 'Correto: são limitações do nível Standard.',
+        },
+        {
+          text: 'Sempre que o parâmetro for do tipo SecureString.',
+          isCorrect: false,
+          explanation: 'SecureString funciona no nível Standard.',
+        },
+        {
+          text: 'Quando o parâmetro é lido por uma função Lambda.',
+          isCorrect: false,
+          explanation: 'O nível não tem relação com quem lê o parâmetro.',
+        },
+        {
+          text: 'Quando o parâmetro faz parte de uma hierarquia.',
+          isCorrect: false,
+          explanation: 'Hierarquias funcionam nos dois níveis.',
+        },
+      ],
+    },
+  ];
+
+  await seedQuestions(sensitiveDataTopic.id, sensitiveDataQuestionsToSeed);
+
+  const sensitiveDataFlashcardsToSeed: FlashcardSeed[] = [
+    {
+      conceptName: 'Secrets Manager vs. Parameter Store',
+      conceptDescription: 'Critérios de escolha entre os dois serviços para guardar segredos.',
+      serviceId: secretsManagerService.id,
+      front: 'Quando usar o Secrets Manager e quando usar o Parameter Store?',
+      back: 'Secrets Manager: rotação automática (ex.: senhas de RDS), replicação entre regiões, até 64 KB, pago. Parameter Store: configurações e segredos sem rotação, hierarquias, nível Standard gratuito.',
+    },
+    {
+      conceptName: 'SecureString',
+      conceptDescription: 'Tipo de parâmetro do Parameter Store criptografado com o KMS.',
+      serviceId: systemsManagerService.id,
+      front: 'O que é preciso para ler um SecureString em claro?',
+      back: 'Chamar com --with-decryption (WithDecryption=true) e ter ssm:GetParameter no parâmetro e kms:Decrypt na chave usada.',
+    },
+    {
+      conceptName: 'Níveis do Parameter Store',
+      conceptDescription: 'Diferenças entre os níveis Standard e Advanced.',
+      serviceId: systemsManagerService.id,
+      front: 'Quais as diferenças entre os níveis Standard e Advanced do Parameter Store?',
+      back: 'Standard: gratuito, até 10.000 parâmetros, 4 KB, sem parameter policies. Advanced: pago, até 100.000 parâmetros, 8 KB, com parameter policies (ex.: expiração).',
+    },
+    {
+      conceptName: 'GetParametersByPath',
+      conceptDescription: 'Leitura de uma hierarquia de parâmetros numa chamada.',
+      serviceId: systemsManagerService.id,
+      front: 'Como ler toda a configuração de /app/prod do Parameter Store numa chamada?',
+      back: 'GetParametersByPath com Path=/app/prod, Recursive=true e WithDecryption=true (paginando, se houver muitos parâmetros).',
+    },
+    {
+      conceptName: 'Staging labels do Secrets Manager',
+      conceptDescription: 'Rótulos que marcam as versões de um segredo durante a rotação.',
+      serviceId: secretsManagerService.id,
+      front: 'O que significam AWSCURRENT, AWSPENDING e AWSPREVIOUS?',
+      back: 'AWSCURRENT: versão atual (padrão do GetSecretValue). AWSPENDING: versão em criação durante a rotação. AWSPREVIOUS: versão anterior, útil para rollback.',
+    },
+    {
+      conceptName: 'Variáveis de ambiente do Lambda e segredos',
+      conceptDescription: 'Proteção das variáveis de ambiente do Lambda e seus limites para segredos.',
+      serviceId: lambdaService.id,
+      front: 'Por que não guardar segredos diretamente em variáveis de ambiente do Lambda?',
+      back: 'Elas são criptografadas em repouso (aws/lambda), mas quem vê a configuração da função vê os valores. Guarde na variável só o nome do segredo e busque o valor no Secrets Manager/Parameter Store.',
+    },
+    {
+      conceptName: 'Cache de segredos no Lambda',
+      conceptDescription: 'Reutilização de segredos entre invocações para reduzir latência e custo.',
+      serviceId: lambdaService.id,
+      front: 'Como evitar chamar o Secrets Manager a cada invocação de uma função Lambda?',
+      back: 'Cache fora do handler (sobrevive entre invocações warm) ou a AWS Parameters and Secrets Lambda Extension, que expõe um endpoint local (porta 2773) com cache e TTL.',
+    },
+    {
+      conceptName: 'Dynamic references do CloudFormation',
+      conceptDescription: 'Resolução de segredos e parâmetros no momento do deploy.',
+      serviceId: secretsManagerService.id,
+      front: 'Como usar um segredo do Secrets Manager num template do CloudFormation sem expô-lo?',
+      back: 'Com uma dynamic reference: {{resolve:secretsmanager:nome:SecretString:chave}} (ou {{resolve:ssm-secure:/caminho}} para SecureString).',
+    },
+    {
+      conceptName: 'Amazon Macie',
+      conceptDescription: 'Serviço de descoberta de dados sensíveis no S3.',
+      serviceId: macieService.id,
+      front: 'Qual serviço encontra PII armazenada em buckets S3?',
+      back: 'O Amazon Macie, que analisa objetos com machine learning e identificadores de dados e gera findings por bucket e objeto.',
+    },
+    {
+      conceptName: 'Data protection policies do CloudWatch Logs',
+      conceptDescription: 'Mascaramento de dados sensíveis em log groups.',
+      serviceId: cloudWatchService.id,
+      front: 'Como mascarar e-mails e números de cartão que aparecem no CloudWatch Logs?',
+      back: 'Com uma data protection policy no log group: os valores sensíveis são mascarados, e só principais com logs:Unmask veem os originais.',
+    },
+  ];
+
+  await seedFlashcards(sensitiveDataTopic.id, sensitiveDataFlashcardsToSeed);
 
   const domainCount = await prisma.domain.count({ where: { examVersionId: examVersion.id } });
   const topicCount = await prisma.topic.count({ where: { domain: { examVersionId: examVersion.id } } });
