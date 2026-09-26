@@ -1123,6 +1123,534 @@ Autenticação e autorização aparecem no domínio Security — espere questõe
     }
   }
 
+  // ---------------------------------------------------------------------
+  // Content-authoring push, topic 2 of 12: Domain 1 "Padrões de arquitetura
+  // e tolerância a falhas" -- same shape as the Cognito topic above.
+  // ---------------------------------------------------------------------
+
+  const architectureTopic = await prisma.topic.findFirstOrThrow({
+    where: { domainId: domain.id, name: 'Padrões de arquitetura e tolerância a falhas' },
+  });
+
+  const sqsServiceData = {
+    shortName: 'SQS',
+    category: 'Application Integration',
+    description:
+      'Fila de mensagens gerenciada que desacopla produtores e consumidores, com suporte a filas Standard e FIFO e dead-letter queues.',
+  };
+  const sqsService = await prisma.aWSService.upsert({
+    where: { name: 'Amazon SQS' },
+    update: sqsServiceData,
+    create: { name: 'Amazon SQS', ...sqsServiceData },
+  });
+
+  const snsServiceData = {
+    shortName: 'SNS',
+    category: 'Application Integration',
+    description:
+      'Serviço de publicação/assinatura (pub/sub) que entrega cada mensagem publicada num tópico a todos os seus assinantes, base do padrão fanout.',
+  };
+  const snsService = await prisma.aWSService.upsert({
+    where: { name: 'Amazon SNS' },
+    update: snsServiceData,
+    create: { name: 'Amazon SNS', ...snsServiceData },
+  });
+
+  const stepFunctionsServiceData = {
+    shortName: 'Step Functions',
+    category: 'Application Integration',
+    description:
+      'Orquestrador de workflows serverless que coordena etapas de uma aplicação como uma máquina de estados, com Retry e Catch declarativos.',
+  };
+  const stepFunctionsService = await prisma.aWSService.upsert({
+    where: { name: 'AWS Step Functions' },
+    update: stepFunctionsServiceData,
+    create: { name: 'AWS Step Functions', ...stepFunctionsServiceData },
+  });
+
+  const architectureLessonContent = `## Objetivo
+
+Ao final desta lição você vai conseguir escolher entre monolito, microsserviços e arquitetura orientada a eventos, diferenciar coreografia de orquestração, e aplicar as técnicas de tolerância a falhas que a prova DVA-C02 mais cobra: retry com backoff exponencial e jitter, dead-letter queues e idempotência.
+
+## Monolito, microsserviços e orientação a eventos
+
+Um monolito empacota toda a aplicação numa única unidade de deploy — simples de começar, mas qualquer mudança exige redeploy do todo e uma parte sobrecarregada escala junto com o resto. Microsserviços quebram a aplicação em serviços pequenos, cada um com seu próprio deploy e seus próprios dados, que se comunicam por APIs ou mensagens. Uma arquitetura orientada a eventos vai além no desacoplamento: um serviço publica um evento ("pedido criado") sem saber quem vai consumi-lo, e cada consumidor reage no seu ritmo. Na AWS, os blocos típicos são o Amazon SQS (filas), o Amazon SNS (pub/sub) e o Amazon EventBridge (barramento de eventos com regras de roteamento).
+
+## Acoplamento síncrono vs. assíncrono
+
+Numa chamada síncrona (ex.: API Gateway → Lambda → outro serviço via HTTP), se o serviço de destino cai, a falha se propaga até o usuário. Colocar uma fila SQS no meio torna a comunicação assíncrona: o produtor grava a mensagem e segue em frente; se o consumidor estiver fora do ar, as mensagens esperam na fila (retenção padrão de 4 dias, configurável até 14). A fila também absorve picos — o consumidor processa no ritmo que aguenta, em vez de ser derrubado pela carga.
+
+## Fanout com SNS + SQS
+
+Quando o mesmo evento precisa ser processado por vários consumidores independentes (ex.: um pedido criado dispara cobrança, e-mail e atualização de estoque), o padrão é o fanout: publica-se uma vez num tópico SNS, e cada consumidor tem sua própria fila SQS assinando o tópico. Cada fila recebe uma cópia da mensagem, e uma falha num consumidor não afeta os outros. Filter policies na assinatura permitem que cada fila receba só as mensagens que lhe interessam.
+
+## Coreografia vs. orquestração
+
+Na coreografia, não há um coordenador central: cada serviço reage a eventos e emite novos eventos (tipicamente com EventBridge ou SNS). É muito desacoplado, mas o fluxo completo fica espalhado e difícil de enxergar. Na orquestração, um coordenador central define a sequência de passos, trata erros e mantém o estado do fluxo — na AWS, o AWS Step Functions. Use orquestração quando o processo tem ordem definida, passos compensatórios ou precisa de visibilidade do estado de cada execução; use coreografia quando os consumidores são independentes entre si.
+
+## Retry com backoff exponencial e jitter
+
+Falhas transitórias (throttling, 5xx, timeouts) devem ser repetidas — mas repetir imediatamente, e todos os clientes ao mesmo tempo, piora a sobrecarga. Backoff exponencial aumenta o intervalo entre tentativas (ex.: 100 ms, 200 ms, 400 ms...), e o jitter adiciona aleatoriedade a esse intervalo para que os clientes não tentem de novo sincronizados. Os AWS SDKs já fazem isso automaticamente para erros repetíveis (como \`ThrottlingException\`); erros 4xx de validação (ex.: parâmetro inválido) não devem ser repetidos, porque vão falhar de novo. No Step Functions, o campo \`Retry\` de um estado aceita \`IntervalSeconds\`, \`MaxAttempts\`, \`BackoffRate\` e \`JitterStrategy\`.
+
+## Dead-letter queues (DLQ)
+
+Uma mensagem que falha repetidamente (uma "poison message") não pode ficar sendo reprocessada para sempre. Numa fila SQS, a redrive policy define um \`maxReceiveCount\`: depois de recebida esse número de vezes sem ser excluída, a mensagem é movida para a dead-letter queue, onde pode ser inspecionada e, depois de corrigido o problema, reenviada (redrive) para a fila original. A DLQ precisa ser do mesmo tipo da fila de origem (Standard ou FIFO), na mesma conta e região. Invocações assíncronas do Lambda têm um mecanismo próprio: por padrão, o Lambda tenta de novo duas vezes após a primeira falha, e depois pode enviar o evento para uma DLQ ou para um on-failure destination.
+
+## Idempotência
+
+Filas SQS Standard garantem entrega pelo menos uma vez (at-least-once), e qualquer retry pode reprocessar a mesma mensagem. Por isso, consumidores devem ser idempotentes: processar a mesma mensagem duas vezes precisa ter o mesmo efeito que processar uma vez (ex.: gravar com uma chave única e uma escrita condicional no DynamoDB, em vez de somar um valor cegamente).
+
+## Relação com a prova DVA-C02
+
+Espere questões de cenário pedindo para desacoplar componentes com SQS, escolher SNS + SQS para fanout, decidir entre Step Functions e coreografia por eventos, configurar uma DLQ com \`maxReceiveCount\`, e reconhecer backoff exponencial com jitter como a resposta certa para erros de throttling.`;
+
+  const existingArchitectureLesson = await prisma.lesson.findFirst({
+    where: { topicId: architectureTopic.id, title: 'Arquiteturas desacopladas e tolerantes a falhas' },
+  });
+
+  if (existingArchitectureLesson) {
+    await prisma.lesson.update({
+      where: { id: existingArchitectureLesson.id },
+      data: { content: architectureLessonContent },
+    });
+  } else {
+    await prisma.lesson.create({
+      data: {
+        topicId: architectureTopic.id,
+        order: 1,
+        estimatedMinutes: 10,
+        title: 'Arquiteturas desacopladas e tolerantes a falhas',
+        content: architectureLessonContent,
+        resources: {
+          create: [
+            {
+              title: 'Amazon SQS dead-letter queues — documentação oficial',
+              url: 'https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-dead-letter-queues.html',
+              type: 'documentation',
+              order: 1,
+            },
+            {
+              title: 'Retry behavior nos AWS SDKs — documentação oficial',
+              url: 'https://docs.aws.amazon.com/sdkref/latest/guide/feature-retry-behavior.html',
+              type: 'documentation',
+              order: 2,
+            },
+          ],
+        },
+      },
+    });
+  }
+
+  const architectureLabData = {
+    level: 1,
+    order: 1,
+    estimatedMinutes: 25,
+    objective:
+      'Ao final deste laboratório você terá montado um fanout SNS → duas filas SQS pelo Console, confirmado que cada fila recebe sua própria cópia de uma mensagem publicada, e visto uma mensagem não processada ser movida para uma dead-letter queue.',
+    prerequisites:
+      'Conta AWS com acesso ao Console (Free Tier é suficiente). Não é necessário conhecimento prévio de SQS ou SNS.',
+    context:
+      'Uma loja virtual quer que cada pedido criado dispare, de forma independente, a cobrança e o envio de e-mail de confirmação — sem que uma falha no serviço de e-mail atrase a cobrança. O time decidiu usar o padrão fanout com SNS + SQS e quer validar o comportamento, incluindo o que acontece com uma mensagem que nunca é processada com sucesso.',
+    troubleshooting:
+      'A fila não recebe a mensagem publicada no tópico: confira se a assinatura aparece como "Confirmed" no tópico SNS e se a access policy da fila permite `sqs:SendMessage` a partir do ARN do tópico (criar a assinatura pela tela da fila, via "Subscribe to Amazon SNS topic", já ajusta essa policy automaticamente). \n\nA mensagem chega "embrulhada" num JSON com campos como `Type`, `MessageId` e `Message`: é o envelope padrão do SNS — o texto publicado está no campo `Message`. Habilite "raw message delivery" na assinatura se quiser só o corpo original. \n\nA mensagem não vai para a DLQ: ela só é movida depois de ser recebida mais vezes que o `maxReceiveCount` sem ser excluída — espere o visibility timeout expirar entre cada "Poll for messages" e não clique em "Delete".',
+    cleanup:
+      'Exclua o tópico SNS `devlab-pedidos` e as três filas (`devlab-cobranca`, `devlab-email` e `devlab-email-dlq`) pelo Console. Excluir o tópico remove também as assinaturas.',
+    costWarning:
+      'O Free Tier inclui 1 milhão de requisições SQS e 1 milhão de publicações SNS por mês. Este laboratório faz algumas dezenas de requisições, então não deve gerar cobrança.',
+  };
+
+  const existingArchitectureLab = await prisma.lab.findFirst({
+    where: { topicId: architectureTopic.id, title: 'Fanout com SNS e SQS e uma dead-letter queue' },
+  });
+
+  if (existingArchitectureLab) {
+    await prisma.lab.update({ where: { id: existingArchitectureLab.id }, data: architectureLabData });
+  } else {
+    await prisma.lab.create({
+      data: {
+        topicId: architectureTopic.id,
+        title: 'Fanout com SNS e SQS e uma dead-letter queue',
+        ...architectureLabData,
+        steps: {
+          create: [
+            {
+              order: 1,
+              title: 'Criar a dead-letter queue',
+              instructions:
+                'No Console da AWS, acesse o Amazon SQS e clique em "Create queue". Escolha o tipo Standard, dê o nome `devlab-email-dlq` e mantenha as demais configurações padrão.',
+              validation: 'A fila `devlab-email-dlq` aparece na lista de filas do SQS.',
+            },
+            {
+              order: 2,
+              title: 'Criar as duas filas consumidoras',
+              instructions:
+                'Crie uma fila Standard chamada `devlab-cobranca` com as configurações padrão. Depois crie outra chamada `devlab-email`, alterando o "Visibility timeout" para 10 segundos e, na seção "Dead-letter queue", habilite a opção, escolha `devlab-email-dlq` e defina "Maximum receives" como 2.',
+              validation:
+                'As filas `devlab-cobranca` e `devlab-email` aparecem na lista, e os detalhes de `devlab-email` mostram `devlab-email-dlq` como dead-letter queue com maximum receives igual a 2.',
+            },
+            {
+              order: 3,
+              title: 'Criar o tópico SNS e assinar as filas',
+              instructions:
+                'Acesse o Amazon SNS, crie um tópico Standard chamado `devlab-pedidos`. Volte ao SQS, abra a fila `devlab-cobranca`, clique em "Subscribe to Amazon SNS topic" e escolha `devlab-pedidos`. Repita para a fila `devlab-email`.',
+              validation:
+                'Na página do tópico `devlab-pedidos`, a aba "Subscriptions" lista duas assinaturas do protocolo SQS, ambas com status "Confirmed".',
+            },
+            {
+              order: 4,
+              title: 'Publicar uma mensagem e verificar o fanout',
+              instructions:
+                'No tópico `devlab-pedidos`, clique em "Publish message" e publique o corpo `{"pedidoId": "123"}`. Em seguida, abra cada uma das duas filas no SQS e use "Send and receive messages" > "Poll for messages".',
+              validation:
+                'As duas filas mostram uma mensagem cada, contendo o envelope do SNS com `{"pedidoId": "123"}` no campo `Message` — cada consumidor recebeu sua própria cópia.',
+            },
+            {
+              order: 5,
+              title: 'Ver a mensagem ir para a DLQ',
+              instructions:
+                'Na fila `devlab-email`, faça "Poll for messages" repetidamente, sem excluir a mensagem, esperando cerca de 10 segundos (o visibility timeout) entre cada tentativa — isso simula um consumidor que falha sempre. Depois de mais de 2 recebimentos, consulte a fila `devlab-email-dlq`.',
+              validation:
+                'A mensagem deixa de aparecer em `devlab-email` e passa a aparecer em `devlab-email-dlq`, enquanto `devlab-cobranca` continua com sua cópia intacta — a falha de um consumidor não afetou o outro.',
+            },
+          ],
+        },
+      },
+    });
+  }
+
+  const architectureQuestionsToSeed: {
+    prompt: string;
+    type: 'KNOWLEDGE' | 'APPLICATION' | 'SCENARIO' | 'EXAM_LEVEL';
+    difficulty: 'EASY' | 'MEDIUM' | 'HARD';
+    explanation: string;
+    officialReferences?: string;
+    options: { text: string; isCorrect: boolean; explanation: string }[];
+  }[] = [
+    {
+      prompt: 'O que é uma dead-letter queue (DLQ) no Amazon SQS?',
+      type: 'KNOWLEDGE',
+      difficulty: 'EASY',
+      explanation:
+        'Uma DLQ é uma fila para onde o SQS move mensagens que foram recebidas mais vezes que o maxReceiveCount da redrive policy sem serem excluídas, isolando mensagens problemáticas para análise sem bloquear o processamento das demais.',
+      officialReferences:
+        'https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-dead-letter-queues.html',
+      options: [
+        {
+          text: 'Uma fila que recebe mensagens que falharam no processamento depois de um número máximo de recebimentos (maxReceiveCount).',
+          isCorrect: true,
+          explanation: 'Correto: é o mecanismo de isolar "poison messages" definido pela redrive policy da fila de origem.',
+        },
+        {
+          text: 'Uma fila que armazena mensagens excluídas para permitir recuperá-las depois.',
+          isCorrect: false,
+          explanation: 'Mensagens excluídas com DeleteMessage são removidas de vez; a DLQ recebe mensagens que nunca foram excluídas com sucesso.',
+        },
+        {
+          text: 'Uma fila FIFO usada para garantir a ordem das mensagens.',
+          isCorrect: false,
+          explanation: 'Ordenação é característica de filas FIFO, não o propósito de uma DLQ.',
+        },
+        {
+          text: 'Uma fila que recebe mensagens que expiraram pelo período de retenção.',
+          isCorrect: false,
+          explanation: 'Mensagens que excedem o período de retenção são descartadas, não movidas para a DLQ.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Por que se adiciona jitter (aleatoriedade) ao backoff exponencial em uma estratégia de retry?',
+      type: 'KNOWLEDGE',
+      difficulty: 'EASY',
+      explanation:
+        'Sem jitter, clientes que falharam ao mesmo tempo tentam de novo nos mesmos instantes, gerando picos sincronizados de carga. O jitter espalha as novas tentativas no tempo, reduzindo a contenção no serviço que está se recuperando.',
+      officialReferences: 'https://docs.aws.amazon.com/sdkref/latest/guide/feature-retry-behavior.html',
+      options: [
+        {
+          text: 'Para evitar que muitos clientes tentem de novo exatamente ao mesmo tempo, espalhando a carga das novas tentativas.',
+          isCorrect: true,
+          explanation: 'Correto: o jitter quebra a sincronização entre clientes que falharam juntos.',
+        },
+        {
+          text: 'Para garantir que a requisição seja bem-sucedida na segunda tentativa.',
+          isCorrect: false,
+          explanation: 'Nenhuma estratégia de retry garante sucesso; o jitter só reduz a contenção.',
+        },
+        {
+          text: 'Para reduzir o número total de tentativas feitas pelo SDK.',
+          isCorrect: false,
+          explanation: 'O número máximo de tentativas é configurado separadamente; o jitter afeta o intervalo entre elas.',
+        },
+        {
+          text: 'Para criptografar o intervalo entre as tentativas.',
+          isCorrect: false,
+          explanation: 'Jitter não tem relação com criptografia.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Quando um pedido é criado, uma aplicação precisa acionar três processos independentes: cobrança, envio de e-mail e atualização de estoque. Uma falha em um deles não pode impedir os outros. Qual arquitetura atende isso de forma desacoplada?',
+      type: 'APPLICATION',
+      difficulty: 'MEDIUM',
+      explanation:
+        'O padrão fanout — publicar o evento uma vez num tópico SNS com três filas SQS assinantes, uma por processo — entrega uma cópia independente a cada consumidor, e cada fila absorve falhas e picos do seu próprio consumidor.',
+      options: [
+        {
+          text: 'Publicar o evento num tópico SNS com três filas SQS assinantes, uma por processo.',
+          isCorrect: true,
+          explanation: 'Correto: é o fanout SNS + SQS — cada consumidor recebe e processa sua cópia de forma independente.',
+        },
+        {
+          text: 'Uma única fila SQS lida pelos três processos.',
+          isCorrect: false,
+          explanation: 'Numa única fila, cada mensagem é consumida por apenas um dos consumidores, não pelos três.',
+        },
+        {
+          text: 'Uma função Lambda que chama os três processos em sequência, de forma síncrona.',
+          isCorrect: false,
+          explanation: 'Acopla os três processos: uma falha ou lentidão num deles afeta os outros.',
+        },
+        {
+          text: 'Gravar o pedido num bucket S3 e fazer os três processos consultarem o bucket periodicamente.',
+          isCorrect: false,
+          explanation: 'Polling periódico de um bucket é ineficiente e não é o padrão de mensageria indicado para esse cenário.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Um processo de pedido tem etapas em ordem definida (reservar estoque, cobrar o cartão, emitir nota), e se a cobrança falhar a reserva de estoque precisa ser desfeita. O time quer visualizar o estado de cada execução. Qual abordagem é a mais adequada?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Um fluxo com ordem definida, passos compensatórios e necessidade de visibilidade do estado é o caso típico de orquestração. O AWS Step Functions modela o fluxo como uma máquina de estados, com Retry e Catch declarativos e histórico de cada execução.',
+      officialReferences: 'https://docs.aws.amazon.com/step-functions/latest/dg/welcome.html',
+      options: [
+        {
+          text: 'Orquestração com AWS Step Functions, usando Catch para acionar a etapa de compensação.',
+          isCorrect: true,
+          explanation: 'Correto: o orquestrador central controla a ordem, trata falhas e expõe o estado de cada execução.',
+        },
+        {
+          text: 'Coreografia pura com eventos no EventBridge, sem nenhum coordenador.',
+          isCorrect: false,
+          explanation: 'Coreografia funciona, mas espalha o fluxo e a compensação entre serviços e dificulta visualizar o estado de cada execução.',
+        },
+        {
+          text: 'Uma única fila SQS FIFO com as três etapas como mensagens.',
+          isCorrect: false,
+          explanation: 'A FIFO garante ordem de entrega, mas não coordena compensação nem oferece visão do estado do fluxo.',
+        },
+        {
+          text: 'Um tópico SNS enviando o pedido para as três etapas ao mesmo tempo.',
+          isCorrect: false,
+          explanation: 'Fanout executa as etapas em paralelo, sem respeitar a ordem exigida.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Uma aplicação que chama o DynamoDB começa a receber erros ProvisionedThroughputExceededException em horários de pico. Qual é a abordagem recomendada no código cliente?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Erros de throttling são transitórios e devem ser repetidos com backoff exponencial e jitter — que os AWS SDKs já aplicam automaticamente, podendo-se ajustar o número máximo de tentativas. Repetir imediatamente ou em loop agrava a sobrecarga.',
+      options: [
+        {
+          text: 'Repetir as requisições com backoff exponencial e jitter (comportamento padrão dos AWS SDKs).',
+          isCorrect: true,
+          explanation: 'Correto: é a estratégia recomendada para erros de throttling.',
+        },
+        {
+          text: 'Repetir a requisição imediatamente em loop até ter sucesso.',
+          isCorrect: false,
+          explanation: 'Retries imediatos e ilimitados aumentam a carga justamente quando o serviço está limitando requisições.',
+        },
+        {
+          text: 'Tratar o erro como definitivo e descartar a requisição.',
+          isCorrect: false,
+          explanation: 'Throttling é transitório; descartar a requisição perde dados sem necessidade.',
+        },
+        {
+          text: 'Trocar a região da tabela a cada erro recebido.',
+          isCorrect: false,
+          explanation: 'Não resolve a causa (capacidade insuficiente no pico) e não é uma estratégia de retry.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Uma função Lambda consome mensagens de uma fila SQS Standard e grava um pagamento no banco a cada mensagem. Em raras ocasiões, o mesmo pagamento é gravado duas vezes. Qual é a causa mais provável e a correção adequada?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'HARD',
+      explanation:
+        'Filas SQS Standard garantem entrega pelo menos uma vez (at-least-once), então a mesma mensagem pode ser entregue mais de uma vez — por exemplo, após um retry. A correção é tornar o consumidor idempotente, por exemplo usando um identificador único do pagamento com uma escrita condicional.',
+      options: [
+        {
+          text: 'A entrega at-least-once da fila Standard pode repetir mensagens; o consumidor deve ser idempotente (ex.: escrita condicional por um ID único do pagamento).',
+          isCorrect: true,
+          explanation: 'Correto: duplicatas ocasionais são esperadas numa fila Standard, e a defesa é a idempotência no consumidor.',
+        },
+        {
+          text: 'O visibility timeout está alto demais; basta reduzi-lo para zero.',
+          isCorrect: false,
+          explanation: 'Um visibility timeout menor que o tempo de processamento aumenta as duplicatas, em vez de eliminá-las.',
+        },
+        {
+          text: 'A fila deveria ter uma dead-letter queue, que impede entregas duplicadas.',
+          isCorrect: false,
+          explanation: 'A DLQ isola mensagens que falham repetidamente; ela não evita duplicatas.',
+        },
+        {
+          text: 'O Lambda está com concorrência reservada baixa demais.',
+          isCorrect: false,
+          explanation: 'A concorrência afeta a vazão, não a semântica de entrega da fila.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Uma função Lambda é invocada por uma fila SQS (event source mapping). Algumas mensagens falham sempre no processamento e ficam voltando para a fila indefinidamente. Como isolar essas mensagens para análise?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'HARD',
+      explanation:
+        'Num event source mapping com SQS, quem controla os retries é a própria fila: a mensagem volta a ficar visível depois do visibility timeout. Por isso a DLQ deve ser configurada na redrive policy da fila de origem (com um maxReceiveCount). A DLQ/on-failure destination da função só se aplica a invocações assíncronas, não a este caso.',
+      officialReferences: 'https://docs.aws.amazon.com/lambda/latest/dg/with-sqs.html',
+      options: [
+        {
+          text: 'Configurar uma redrive policy na fila SQS de origem, apontando para uma DLQ com um maxReceiveCount adequado.',
+          isCorrect: true,
+          explanation: 'Correto: no event source mapping com SQS, a DLQ é configurada na fila, não na função.',
+        },
+        {
+          text: 'Configurar uma dead-letter queue nas configurações de invocação assíncrona da função Lambda.',
+          isCorrect: false,
+          explanation: 'Essa DLQ só vale para invocações assíncronas; mensagens lidas via event source mapping do SQS não passam por ela.',
+        },
+        {
+          text: 'Aumentar o timeout da função Lambda para o máximo de 15 minutos.',
+          isCorrect: false,
+          explanation: 'Se a mensagem falha sempre por um erro de lógica ou de dados, mais tempo não resolve.',
+        },
+        {
+          text: 'Converter a fila para FIFO, que descarta mensagens com falha automaticamente.',
+          isCorrect: false,
+          explanation: 'Filas FIFO não descartam mensagens com falha; elas também dependem de uma DLQ (do tipo FIFO).',
+        },
+      ],
+    },
+  ];
+
+  for (const q of architectureQuestionsToSeed) {
+    const questionData = {
+      type: q.type,
+      difficulty: q.difficulty,
+      explanation: q.explanation,
+      officialReferences: q.officialReferences,
+    };
+
+    const existingQuestion = await prisma.question.findFirst({
+      where: { topicId: architectureTopic.id, prompt: q.prompt },
+    });
+
+    if (existingQuestion) {
+      await prisma.question.update({ where: { id: existingQuestion.id }, data: questionData });
+    } else {
+      await prisma.question.create({
+        data: {
+          topicId: architectureTopic.id,
+          prompt: q.prompt,
+          ...questionData,
+          options: {
+            create: q.options.map((option, index) => ({
+              text: option.text,
+              isCorrect: option.isCorrect,
+              explanation: option.explanation,
+              order: index + 1,
+            })),
+          },
+        },
+      });
+    }
+  }
+
+  const architectureFlashcardsToSeed: {
+    conceptName: string;
+    conceptDescription: string;
+    serviceId: string;
+    front: string;
+    back: string;
+  }[] = [
+    {
+      conceptName: 'Fanout SNS + SQS',
+      conceptDescription: 'Padrão em que um tópico SNS entrega cada mensagem a várias filas SQS assinantes, uma por consumidor independente.',
+      serviceId: snsService.id,
+      front: 'Como entregar o mesmo evento a vários consumidores independentes, isolando falhas de cada um?',
+      back: 'Fanout: publicar num tópico SNS com uma fila SQS assinante por consumidor. Cada fila recebe sua própria cópia, e a falha de um consumidor não afeta os outros.',
+    },
+    {
+      conceptName: 'Dead-letter queue',
+      conceptDescription: 'Fila para onde o SQS move mensagens recebidas mais vezes que o maxReceiveCount sem serem excluídas.',
+      serviceId: sqsService.id,
+      front: 'O que faz uma mensagem SQS ser movida para a dead-letter queue?',
+      back: 'Ser recebida mais vezes que o maxReceiveCount da redrive policy sem ser excluída. A DLQ precisa ser do mesmo tipo (Standard/FIFO), na mesma conta e região.',
+    },
+    {
+      conceptName: 'Backoff exponencial com jitter',
+      conceptDescription: 'Estratégia de retry que aumenta exponencialmente o intervalo entre tentativas e adiciona aleatoriedade para evitar picos sincronizados.',
+      serviceId: sqsService.id,
+      front: 'Qual a estratégia recomendada para repetir chamadas que falharam por throttling?',
+      back: 'Retry com backoff exponencial (intervalos crescentes) e jitter (aleatoriedade no intervalo). Os AWS SDKs já fazem isso por padrão para erros repetíveis.',
+    },
+    {
+      conceptName: 'Coreografia vs. orquestração',
+      conceptDescription: 'Duas formas de coordenar microsserviços: reação descentralizada a eventos vs. um coordenador central do fluxo.',
+      serviceId: stepFunctionsService.id,
+      front: 'Qual a diferença entre coreografia e orquestração de microsserviços?',
+      back: 'Coreografia: cada serviço reage a eventos, sem coordenador central (ex.: EventBridge). Orquestração: um coordenador central define a ordem e trata erros (ex.: Step Functions).',
+    },
+    {
+      conceptName: 'Idempotência de consumidores',
+      conceptDescription: 'Propriedade de um consumidor que produz o mesmo efeito ao processar a mesma mensagem mais de uma vez.',
+      serviceId: sqsService.id,
+      front: 'Por que consumidores de uma fila SQS Standard devem ser idempotentes?',
+      back: 'Porque a fila Standard garante entrega pelo menos uma vez (at-least-once): a mesma mensagem pode chegar mais de uma vez, e processá-la de novo não pode duplicar o efeito.',
+    },
+  ];
+
+  for (const card of architectureFlashcardsToSeed) {
+    const existingConcept = await prisma.concept.findFirst({
+      where: { topicId: architectureTopic.id, name: card.conceptName },
+    });
+
+    const concept = existingConcept
+      ? await prisma.concept.update({
+          where: { id: existingConcept.id },
+          data: { description: card.conceptDescription },
+        })
+      : await prisma.concept.create({
+          data: {
+            topicId: architectureTopic.id,
+            name: card.conceptName,
+            description: card.conceptDescription,
+            awsServices: { connect: { id: card.serviceId } },
+          },
+        });
+
+    const existingFlashcard = await prisma.flashcard.findFirst({
+      where: { conceptId: concept.id, front: card.front },
+    });
+
+    if (existingFlashcard) {
+      await prisma.flashcard.update({ where: { id: existingFlashcard.id }, data: { back: card.back } });
+    } else {
+      await prisma.flashcard.create({
+        data: { conceptId: concept.id, front: card.front, back: card.back },
+      });
+    }
+  }
+
   const domainCount = await prisma.domain.count({ where: { examVersionId: examVersion.id } });
   const topicCount = await prisma.topic.count({ where: { domain: { examVersionId: examVersion.id } } });
 

@@ -32,7 +32,7 @@ pra sair do zero, não o teto.
 | # | Tópico | Status | Aula | Lab | Questões | Flashcards |
 |---|--------|--------|------|-----|----------|------------|
 | 1 | Fundamentos do AWS Lambda | ✅ Feito (Sessão 3–6) | 1 | 1 | 6 | 5 |
-| 2 | Padrões de arquitetura e tolerância a falhas | ⬜ Pendente | — | — | — | — |
+| 2 | Padrões de arquitetura e tolerância a falhas | ✅ Feito (Sessão 20) | 1 | 1 | 7 | 5 |
 | 3 | Armazenamento de dados em aplicações | ⬜ Pendente | — | — | — | — |
 
 Tópicos 2 e 3 são amplos (o objetivo de aprendizagem já escrito cobre
@@ -68,11 +68,11 @@ Linha de base assume 1+1 por enquanto; posso expandir depois se fizer falta.
 
 ## Volume total pra fechar a linha de base
 
-- **11 tópicos** ainda vazios (de 13)
-- **~11 aulas** novas (mais se Domain 1 #2/#3 virarem 2 aulas cada)
-- **~11 labs** novos
-- **~70-85 questões** novas → banco total sobe de ~11 para **~85-95 questões**
-- **~55 flashcards** novos → total sobe de 10 para **~65**
+- **10 tópicos** ainda vazios (de 13)
+- **~10 aulas** novas (mais se Domain 1 #3 virar 2 aulas)
+- **~10 labs** novos
+- **~65-75 questões** novas → banco total sobe de 18 para **~85-95 questões**
+- **~50 flashcards** novos → total sobe de 15 para **~65**
 
 Com ~85-95 questões, um simulado real de 65 questões já fica possível sem repetir
 demais — ainda longe do ideal, mas sai do "praticamente inexistente" de hoje.

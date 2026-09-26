@@ -394,3 +394,23 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 **Decisions:** none — content authoring, not an architectural change.
 
 **Next steps:** waiting on Pedro's review of this topic's format/depth/tone before writing the other 11 (2 more Domain 1 topics; 2 more Security topics; 4 Deployment topics; 3 Troubleshooting and Optimization topics).
+
+---
+
+## 2026-09-26 — Session 20: content-authoring push, topic 2 of 12 (architecture patterns and fault tolerance)
+
+**Goal:** continue the content-authoring push in the order set by `docs/Conteudo-DVA-C02.md` (PR #28): the next topic is Domain 1's "Padrões de arquitetura e tolerância a falhas" (32% weight, the highest-weighted domain). Cognito (Session 19) was merged as the format sample, so this topic follows the same shape.
+
+**Changes:**
+
+- `packages/database/prisma/seed.ts`: new content block for the topic, same update-or-create pattern as the Cognito block:
+  - **Lesson** ("Arquiteturas desacopladas e tolerantes a falhas", 10 min): monolith vs. microservices vs. event-driven; sync vs. async coupling with SQS; SNS + SQS fanout (with filter policies); choreography (EventBridge/SNS) vs. orchestration (Step Functions); retry with exponential backoff + jitter (SDK defaults, don't retry 4xx validation errors, Step Functions `Retry` fields); SQS DLQs via redrive policy/`maxReceiveCount` and Lambda async-invocation retries/destinations; idempotency under at-least-once delivery. Two documentation resources.
+  - **Lab** ("Fanout com SNS e SQS e uma dead-letter queue", Level 1, 25 min, 5 steps): create a DLQ and two queues (one with a 10 s visibility timeout and `maxReceiveCount` 2), subscribe both to an SNS topic, publish once and see each queue get its copy, then poll without deleting until the message moves to the DLQ — Free Tier.
+  - **7 questions** (the checklist baseline is 6-8) across all 4 types and 3 difficulties, including the exam-classic trap of where the DLQ goes for an SQS event source mapping (on the queue, not the function's async config).
+  - **5 flashcards**, with new `AWSService` rows Amazon SQS, Amazon SNS and AWS Step Functions (each concept connected to the most relevant one).
+- `docs/Conteudo-DVA-C02.md`: topic marked done (1/1/7/5), totals updated. `docs/Pendencias.md`: 10 of 12 topics remaining, Done entry added.
+- Verified: typecheck clean; `pnpm db:seed` run twice (no duplicates: 1 lesson, 1 lab/5 steps, 7 questions/28 options, 5 flashcards for the topic); full API suite (26 unit + 39 e2e) green. Not re-checked in the browser this time — the rendering path is identical to the Cognito topic verified in Session 19.
+
+**Decisions:** none — content authoring.
+
+**Next steps:** Domain 1 topic 3, "Armazenamento de dados em aplicações" (the checklist flags it as a candidate for 2 lessons/2 labs given how broad its objective is).
