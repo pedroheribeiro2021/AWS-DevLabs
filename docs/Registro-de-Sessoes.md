@@ -436,3 +436,29 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 **Decisions:** content bar raised from "minimal baseline" to "exam readiness" (recorded in `docs/Conteudo-DVA-C02.md` rather than an ADR, since it's a content-scope decision, not an architectural one).
 
 **Next steps:** Domain 2 — "Criptografia com serviços AWS" (KMS, envelope encryption, ACM), then "Dados sensíveis no código da aplicação" (Secrets Manager vs. Parameter Store), both to the readiness bar.
+
+---
+
+## 2026-09-26 — Session 22: login hang after idle (Render cold start) + content topic 4 of 12 (encryption)
+
+**Goal:** two things Pedro raised together: continue the content push with "Criptografia com serviços AWS", and investigate why the first login from his phone never works (hangs, he reloads, logs in again, then it works).
+
+### Login hang (PR #31)
+
+- **Diagnosis:** Vercel production logs (web project) showed the exact sequence at 11:58–11:59 Brasília time: `POST /login` with no `/dashboard` navigation after it, a reload ~30 s later, a second `POST /login`, then the dashboard ~6 s later. The API is on Render's free plan, which spins down after ~15 min idle. A background measurement confirmed it: `/health` after 16 min idle took **52 s**; 0.34 s immediately afterward. The login code itself was fine — it was just waiting on the cold boot with no feedback.
+- **Fix (free, layered):** a GitHub Actions keep-alive (`.github/workflows/keep-api-warm.yml`, `/health` every 10 min from 07:00 to 23:59 Brasília — ~530 h/month, inside Render's 750 free hours; public repo so Actions minutes are free); a new `/api/wake` route handler the auth form calls on mount, so the boot overlaps with typing; and a "server is waking up, no need to reload" hint after 5 s pending. ADR 0004 Update 4 records it.
+- **Verified:** web lint, typecheck and build clean. Still to confirm after merge: a manual `workflow_dispatch` run, and a real first login after >15 min idle.
+
+### Encryption topic
+
+- `packages/database/prisma/seed.ts`, to the exam-readiness bar:
+  - **Lesson 1** "AWS KMS e criptografia envelope" (12 min): AWS owned / AWS managed / customer managed keys, symmetric vs. asymmetric, rotation (material kept, ID/ARN unchanged, no BYOK auto-rotation), the 4 KB `Encrypt` limit and envelope encryption (`GenerateDataKey`, `GenerateDataKeyWithoutPlaintext`, Encryption SDK), key policies vs. IAM, cross-account, grants, request quotas/`ThrottlingException`.
+  - **Lesson 2** "Criptografia em repouso, em trânsito e certificados" (10 min): SSE-S3/SSE-KMS/DSSE-KMS/SSE-C/client-side, enforcing via bucket policy, DynamoDB always-on encryption, encrypting an existing RDS via snapshot copy, TLS and `aws:SecureTransport`, ACM (DNS validation for auto-renewal, us-east-1 for CloudFront) and AWS Private CA.
+  - **Lab 1** KMS via CloudShell (5 steps: create key, encrypt, decrypt without `--key-id`, `generate-data-key`, enable rotation) and **Lab 2** S3 SSE-KMS + Bucket Key + TLS-only bucket policy (5 steps). Lab 2 proves the policy with a bucket *listing* over HTTP, because GET/PUT on SSE-KMS objects already require TLS and would fail over HTTP even without the policy — caught while reviewing the first draft.
+  - **13 questions**, **9 flashcards**; new `AWSService` rows AWS KMS and AWS Certificate Manager.
+- `docs/Conteudo-DVA-C02.md` / `docs/Pendencias.md` updated (45 questions, 33 flashcards in the bank; 8 topics left).
+- **Verified:** typecheck clean; seed run twice with no duplicates (2 lessons, 2 labs/10 steps, 13 questions/52 options, 9 flashcards); API suite (26 unit + 39 e2e) green.
+
+**Decisions:** keep-alive + wake-on-mount instead of a paid Render instance (ADR 0004 Update 4).
+
+**Next steps:** merge PR #31 and run the workflow once manually; then Domain 2's last topic, "Dados sensíveis no código da aplicação" (Secrets Manager vs. Parameter Store, encrypted Lambda environment variables, PII/PHI).

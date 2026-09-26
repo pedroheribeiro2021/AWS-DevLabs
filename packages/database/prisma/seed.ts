@@ -2384,6 +2384,713 @@ Espere cenários pedindo a estratégia de cache certa para um requisito ("dados 
 
   await seedFlashcards(storageTopic.id, storageFlashcardsToSeed);
 
+  // ---------------------------------------------------------------------
+  // Content-authoring push, topic 4 of 12: Domain 2 "Criptografia com
+  // serviços AWS", to the exam-readiness bar (2 lessons + 2 labs).
+  // ---------------------------------------------------------------------
+
+  const encryptionTopic = await prisma.topic.findFirstOrThrow({
+    where: { domainId: securityDomain.id, name: 'Criptografia com serviços AWS' },
+  });
+
+  const kmsServiceData = {
+    shortName: 'KMS',
+    category: 'Security, Identity, & Compliance',
+    description:
+      'Cria e gerencia chaves criptográficas e controla seu uso nos serviços da AWS e nas aplicações, com auditoria no CloudTrail.',
+  };
+  const kmsService = await prisma.aWSService.upsert({
+    where: { name: 'AWS Key Management Service' },
+    update: kmsServiceData,
+    create: { name: 'AWS Key Management Service', ...kmsServiceData },
+  });
+
+  const acmServiceData = {
+    shortName: 'ACM',
+    category: 'Security, Identity, & Compliance',
+    description:
+      'Emite, gerencia e renova certificados SSL/TLS públicos e privados para uso em serviços da AWS.',
+  };
+  const acmService = await prisma.aWSService.upsert({
+    where: { name: 'AWS Certificate Manager' },
+    update: acmServiceData,
+    create: { name: 'AWS Certificate Manager', ...acmServiceData },
+  });
+
+  const kmsLessonContent = `## Objetivo
+
+Ao final desta lição você vai conseguir explicar os tipos de chave do AWS KMS, aplicar criptografia envelope, controlar o acesso a chaves com key policies e grants, e reconhecer os limites do KMS que a prova DVA-C02 costuma cobrar.
+
+## O que o KMS faz
+
+O AWS Key Management Service guarda chaves criptográficas em HSMs gerenciados pela AWS — a chave (no caso das chaves simétricas) nunca sai do KMS em texto claro. Você não recebe a chave: você pede ao KMS para criptografar, descriptografar ou gerar chaves de dados com ela, e cada uma dessas chamadas passa por controle de acesso e fica registrada no AWS CloudTrail.
+
+## Tipos de chave
+
+- **AWS owned keys**: usadas internamente por serviços, invisíveis na sua conta, sem custo (ex.: o padrão de criptografia do DynamoDB).
+- **AWS managed keys**: criadas por um serviço na sua conta (alias \`aws/s3\`, \`aws/lambda\` etc.), sem custo mensal; você vê e audita o uso, mas não altera a key policy, e a rotação é automática (anual).
+- **Customer managed keys**: você cria e controla tudo — key policy, grants, rotação, habilitar/desabilitar, agendar exclusão. Custam US$ 1/mês cada. São a resposta quando a questão pede controle sobre quem usa a chave, rotação sob demanda ou acesso entre contas.
+
+Chaves simétricas (AES-256) são o padrão e servem para a maioria dos casos. Chaves assimétricas (RSA, ECC) servem para assinatura/verificação ou para quando quem criptografa está fora da AWS e só tem a chave pública.
+
+## Rotação
+
+Customer managed keys podem ter rotação automática habilitada (período configurável, padrão de 365 dias) e também rotação sob demanda. Na rotação, o KMS gera novo material criptográfico mas mantém o antigo: o ID e o ARN da chave não mudam, dados antigos continuam descriptografáveis e dados novos usam o material novo — nenhuma recriptografia é necessária. Chaves com material importado (BYOK) não têm rotação automática; para "rotacionar", cria-se uma chave nova e troca-se o alias.
+
+## Criptografia envelope
+
+A API \`Encrypt\` aceita no máximo 4 KB de dados — ela foi feita para criptografar pequenos segredos, não arquivos. Para dados maiores, usa-se criptografia envelope: a aplicação chama \`GenerateDataKey\`, que devolve uma chave de dados em duas formas — em texto claro e criptografada pela chave do KMS. A aplicação criptografa os dados localmente com a versão em texto claro, descarta essa versão da memória e guarda a versão criptografada junto com os dados. Para ler, chama \`Decrypt\` na chave de dados criptografada e usa o resultado para descriptografar localmente. \`GenerateDataKeyWithoutPlaintext\` devolve só a versão criptografada, para quando a chave só vai ser usada depois. O AWS Encryption SDK implementa esse padrão pronto, incluindo cache de chaves de dados.
+
+## Controle de acesso: key policies e grants
+
+Toda chave do KMS tem exatamente uma key policy, e ela é a fonte primária de permissão: uma policy do IAM só tem efeito se a key policy permitir que a conta use IAM para aquela chave (a key policy padrão faz isso, dando acesso à conta). Para acesso entre contas, são necessárias as duas pontas: a key policy da conta dona da chave permitindo a outra conta, e uma policy do IAM na outra conta permitindo o uso. Grants dão permissões temporárias e específicas a um principal sem editar a key policy — muitos serviços da AWS os usam por baixo dos panos.
+
+## Cotas e throttling
+
+As operações criptográficas do KMS têm uma cota de requisições por segundo compartilhada por conta e região. Uma aplicação que chama o KMS para cada objeto pode receber \`ThrottlingException\`. As saídas: repetir com backoff exponencial, reutilizar chaves de dados com o cache do Encryption SDK, habilitar S3 Bucket Keys (que reduzem drasticamente as chamadas ao KMS feitas pelo SSE-KMS) ou pedir aumento de cota.
+
+## Relação com a prova DVA-C02
+
+Espere cenários sobre o limite de 4 KB do \`Encrypt\` e criptografia envelope com \`GenerateDataKey\`, escolha entre AWS managed e customer managed keys, rotação sem recriptografia, key policy vs. IAM em acesso entre contas, e \`ThrottlingException\` do KMS.`;
+
+  const encryptionServicesLessonContent = `## Objetivo
+
+Ao final desta lição você vai conseguir escolher o tipo de criptografia em repouso certo para o S3 e outros serviços, exigir criptografia em trânsito, e usar o AWS Certificate Manager para certificados TLS.
+
+## Criptografia em repouso no S3
+
+- **SSE-S3**: chaves gerenciadas pelo próprio S3 (AES-256). É o padrão para todo objeto novo desde 2023 — nada precisa ser configurado.
+- **SSE-KMS**: o S3 usa uma chave do KMS (AWS managed \`aws/s3\` ou customer managed). Ganha-se controle de acesso pela key policy (quem não tem permissão na chave não lê o objeto, mesmo com permissão no bucket) e auditoria de cada uso no CloudTrail. O cabeçalho de upload é \`x-amz-server-side-encryption: aws:kms\`, e requisições de GET/PUT de objetos SSE-KMS só funcionam com TLS. S3 Bucket Keys reduzem o custo e o volume de chamadas ao KMS.
+- **DSSE-KMS**: duas camadas de criptografia com KMS, para exigências de compliance.
+- **SSE-C**: o cliente envia a própria chave em cada requisição; o S3 criptografa e descarta a chave. Exige HTTPS, e se a chave for perdida o objeto é irrecuperável.
+- **Criptografia no lado do cliente**: a aplicação criptografa antes de enviar (ex.: com o Encryption SDK); a AWS nunca vê os dados em claro.
+
+A criptografia padrão do bucket define o que vale quando o upload não especifica nada. Para obrigar um tipo específico (ex.: só SSE-KMS), usa-se uma bucket policy que nega \`s3:PutObject\` quando o cabeçalho de criptografia não é o exigido.
+
+## Outros serviços
+
+O DynamoDB criptografa todas as tabelas em repouso, sempre — a escolha é só qual chave usar (AWS owned, AWS managed ou customer managed). No EBS e no RDS, a criptografia é definida na criação: não dá para criptografar uma instância RDS existente diretamente; o caminho é tirar um snapshot, copiar o snapshot habilitando criptografia e restaurar uma nova instância a partir dele. Réplicas de leitura e snapshots de um banco criptografado também são criptografados.
+
+## Criptografia em trânsito
+
+Os endpoints da AWS aceitam HTTPS (TLS), e os SDKs o usam por padrão. Para exigir TLS num bucket S3, uma bucket policy nega qualquer requisição com a condição \`aws:SecureTransport\` igual a \`false\`. Bancos como o RDS aceitam conexões TLS e podem ser configurados para exigi-las.
+
+## Certificados com o ACM
+
+O AWS Certificate Manager emite certificados TLS públicos gratuitos para uso em serviços integrados — Elastic Load Balancing, Amazon CloudFront, Amazon API Gateway — e os renova automaticamente quando o domínio é validado por DNS (a validação por e-mail exige ação manual a cada renovação). Um detalhe muito cobrado: certificados usados pelo CloudFront precisam estar na região us-east-1 (N. Virginia). Para certificados internos (serviços privados, TLS mútuo entre microsserviços), o AWS Private CA cria uma autoridade certificadora privada gerenciada, cobrada à parte.
+
+## Relação com a prova DVA-C02
+
+Espere cenários pedindo SSE-KMS quando o requisito é auditoria ou controle de acesso à chave, SSE-C quando o cliente precisa manter a chave, bucket policies com \`aws:SecureTransport\` ou com o cabeçalho de criptografia, criptografar um RDS existente via snapshot, e certificados do ACM (inclusive a região us-east-1 para o CloudFront).`;
+
+  const encryptionLessons = [
+    {
+      order: 1,
+      estimatedMinutes: 12,
+      title: 'AWS KMS e criptografia envelope',
+      content: kmsLessonContent,
+      resources: [
+        {
+          title: 'Conceitos do AWS KMS — documentação oficial',
+          url: 'https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html',
+        },
+        {
+          title: 'Rotação de chaves do KMS — documentação oficial',
+          url: 'https://docs.aws.amazon.com/kms/latest/developerguide/rotate-keys.html',
+        },
+      ],
+    },
+    {
+      order: 2,
+      estimatedMinutes: 10,
+      title: 'Criptografia em repouso, em trânsito e certificados',
+      content: encryptionServicesLessonContent,
+      resources: [
+        {
+          title: 'Proteção de dados com criptografia no S3 — documentação oficial',
+          url: 'https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingEncryption.html',
+        },
+        {
+          title: 'AWS Certificate Manager — documentação oficial',
+          url: 'https://docs.aws.amazon.com/acm/latest/userguide/acm-overview.html',
+        },
+      ],
+    },
+  ];
+
+  for (const lessonDef of encryptionLessons) {
+    const existingLesson = await prisma.lesson.findFirst({
+      where: { topicId: encryptionTopic.id, title: lessonDef.title },
+    });
+
+    if (existingLesson) {
+      await prisma.lesson.update({
+        where: { id: existingLesson.id },
+        data: { order: lessonDef.order, estimatedMinutes: lessonDef.estimatedMinutes, content: lessonDef.content },
+      });
+    } else {
+      await prisma.lesson.create({
+        data: {
+          topicId: encryptionTopic.id,
+          order: lessonDef.order,
+          estimatedMinutes: lessonDef.estimatedMinutes,
+          title: lessonDef.title,
+          content: lessonDef.content,
+          resources: {
+            create: lessonDef.resources.map((resource, index) => ({
+              ...resource,
+              type: 'documentation',
+              order: index + 1,
+            })),
+          },
+        },
+      });
+    }
+  }
+
+  const encryptionLabs = [
+    {
+      title: 'Criptografar e descriptografar com o KMS pelo CloudShell',
+      data: {
+        level: 1,
+        order: 1,
+        estimatedMinutes: 25,
+        objective:
+          'Ao final deste laboratório você terá criado uma customer managed key no KMS, criptografado e descriptografado um segredo pela AWS CLI, gerado uma chave de dados para criptografia envelope e habilitado a rotação automática da chave.',
+        prerequisites:
+          'Conta AWS com acesso ao Console e ao AWS CloudShell (que já vem com a AWS CLI configurada). Ter lido a lição "AWS KMS e criptografia envelope" ajuda.',
+        context:
+          'Uma aplicação precisa proteger pequenos segredos e, no futuro, arquivos maiores. Antes de escrever código, o time quer ver na prática como o KMS criptografa dados, por que descriptografar não exige informar a chave, e o que a API GenerateDataKey devolve.',
+        troubleshooting:
+          'AccessDeniedException ao criptografar: o usuário ou role do CloudShell precisa estar entre os "key users" da chave — confira a key policy na aba "Key policy". \n\nErro "Invalid base64" ou arquivo vazio: o parâmetro `--plaintext fileb://` lê bytes do arquivo; confira se usou `fileb://` (e não `file://`) e se o arquivo existe no diretório atual do CloudShell. \n\nNotFoundException com o alias: aliases começam com `alias/` — use `alias/devlab-key`, e confira se o CloudShell está na mesma região em que a chave foi criada.',
+        cleanup:
+          'No KMS, selecione a chave `devlab-key` e use "Key actions" > "Schedule key deletion" com o período mínimo de 7 dias. A chave fica desabilitada até ser excluída de vez.',
+        costWarning:
+          'Uma customer managed key custa US$ 1 por mês, cobrado proporcionalmente por hora; as requisições deste laboratório ficam dentro das 20.000 gratuitas por mês. Agende a exclusão ao final para o custo ficar em centavos.',
+      },
+      steps: [
+        {
+          order: 1,
+          title: 'Criar a customer managed key',
+          instructions:
+            'No Console, acesse o KMS e clique em "Create key". Escolha "Symmetric" e "Encrypt and decrypt", alias `devlab-key`. Em "Key administrators" e "Key users", selecione o usuário ou role com que você está logado no Console. Conclua a criação.',
+          validation: 'A chave aparece em "Customer managed keys" com o alias `devlab-key` e status "Enabled".',
+        },
+        {
+          order: 2,
+          title: 'Criptografar um segredo',
+          instructions:
+            'Abra o AWS CloudShell (ícone de terminal no topo do Console, na mesma região da chave) e rode: `echo -n "segredo do devlab" > segredo.txt` e depois `aws kms encrypt --key-id alias/devlab-key --plaintext fileb://segredo.txt --output text --query CiphertextBlob | base64 --decode > segredo.enc`.',
+          validation:
+            'O arquivo `segredo.enc` é criado; `cat segredo.enc` mostra bytes ilegíveis — o texto original não aparece.',
+        },
+        {
+          order: 3,
+          title: 'Descriptografar sem informar a chave',
+          instructions:
+            'Rode: `aws kms decrypt --ciphertext-blob fileb://segredo.enc --output text --query Plaintext | base64 --decode`. Repare que o comando não recebe `--key-id`.',
+          validation:
+            'O terminal mostra "segredo do devlab". Com chaves simétricas, o texto cifrado carrega a referência da chave usada, então o KMS sabe qual chave aplicar.',
+        },
+        {
+          order: 4,
+          title: 'Gerar uma chave de dados',
+          instructions:
+            'Rode: `aws kms generate-data-key --key-id alias/devlab-key --key-spec AES_256`.',
+          validation:
+            'A resposta traz `Plaintext` (a chave de dados em claro, para criptografar localmente e descartar) e `CiphertextBlob` (a mesma chave criptografada pela `devlab-key`, para guardar junto com os dados) — as duas metades da criptografia envelope.',
+        },
+        {
+          order: 5,
+          title: 'Habilitar a rotação automática',
+          instructions:
+            'De volta ao Console do KMS, abra a chave `devlab-key`, vá até a aba "Key rotation", habilite a rotação automática e mantenha o período padrão.',
+          validation:
+            'A aba "Key rotation" mostra a rotação automática habilitada com período de 365 dias. O ID e o ARN da chave continuam os mesmos — a rotação troca só o material criptográfico.',
+        },
+      ],
+    },
+    {
+      title: 'S3 com SSE-KMS e TLS obrigatório',
+      data: {
+        level: 1,
+        order: 2,
+        estimatedMinutes: 25,
+        objective:
+          'Ao final deste laboratório você terá configurado um bucket S3 com criptografia padrão SSE-KMS e Bucket Key, verificado a criptografia de um objeto, e bloqueado qualquer acesso ao bucket que não use HTTPS.',
+        prerequisites:
+          'Conta AWS com acesso ao Console e ao AWS CloudShell. Ter lido a lição "Criptografia em repouso, em trânsito e certificados" ajuda.',
+        context:
+          'Uma auditoria exige que os documentos de um bucket fiquem criptografados com chaves do KMS (para que cada acesso fique registrado no CloudTrail) e que nenhum acesso aconteça sem TLS. Você vai configurar e provar as duas coisas.',
+        troubleshooting:
+          'O nome do bucket é recusado: nomes são globais — acrescente um sufixo único. \n\nA listagem via HTTP falha já no passo 3: confira se o CloudShell está na mesma região do bucket (a variável `$AWS_REGION` do CloudShell é usada no endpoint). \n\nA bucket policy é rejeitada com "Invalid principal" ou "Invalid resource": confira se trocou `NOME-DO-BUCKET` pelo nome real nas duas linhas de `Resource`. \n\nA listagem via HTTP não é negada no passo 5: confira se a policy foi salva e se o comando usa `--endpoint-url http://...` (sem o "s" de https).',
+        cleanup:
+          'Selecione o bucket, use "Empty" e depois "Delete". A chave `aws/s3` é gerenciada pela AWS e não precisa ser excluída.',
+        costWarning:
+          'A chave AWS managed `aws/s3` não tem custo mensal, e as poucas requisições ao KMS e ao S3 deste laboratório ficam dentro do Free Tier.',
+      },
+      steps: [
+        {
+          order: 1,
+          title: 'Criar o bucket com SSE-KMS',
+          instructions:
+            'No Console do S3, crie um bucket com nome único (ex.: `devlab-cripto-<suas-iniciais>-<data>`). Em "Default encryption", escolha "Server-side encryption with AWS Key Management Service keys (SSE-KMS)", selecione a chave AWS managed `aws/s3` e mantenha "Bucket Key" habilitado.',
+          validation:
+            'Na aba "Properties" do bucket, "Default encryption" mostra SSE-KMS com a chave `aws/s3` e Bucket Key habilitado.',
+        },
+        {
+          order: 2,
+          title: 'Enviar um objeto e verificar a criptografia',
+          instructions:
+            'Faça upload de um arquivo de texto qualquer chamado `documento.txt`, sem alterar nenhuma opção de criptografia no upload. Depois abra o objeto e veja a seção "Server-side encryption settings".',
+          validation:
+            'O objeto mostra criptografia SSE-KMS com o ARN da chave `aws/s3` — a criptografia padrão do bucket foi aplicada sem o upload pedir nada.',
+        },
+        {
+          order: 3,
+          title: 'Listar o bucket via HTTP, antes da policy',
+          instructions:
+            'Abra o AWS CloudShell na mesma região do bucket e rode `aws s3 ls s3://NOME-DO-BUCKET --endpoint-url http://s3.$AWS_REGION.amazonaws.com`, trocando `NOME-DO-BUCKET` pelo nome real. O `--endpoint-url http://` força a CLI a usar HTTP, sem TLS.',
+          validation:
+            'O comando lista `documento.txt` — por enquanto nada impede uma listagem sem TLS. (Um GET do próprio objeto via HTTP já falharia, porque objetos SSE-KMS exigem TLS; a listagem não tem essa proteção.)',
+        },
+        {
+          order: 4,
+          title: 'Exigir TLS com uma bucket policy',
+          instructions:
+            'Na aba "Permissions", edite a "Bucket policy" e cole a policy abaixo, trocando `NOME-DO-BUCKET` pelo nome do seu bucket: `{"Version":"2012-10-17","Statement":[{"Sid":"DenyInsecureTransport","Effect":"Deny","Principal":"*","Action":"s3:*","Resource":["arn:aws:s3:::NOME-DO-BUCKET","arn:aws:s3:::NOME-DO-BUCKET/*"],"Condition":{"Bool":{"aws:SecureTransport":"false"}}}]}`.',
+          validation: 'A policy é salva sem erros e aparece na aba "Permissions".',
+        },
+        {
+          order: 5,
+          title: 'Provar que HTTP é negado e HTTPS funciona',
+          instructions:
+            'No CloudShell, repita o comando de listagem com `--endpoint-url http://...`. Depois rode `aws s3 cp s3://NOME-DO-BUCKET/documento.txt -` (sem `--endpoint-url`: a CLI usa HTTPS por padrão).',
+          validation:
+            'A listagem via HTTP agora falha com "AccessDenied" por causa da condição `aws:SecureTransport`; o `cp` via HTTPS imprime o conteúdo do arquivo — descriptografado de forma transparente, porque você tem permissão no bucket e na chave.',
+        },
+      ],
+    },
+  ];
+
+  for (const labDef of encryptionLabs) {
+    const existingLab = await prisma.lab.findFirst({
+      where: { topicId: encryptionTopic.id, title: labDef.title },
+    });
+
+    if (existingLab) {
+      await prisma.lab.update({ where: { id: existingLab.id }, data: labDef.data });
+    } else {
+      await prisma.lab.create({
+        data: {
+          topicId: encryptionTopic.id,
+          title: labDef.title,
+          ...labDef.data,
+          steps: { create: labDef.steps },
+        },
+      });
+    }
+  }
+
+  const encryptionQuestionsToSeed: QuestionSeed[] = [
+    {
+      prompt: 'Qual é o tamanho máximo de dados que a API Encrypt do AWS KMS aceita diretamente?',
+      type: 'KNOWLEDGE',
+      difficulty: 'EASY',
+      explanation:
+        'A API Encrypt aceita até 4 KB de texto claro. Para dados maiores, o padrão é a criptografia envelope com GenerateDataKey.',
+      options: [
+        { text: '4 KB', isCorrect: true, explanation: 'Correto: Encrypt é para pequenos segredos; acima disso, criptografia envelope.' },
+        { text: '1 MB', isCorrect: false, explanation: 'O limite é bem menor: 4 KB.' },
+        { text: '5 GB', isCorrect: false, explanation: '5 GB é o limite de um PUT único no S3, não do KMS.' },
+        { text: 'Não há limite; o KMS processa arquivos de qualquer tamanho.', isCorrect: false, explanation: 'O KMS não foi feito para criptografar dados grandes diretamente.' },
+      ],
+    },
+    {
+      prompt: 'O que acontece com os dados já criptografados quando a rotação automática de uma customer managed key do KMS acontece?',
+      type: 'KNOWLEDGE',
+      difficulty: 'EASY',
+      explanation:
+        'Na rotação, o KMS gera novo material criptográfico mas mantém o material antigo. O ID/ARN da chave não muda, dados antigos continuam sendo descriptografados com o material antigo e dados novos usam o material novo — nenhuma recriptografia é necessária.',
+      officialReferences: 'https://docs.aws.amazon.com/kms/latest/developerguide/rotate-keys.html',
+      options: [
+        {
+          text: 'Continuam descriptografáveis normalmente; o KMS guarda o material antigo e não é preciso recriptografar nada.',
+          isCorrect: true,
+          explanation: 'Correto: a rotação é transparente para a aplicação.',
+        },
+        {
+          text: 'Precisam ser recriptografados pela aplicação antes da rotação.',
+          isCorrect: false,
+          explanation: 'O KMS mantém o material antigo justamente para evitar isso.',
+        },
+        {
+          text: 'Ficam inacessíveis até que a rotação seja revertida.',
+          isCorrect: false,
+          explanation: 'A rotação não afeta a leitura de dados antigos.',
+        },
+        {
+          text: 'A chave ganha um novo ARN, e a aplicação precisa ser atualizada.',
+          isCorrect: false,
+          explanation: 'ID e ARN permanecem os mesmos na rotação.',
+        },
+      ],
+    },
+    {
+      prompt: 'Uma aplicação precisa servir um site pelo Amazon CloudFront com HTTPS num domínio próprio, usando um certificado do ACM. Em qual região o certificado deve ser emitido?',
+      type: 'KNOWLEDGE',
+      difficulty: 'MEDIUM',
+      explanation: 'O CloudFront só usa certificados do ACM emitidos (ou importados) na região us-east-1 (N. Virginia), independentemente de onde está a origem.',
+      options: [
+        { text: 'us-east-1 (N. Virginia)', isCorrect: true, explanation: 'Correto: é um requisito do CloudFront.' },
+        { text: 'Na mesma região da origem (ex.: o bucket S3).', isCorrect: false, explanation: 'Vale para um load balancer regional, não para o CloudFront.' },
+        { text: 'Em qualquer região; o certificado é replicado automaticamente.', isCorrect: false, explanation: 'Certificados do ACM são regionais e não são replicados.' },
+        { text: 'Na região mais próxima dos usuários.', isCorrect: false, explanation: 'O CloudFront exige us-east-1.' },
+      ],
+    },
+    {
+      prompt:
+        'Uma aplicação precisa criptografar arquivos de 50 MB com uma chave do KMS antes de gravá-los no disco. Qual é a abordagem correta?',
+      type: 'APPLICATION',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Criptografia envelope: GenerateDataKey devolve uma chave de dados em claro e criptografada; o arquivo é criptografado localmente com a versão em claro (descartada em seguida) e a versão criptografada é guardada junto do arquivo.',
+      officialReferences: 'https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html',
+      options: [
+        {
+          text: 'Chamar GenerateDataKey, criptografar o arquivo localmente com a chave em claro, descartá-la e guardar a chave criptografada junto do arquivo.',
+          isCorrect: true,
+          explanation: 'Correto: é a criptografia envelope.',
+        },
+        {
+          text: 'Chamar a API Encrypt enviando o arquivo inteiro.',
+          isCorrect: false,
+          explanation: 'Encrypt aceita no máximo 4 KB.',
+        },
+        {
+          text: 'Dividir o arquivo em pedaços de 4 KB e chamar Encrypt para cada um.',
+          isCorrect: false,
+          explanation: 'Funcionaria de forma lenta e cara, e esbarraria nas cotas de requisição do KMS — não é o padrão recomendado.',
+        },
+        {
+          text: 'Exportar a chave do KMS e usá-la localmente.',
+          isCorrect: false,
+          explanation: 'Chaves simétricas do KMS não podem ser exportadas.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Uma empresa precisa que o acesso aos objetos de um bucket S3 dependa também de permissão numa chave de criptografia, e que cada uso dessa chave fique registrado para auditoria. Qual criptografia do lado do servidor atende?',
+      type: 'APPLICATION',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Com SSE-KMS, ler um objeto exige permissão de kms:Decrypt na chave (além da permissão no bucket), e cada uso da chave fica registrado no CloudTrail. SSE-S3 não oferece nem uma coisa nem outra.',
+      options: [
+        { text: 'SSE-KMS', isCorrect: true, explanation: 'Correto: controle de acesso pela key policy e auditoria no CloudTrail.' },
+        { text: 'SSE-S3', isCorrect: false, explanation: 'As chaves são gerenciadas pelo S3, sem controle de acesso separado nem auditoria por uso.' },
+        { text: 'SSE-C', isCorrect: false, explanation: 'Com SSE-C a chave fica com o cliente; não há registro de uso de chave na AWS.' },
+        { text: 'Nenhuma: basta habilitar o versionamento.', isCorrect: false, explanation: 'Versionamento não tem relação com criptografia.' },
+      ],
+    },
+    {
+      prompt:
+        'Uma política de segurança exige que o bucket S3 de uma aplicação recuse qualquer requisição feita sem TLS. Como implementar isso?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Uma bucket policy com Effect Deny para todas as ações quando a condição aws:SecureTransport é false bloqueia qualquer requisição HTTP sem TLS.',
+      options: [
+        {
+          text: 'Bucket policy negando todas as ações quando aws:SecureTransport for false.',
+          isCorrect: true,
+          explanation: 'Correto: é a forma padrão de exigir TLS num bucket.',
+        },
+        {
+          text: 'Habilitar a criptografia padrão SSE-KMS no bucket.',
+          isCorrect: false,
+          explanation: 'SSE-KMS é criptografia em repouso; não impede requisições sem TLS.',
+        },
+        {
+          text: 'Habilitar o Block Public Access.',
+          isCorrect: false,
+          explanation: 'Bloqueia acesso público, mas não exige TLS de quem tem permissão.',
+        },
+        {
+          text: 'Usar SSE-C em todos os uploads.',
+          isCorrect: false,
+          explanation: 'SSE-C exige HTTPS nas requisições que o usam, mas não impede outras requisições sem TLS no bucket.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Uma aplicação que processa milhares de objetos por segundo num bucket com SSE-KMS começa a receber ThrottlingException do KMS. Qual mudança reduz as chamadas ao KMS com o menor esforço?',
+      type: 'SCENARIO',
+      difficulty: 'HARD',
+      explanation:
+        'S3 Bucket Keys fazem o S3 gerar uma chave de nível de bucket a partir do KMS e usá-la para derivar as chaves dos objetos, reduzindo drasticamente as requisições ao KMS — é uma configuração do bucket, sem mudança de código.',
+      options: [
+        {
+          text: 'Habilitar S3 Bucket Keys no bucket.',
+          isCorrect: true,
+          explanation: 'Correto: reduz muito as chamadas ao KMS sem mudar a aplicação.',
+        },
+        {
+          text: 'Trocar a customer managed key por outra customer managed key.',
+          isCorrect: false,
+          explanation: 'A cota é por conta e região, não por chave; trocar de chave não resolve.',
+        },
+        {
+          text: 'Desabilitar o CloudTrail.',
+          isCorrect: false,
+          explanation: 'O CloudTrail não influencia as cotas do KMS.',
+        },
+        {
+          text: 'Habilitar a rotação automática da chave.',
+          isCorrect: false,
+          explanation: 'Rotação não altera o volume de requisições.',
+        },
+      ],
+    },
+    {
+      prompt: 'Uma instância do Amazon RDS foi criada sem criptografia e agora precisa ser criptografada em repouso. Qual é o procedimento?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Não é possível habilitar criptografia numa instância RDS existente. O caminho é criar um snapshot, copiá-lo com criptografia habilitada (escolhendo a chave do KMS) e restaurar uma nova instância a partir da cópia criptografada.',
+      options: [
+        {
+          text: 'Criar um snapshot, copiá-lo habilitando criptografia e restaurar uma nova instância a partir da cópia.',
+          isCorrect: true,
+          explanation: 'Correto: é o procedimento documentado.',
+        },
+        {
+          text: 'Modificar a instância e marcar a opção de criptografia.',
+          isCorrect: false,
+          explanation: 'A criptografia só pode ser definida na criação da instância.',
+        },
+        {
+          text: 'Criar uma réplica de leitura criptografada a partir da instância não criptografada.',
+          isCorrect: false,
+          explanation: 'Uma réplica de uma instância não criptografada também não é criptografada.',
+        },
+        {
+          text: 'Habilitar SSL nas conexões com o banco.',
+          isCorrect: false,
+          explanation: 'SSL/TLS é criptografia em trânsito, não em repouso.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Um cliente exige manter e gerenciar as próprias chaves de criptografia fora da AWS, mas quer que o S3 faça a criptografia e a descriptografia dos objetos no lado do servidor. Qual opção atende?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Com SSE-C, o cliente envia a chave em cada requisição (via HTTPS); o S3 criptografa/descriptografa e descarta a chave, sem armazená-la. Se o cliente perder a chave, o objeto não pode mais ser lido.',
+      options: [
+        { text: 'SSE-C', isCorrect: true, explanation: 'Correto: a chave é do cliente, e o trabalho criptográfico é do S3.' },
+        { text: 'SSE-S3', isCorrect: false, explanation: 'As chaves são do S3, não do cliente.' },
+        { text: 'SSE-KMS com AWS managed key', isCorrect: false, explanation: 'A chave fica no KMS, gerenciada pela AWS.' },
+        { text: 'Criptografia no lado do cliente', isCorrect: false, explanation: 'A chave fica com o cliente, mas o trabalho criptográfico sai do S3 — o requisito pedia criptografia no servidor.' },
+      ],
+    },
+    {
+      prompt:
+        'A conta A tem uma customer managed key do KMS. Uma role da conta B precisa usá-la para descriptografar dados. O que é necessário?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'HARD',
+      explanation:
+        'Acesso entre contas ao KMS exige as duas pontas: a key policy na conta A deve permitir a conta B (ou a role) usar a chave, e uma policy do IAM na conta B deve permitir à role chamar kms:Decrypt nessa chave.',
+      officialReferences:
+        'https://docs.aws.amazon.com/kms/latest/developerguide/key-policy-modifying-external-accounts.html',
+      options: [
+        {
+          text: 'Permitir a conta B na key policy da chave (conta A) e dar à role, por uma policy do IAM na conta B, permissão de kms:Decrypt na chave.',
+          isCorrect: true,
+          explanation: 'Correto: key policy e IAM precisam permitir, cada um na sua conta.',
+        },
+        {
+          text: 'Só uma policy do IAM na conta B permitindo kms:Decrypt.',
+          isCorrect: false,
+          explanation: 'Sem a key policy permitindo a conta B, a policy do IAM não tem efeito.',
+        },
+        {
+          text: 'Só alterar a key policy na conta A.',
+          isCorrect: false,
+          explanation: 'Se a key policy delega à conta B, a role ainda precisa de uma policy do IAM na própria conta.',
+        },
+        {
+          text: 'Exportar a chave e importá-la na conta B.',
+          isCorrect: false,
+          explanation: 'Chaves simétricas do KMS não podem ser exportadas.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Uma aplicação criptografa dados com uma chave de dados gerada pelo KMS e quer gerar, no momento do cadastro, uma chave de dados que só será usada dias depois por outro componente. Qual API é a mais adequada para gerá-la?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'HARD',
+      explanation:
+        'GenerateDataKeyWithoutPlaintext devolve só a chave de dados criptografada — a versão em claro não precisa existir até ser usada, quando o componente chama Decrypt. Isso evita manter uma chave em claro sem necessidade.',
+      options: [
+        {
+          text: 'GenerateDataKeyWithoutPlaintext',
+          isCorrect: true,
+          explanation: 'Correto: a chave em claro só aparece quando o componente chamar Decrypt.',
+        },
+        {
+          text: 'GenerateDataKey',
+          isCorrect: false,
+          explanation: 'Devolveria também a chave em claro, que não é necessária agora.',
+        },
+        {
+          text: 'Encrypt',
+          isCorrect: false,
+          explanation: 'Encrypt criptografa dados de até 4 KB; não gera chaves de dados.',
+        },
+        {
+          text: 'CreateKey',
+          isCorrect: false,
+          explanation: 'Cria uma nova chave do KMS (com custo mensal), não uma chave de dados.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Um time quer controlar a key policy, usar a chave em outra conta e rotacionar a chave sob demanda. Um desenvolvedor sugere usar a chave AWS managed aws/s3. Por que essa sugestão não atende?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Chaves AWS managed têm key policy controlada pela AWS (não editável), não podem ser usadas por outras contas e têm rotação automática anual fixa. Os requisitos exigem uma customer managed key.',
+      options: [
+        {
+          text: 'Chaves AWS managed não permitem editar a key policy, uso entre contas nem rotação sob demanda; é preciso uma customer managed key.',
+          isCorrect: true,
+          explanation: 'Correto: controle total só com customer managed keys.',
+        },
+        {
+          text: 'Chaves AWS managed não podem ser usadas pelo S3.',
+          isCorrect: false,
+          explanation: 'A aws/s3 é justamente a chave AWS managed do S3.',
+        },
+        {
+          text: 'Chaves AWS managed custam mais que customer managed keys.',
+          isCorrect: false,
+          explanation: 'Chaves AWS managed não têm custo mensal.',
+        },
+        {
+          text: 'Chaves AWS managed não são auditadas no CloudTrail.',
+          isCorrect: false,
+          explanation: 'O uso de chaves AWS managed também aparece no CloudTrail.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Um certificado público do ACM usado num Application Load Balancer não foi renovado automaticamente e expirou. Qual é a causa mais provável?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'HARD',
+      explanation:
+        'A renovação gerenciada do ACM é automática quando o domínio foi validado por DNS e o registro CNAME de validação continua no lugar. Com validação por e-mail, a renovação exige que alguém aprove o e-mail enviado; se ninguém aprovar (ou o registro DNS foi removido), o certificado expira.',
+      officialReferences: 'https://docs.aws.amazon.com/acm/latest/userguide/managed-renewal.html',
+      options: [
+        {
+          text: 'O domínio foi validado por e-mail (ou o CNAME de validação DNS foi removido), e a renovação não pôde ser concluída automaticamente.',
+          isCorrect: true,
+          explanation: 'Correto: renovação totalmente automática depende da validação por DNS mantida.',
+        },
+        {
+          text: 'Certificados do ACM nunca são renovados automaticamente.',
+          isCorrect: false,
+          explanation: 'Certificados emitidos pelo ACM têm renovação gerenciada.',
+        },
+        {
+          text: 'O ALB estava numa região diferente de us-east-1.',
+          isCorrect: false,
+          explanation: 'A exigência de us-east-1 é do CloudFront; ALBs usam certificados da própria região.',
+        },
+        {
+          text: 'A chave do KMS do certificado foi rotacionada.',
+          isCorrect: false,
+          explanation: 'A renovação de certificados do ACM não depende de chaves do KMS da conta.',
+        },
+      ],
+    },
+  ];
+
+  await seedQuestions(encryptionTopic.id, encryptionQuestionsToSeed);
+
+  const encryptionFlashcardsToSeed: FlashcardSeed[] = [
+    {
+      conceptName: 'Criptografia envelope',
+      conceptDescription: 'Padrão de criptografar dados localmente com uma chave de dados protegida por uma chave do KMS.',
+      serviceId: kmsService.id,
+      front: 'Como funciona a criptografia envelope com o KMS?',
+      back: 'GenerateDataKey devolve uma chave de dados em claro e criptografada. Criptografa-se os dados localmente com a versão em claro (descartada) e guarda-se a versão criptografada junto dos dados. Para ler, Decrypt na chave criptografada.',
+    },
+    {
+      conceptName: 'Limite da API Encrypt',
+      conceptDescription: 'Tamanho máximo de dados que o KMS criptografa diretamente.',
+      serviceId: kmsService.id,
+      front: 'Qual o tamanho máximo que a API Encrypt do KMS aceita?',
+      back: '4 KB. Para dados maiores, usa-se criptografia envelope (GenerateDataKey).',
+    },
+    {
+      conceptName: 'Tipos de chave do KMS',
+      conceptDescription: 'AWS owned, AWS managed e customer managed keys.',
+      serviceId: kmsService.id,
+      front: 'Qual a diferença entre AWS managed keys e customer managed keys no KMS?',
+      back: 'AWS managed (aws/s3 etc.): sem custo mensal, key policy não editável, rotação anual automática, sem uso entre contas. Customer managed: US$ 1/mês, controle total de key policy, grants, rotação e acesso entre contas.',
+    },
+    {
+      conceptName: 'Rotação de chaves do KMS',
+      conceptDescription: 'Troca do material criptográfico de uma chave mantendo o material antigo.',
+      serviceId: kmsService.id,
+      front: 'O que muda quando uma chave do KMS é rotacionada?',
+      back: 'Só o material criptográfico usado para novos dados. ID e ARN não mudam, o material antigo é mantido e dados antigos continuam descriptografáveis sem recriptografar.',
+    },
+    {
+      conceptName: 'Key policy e acesso entre contas',
+      conceptDescription: 'Relação entre key policy e policies do IAM no controle de acesso a chaves do KMS.',
+      serviceId: kmsService.id,
+      front: 'O que é necessário para uma role de outra conta usar uma chave do KMS?',
+      back: 'A key policy (na conta dona da chave) permitindo a outra conta, e uma policy do IAM na outra conta permitindo a ação (ex.: kms:Decrypt) na chave.',
+    },
+    {
+      conceptName: 'Tipos de SSE no S3',
+      conceptDescription: 'SSE-S3, SSE-KMS, DSSE-KMS e SSE-C.',
+      serviceId: s3Service.id,
+      front: 'Quando usar SSE-S3, SSE-KMS e SSE-C no S3?',
+      back: 'SSE-S3: padrão, sem configuração. SSE-KMS: controle de acesso pela key policy e auditoria no CloudTrail. SSE-C: o cliente mantém a chave e a envia em cada requisição (HTTPS obrigatório).',
+    },
+    {
+      conceptName: 'aws:SecureTransport',
+      conceptDescription: 'Chave de condição usada para exigir TLS em bucket policies.',
+      serviceId: s3Service.id,
+      front: 'Como exigir que todo acesso a um bucket S3 use TLS?',
+      back: 'Bucket policy com Deny em s3:* quando a condição aws:SecureTransport for false.',
+    },
+    {
+      conceptName: 'S3 Bucket Keys',
+      conceptDescription: 'Chave de nível de bucket que reduz as chamadas do SSE-KMS ao KMS.',
+      serviceId: s3Service.id,
+      front: 'Como reduzir o custo e o throttling do KMS num bucket com SSE-KMS?',
+      back: 'Habilitando S3 Bucket Keys: o S3 usa uma chave de nível de bucket para derivar as chaves dos objetos, reduzindo drasticamente as chamadas ao KMS.',
+    },
+    {
+      conceptName: 'ACM e CloudFront',
+      conceptDescription: 'Regras de região e renovação dos certificados do AWS Certificate Manager.',
+      serviceId: acmService.id,
+      front: 'Quais são as duas regras do ACM mais cobradas na prova?',
+      back: 'Certificados para o CloudFront precisam estar em us-east-1. A renovação automática depende da validação por DNS (por e-mail exige aprovação manual).',
+    },
+  ];
+
+  await seedFlashcards(encryptionTopic.id, encryptionFlashcardsToSeed);
+
   const domainCount = await prisma.domain.count({ where: { examVersionId: examVersion.id } });
   const topicCount = await prisma.topic.count({ where: { domain: { examVersionId: examVersion.id } } });
 
