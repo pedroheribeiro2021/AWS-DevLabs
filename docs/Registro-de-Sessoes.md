@@ -462,3 +462,22 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 **Decisions:** keep-alive + wake-on-mount instead of a paid Render instance (ADR 0004 Update 4).
 
 **Next steps:** merge PR #31 and run the workflow once manually; then Domain 2's last topic, "Dados sensíveis no código da aplicação" (Secrets Manager vs. Parameter Store, encrypted Lambda environment variables, PII/PHI).
+
+---
+
+## 2026-09-26 — Session 23: content topic 5 of 12 (sensitive data) + Markdown rendering in labs
+
+**Goal:** Pedro merged #31 (login cold start) and #32 (encryption) and asked to continue with "Dados sensíveis no código da aplicação", the last Domain 2 topic.
+
+**Changes:**
+
+- Ran the new keep-alive workflow manually (`gh workflow run`): succeeded at 12:23 Brasília, `/health` returned `ok`. No scheduled run had fired ~20 min after merge — logged in `Pendencias.md` to confirm later.
+- `packages/database/prisma/seed.ts`:
+  - Extracted `seedLessons`/`seedLabs` (+ `LessonSeed`/`LabSeed` types), completing the set started with `seedQuestions`/`seedFlashcards` in Session 21; Storage and Encryption blocks now use them (per-topic counts unchanged after reseed).
+  - New topic content: **Lesson 1** "Secrets Manager e Parameter Store" (12 min) and **Lesson 2** "Dados sensíveis na aplicação: Lambda, cache e logs" (9 min); **Lab 1** "Parameter Store e Secrets Manager pela AWS CLI" (Level 1, 5 steps: String/SecureString hierarchy, `--with-decryption`, `get-parameters-by-path`, a secret whose update produces AWSCURRENT/AWSPREVIOUS) and **Lab 2** "Função Lambda lendo um segredo com cache e menor privilégio" (Level 2, 6 steps: secret name in an env var, AccessDenied before a single-secret inline policy, then cached reads); **13 questions**, **10 flashcards**. New `AWSService` rows: AWS Secrets Manager, AWS Systems Manager, Amazon Macie, Amazon CloudWatch.
+- `apps/web/src/app/labs/[labId]/page.tsx`: lab objective, prerequisites, context, steps, validation, troubleshooting and cleanup now go through the existing `<MarkdownContent>` (the cost warning stays plain to keep its box color). Every lab written so far used backticks for commands, which were displayed literally; the new Lambda lab also needs fenced code blocks.
+- Verified: typecheck, lint and web build clean; seed twice without duplicates (sensitive data: 2 lessons/4 resources, 2 labs/11 steps, 13 questions, 10 flashcards; totals 58 questions, 43 flashcards); API suite (26 unit + 39 e2e) green. **Browser-verified locally** (throwaway test account, deleted afterward): the new Lambda lab renders inline code, the Python and JSON code blocks keep their indentation and scroll horizontally on a narrow viewport, and the older Cognito lab's troubleshooting paragraphs and inline commands render correctly.
+
+**Decisions:** none architectural.
+
+**Next steps:** Domain 3 (Deployment, 4 topics), starting with "Preparação de artefatos de deploy".

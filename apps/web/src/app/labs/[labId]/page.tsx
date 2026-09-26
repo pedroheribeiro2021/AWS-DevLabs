@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { MarkdownContent } from '@/components/markdown-content';
 import { XpBanner } from '@/components/xp-banner';
 import { getCurrentUser } from '@/lib/auth-server';
 import { getLab } from '@/lib/labs';
@@ -41,15 +42,15 @@ export default async function LabPage({ params, searchParams }: LabPageProps) {
       <section className="flex flex-col gap-4 rounded-lg border border-slate-200 bg-white p-6 text-sm leading-relaxed text-slate-800">
         <div>
           <h2 className="mb-1 font-semibold text-slate-700">Objetivo</h2>
-          <p>{lab.objective}</p>
+          <MarkdownContent content={lab.objective} />
         </div>
         <div>
           <h2 className="mb-1 font-semibold text-slate-700">Pré-requisitos</h2>
-          <p>{lab.prerequisites}</p>
+          <MarkdownContent content={lab.prerequisites} />
         </div>
         <div>
           <h2 className="mb-1 font-semibold text-slate-700">Contexto</h2>
-          <p>{lab.context}</p>
+          <MarkdownContent content={lab.context} />
         </div>
         <div className="rounded-md bg-orange-50 p-3 text-orange-800">
           <p className="font-semibold">Custos</p>
@@ -64,23 +65,25 @@ export default async function LabPage({ params, searchParams }: LabPageProps) {
             <h3 className="mb-2 font-medium text-slate-700">
               {step.order}. {step.title}
             </h3>
-            <p className="whitespace-pre-wrap text-sm text-slate-700">{step.instructions}</p>
-            <p className="mt-3 rounded-md bg-slate-50 p-2 text-xs text-slate-600">
-              <span className="font-semibold">Como validar: </span>
-              {step.validation}
-            </p>
+            <div className="text-sm">
+              <MarkdownContent content={step.instructions} />
+            </div>
+            <div className="mt-3 rounded-md bg-slate-50 p-2 text-xs">
+              <p className="mb-1 font-semibold text-slate-600">Como validar</p>
+              <MarkdownContent content={step.validation} />
+            </div>
           </div>
         ))}
       </section>
 
       <section className="rounded-lg border border-slate-200 bg-white p-6 text-sm leading-relaxed text-slate-800">
         <h2 className="mb-1 font-semibold text-slate-700">Troubleshooting</h2>
-        <p className="whitespace-pre-wrap">{lab.troubleshooting}</p>
+        <MarkdownContent content={lab.troubleshooting} />
       </section>
 
       <section className="rounded-lg border border-slate-200 bg-white p-6 text-sm leading-relaxed text-slate-800">
         <h2 className="mb-1 font-semibold text-slate-700">Cleanup</h2>
-        <p>{lab.cleanup}</p>
+        <MarkdownContent content={lab.cleanup} />
       </section>
 
       {lab.status === 'NOT_STARTED' && (
