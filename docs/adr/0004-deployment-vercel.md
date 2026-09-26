@@ -55,6 +55,18 @@ This confirms the Session 9 hypothesis without fully diagnosing the exact Vercel
 
 `apps/web`'s `API_URL` is a plain config value (not a real secret) pointing at `https://aws-devlab-api.onrender.com`. The old `aws-devlab-api` Vercel project is still connected to the GitHub repo (still auto-deploys on push, unused) — left as a low-priority cleanup item in `Pendencias.md` rather than deleted immediately.
 
+## Update 4 (2026-09-26, Session 22) — Mitigating the free-plan cold start
+
+The trade-off this ADR originally flagged about Render ("spins down on idle, cold start of 30s+") showed up in real use: Pedro reported that the first login from his phone after a break never worked — the button sat on "Aguarde…" long enough that he'd reload and log in again, and the second attempt worked. Vercel's production logs showed exactly that: a `POST /login` with no `/dashboard` navigation after it, a reload ~30 s later, and a second `POST /login` followed by the dashboard ~6 s later. Measured cold start of `/health` after 16 min idle: **52 s** (0.34 s immediately afterward, warm).
+
+Still no budget for a paid plan, so three free mitigations, layered:
+
+1. **Keep-alive** (`.github/workflows/keep-api-warm.yml`): a scheduled GitHub Actions job pings `/health` every 10 min during usage hours (07:00–23:59 BRT). `/health` touches neither Prisma nor bcrypt, so it doesn't keep Neon's compute awake. Limiting the hours keeps the service at roughly 17 h/day (~530 h/month), inside Render's 750 free instance-hours per month. The repo is public, so Actions minutes are free.
+2. **Wake on page load**: the auth form calls a new `/api/wake` route handler as soon as it mounts, which calls the API's `/health`. GitHub's scheduler can delay or drop runs, so this covers the gaps: the boot overlaps with typing the credentials instead of starting only on submit.
+3. **Honest feedback**: after 5 s pending, the submit button explains the server is waking up and that reloading isn't needed.
+
+If a real always-on requirement appears (other users, not just Pedro), the fix is a paid instance, not more keep-alive tricks.
+
 ## Consequences
 
 - Fixed a real gap this decision exposed: `packages/database`'s `exports` pointed at raw `src/index.ts`. That happened to work in local dev because `nest start` transpiles TypeScript on the fly (including workspace packages), but `node dist/main.js` — what any real production deploy runs — could not import a `.ts` file directly. Added a `tsc` build step (`packages/database/tsconfig.build.json`) and pointed `exports` at the compiled `dist/index.js`/`dist/index.d.ts`. Verified by actually running `node dist/main.js` locally against Neon before deploying, not just assuming Vercel's bundler would paper over it.
