@@ -80,17 +80,17 @@ lifecycle no S3), 14 questões e 9 flashcards.
 | # | Tópico | Status | Aula | Lab | Questões | Flashcards |
 |---|--------|--------|------|-----|----------|------------|
 | 1 | Análise de causa raiz | ✅ Feito (Sessão 28) | 2 | 2 | 14 | 10 |
-| 2 | Instrumentação de código para observabilidade | ⬜ Pendente | — | — | — | — |
+| 2 | Instrumentação de código para observabilidade | ✅ Feito (Sessão 29) | 2 | 2 | 14 | 10 |
 | 3 | Otimização de aplicações | ⬜ Pendente | — | — | — | — |
 
 ## Volume total pra fechar a trilha
 
-Hoje: **126 questões** e **93 flashcards** no banco.
+Hoje: **140 questões** e **103 flashcards** no banco.
 
-- **2 tópicos** ainda vazios (de 13)
-- **~2-4 aulas** e **~2-4 labs** novos (conforme a amplitude de cada tópico)
-- **~26-28 questões** novas → banco total sobe para **~150-155 questões**
-- **~20 flashcards** novos
+- **1 tópico** ainda vazio (de 13)
+- **~2 aulas** e **~2 labs** novos (conforme a amplitude de cada tópico)
+- **~14 questões** novas → banco total sobe para **~154 questões**
+- **~10 flashcards** novos
 
 ## Reforços pendentes
 
@@ -109,7 +109,7 @@ numérica que o schema usa hoje:
 1. ~~Domain 1 restante~~ — concluído (Sessões 20-21)
 2. ~~Domain 2 restante~~ — concluído (Sessões 22-23)
 3. ~~Domain 3~~ — concluído (Sessões 24-27)
-4. Domain 4 (3 tópicos — Análise de causa raiz concluída na Sessão 28)
+4. Domain 4 (3 tópicos — 2 concluídos nas Sessões 28-29; falta Otimização de aplicações)
 
 ## Ritmo
 

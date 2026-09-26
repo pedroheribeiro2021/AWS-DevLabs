@@ -7089,6 +7089,654 @@ done | sort | uniq -c
 
   await seedFlashcards(rootCauseTopic.id, rootCauseFlashcardsToSeed);
 
+  // ---------------------------------------------------------------------
+  // Content-authoring push, topic 11 of 12: Domain 4 "Instrumentação de
+  // código para observabilidade", to the exam-readiness bar.
+  // ---------------------------------------------------------------------
+
+  const observabilityTopic = await prisma.topic.findFirstOrThrow({
+    where: { domainId: troubleshootingDomain.id, name: 'Instrumentação de código para observabilidade' },
+  });
+
+  const eventBridgeServiceData = {
+    shortName: 'EventBridge',
+    category: 'Application Integration',
+    description:
+      'Barramento de eventos que roteia eventos de serviços da AWS, de aplicações e de SaaS para destinos por meio de regras.',
+  };
+  const eventBridgeService = await prisma.aWSService.upsert({
+    where: { name: 'Amazon EventBridge' },
+    update: eventBridgeServiceData,
+    create: { name: 'Amazon EventBridge', ...eventBridgeServiceData },
+  });
+
+  const logsMetricsInstrumentationLessonContent = `## Objetivo
+
+Ao final desta lição você vai conseguir diferenciar logging, monitoramento e observabilidade, escrever logs estruturados úteis e publicar métricas customizadas no CloudWatch da forma mais eficiente.
+
+## Logging, monitoramento e observabilidade
+
+- **Logging**: registrar o que aconteceu (eventos, erros, decisões do código).
+- **Monitoramento**: acompanhar indicadores conhecidos e alertar quando saem do normal ("a taxa de erros passou de 1%").
+- **Observabilidade**: conseguir responder perguntas **novas** sobre o sistema sem mudar o código ("por que só os clientes do plano X estão lentos desde ontem?"), combinando os três pilares — **logs**, **métricas** e **traces** — ligados por identificadores em comum.
+
+## Logs estruturados
+
+Logs em JSON, com campos consistentes, podem ser filtrados e agregados (no Logs Insights, por exemplo) em vez de só lidos. Boas práticas:
+
+- Um **nível** por mensagem (\`DEBUG\`, \`INFO\`, \`WARN\`, \`ERROR\`) e o nível configurável sem mudar código.
+- Um **ID de correlação** em toda linha — o request ID do Lambda, o trace ID do X-Ray ou um ID propagado entre serviços — para seguir uma requisição por vários serviços.
+- Contexto de negócio (ID do pedido, tipo de cliente), mas **nunca** segredos ou dados sensíveis sem mascarar.
+
+No Lambda, os **controles avançados de logging** permitem escolher o formato **JSON** para os logs da função e do sistema (as linhas \`START\`/\`REPORT\` viram eventos \`platform.*\`), definir o **nível de log da aplicação** e do sistema (filtrando mensagens abaixo dele sem alterar o código) e apontar a função para um **log group customizado**. O **Powertools for AWS Lambda** (Python, TypeScript, Java, .NET) oferece Logger, Metrics e Tracer prontos com essas práticas.
+
+## Métricas customizadas
+
+Uma métrica do CloudWatch é identificada por **namespace** (ex.: \`DevLab/Pedidos\`), **nome** e **dimensions** (pares chave-valor, como \`Servico=checkout\`; até 30 por métrica). Cada combinação de dimensões é uma métrica separada e cobrada — por isso valores de **alta cardinalidade** (ID do pedido, ID do usuário) vão para os logs, nunca para dimensões.
+
+Duas formas de publicar:
+
+- **\`PutMetricData\`**: uma chamada de API do SDK. Simples, mas adiciona latência e custo por chamada no caminho da requisição, e está sujeita a throttling.
+- **Embedded Metric Format (EMF)**: a aplicação escreve uma linha de log em JSON com um bloco \`_aws\` descrevendo as métricas, e o CloudWatch extrai as métricas **de forma assíncrona** a partir do log — sem chamada de API, e com o contexto (IDs de alta cardinalidade) preservado no próprio log. É a forma recomendada no Lambda.
+
+Métricas têm resolução **padrão** (60 s) ou **alta resolução** (1 s, via \`StorageResolution\`), que permite alarmes com períodos de 10 ou 30 segundos. Para latência, prefira **percentis** (\`p90\`, \`p99\`) à média, que esconde a cauda lenta. Em instâncias EC2, métricas de dentro do sistema operacional (**memória**, **disco**) não existem por padrão — exigem o **CloudWatch agent**.
+
+## Relação com a prova DVA-C02
+
+Espere cenários sobre EMF vs. \`PutMetricData\`, dimensões e cardinalidade, alta resolução, percentis, CloudWatch agent para memória em EC2, logs estruturados com ID de correlação e o nível de log do Lambda ajustado sem mudar código.`;
+
+  const tracingAlarmsLessonContent = `## Objetivo
+
+Ao final desta lição você vai conseguir instrumentar código com o X-Ray SDK (ou OpenTelemetry), configurar alarmes que não disparam à toa e notificar o time sobre eventos como falhas de pipeline e cotas perto do limite.
+
+## Instrumentando traces
+
+O active tracing do Lambda e o tracing do API Gateway registram os serviços, mas **o que acontece dentro do código** só aparece com instrumentação:
+
+- **Patch dos clientes**: o X-Ray SDK (\`patch_all()\` em Python, \`captureAWSv3Client\` em Node.js) cria automaticamente um **subsegment** para cada chamada ao SDK da AWS e a APIs HTTP, com tempo e erros.
+- **Subsegments customizados**: marcam trechos do código (\`with xray_recorder.in_subsegment("calcular_frete")\`).
+- **Annotations** (indexadas, até 50 por trace, usadas em filter expressions) e **metadata** (qualquer dado, não indexado). No Lambda, o segmento da função é criado pelo próprio serviço (um *facade segment*) e não pode ser alterado — annotations e metadata vão em **subsegments** que o código cria.
+- **AWS Distro for OpenTelemetry (ADOT)** é a alternativa baseada no padrão aberto OpenTelemetry, que envia traces ao X-Ray e métricas ao CloudWatch — útil quando o time quer instrumentação portável.
+
+## Alarmes do CloudWatch
+
+Um alarme observa uma métrica (ou uma expressão matemática sobre métricas) e fica em \`OK\`, \`ALARM\` ou \`INSUFFICIENT_DATA\`. Os parâmetros que evitam alarmes falsos:
+
+- **Period** e **statistic** (ex.: \`Sum\` de erros em 1 minuto, \`p99\` de latência em 5 minutos).
+- **Evaluation periods** e **datapoints to alarm** — "M de N": 3 de 5 períodos acima do limite, em vez de um pico isolado.
+- **Treat missing data**: como tratar períodos sem dados (\`missing\`, \`notBreaching\`, \`breaching\`, \`ignore\`) — em serviços de pouco tráfego, \`notBreaching\` evita alarmes por falta de dados.
+- **Composite alarms**: combinam alarmes com AND/OR para reduzir ruído (ex.: só alertar se erros **e** latência estiverem altos).
+- **Anomaly detection**: faixa esperada aprendida do histórico, em vez de um limite fixo.
+
+Ações de alarme: notificar via **SNS**, escalar um Auto Scaling group, executar ações de EC2 ou invocar uma função Lambda.
+
+## Notificações sobre eventos
+
+Nem tudo é métrica. O **Amazon EventBridge** recebe eventos de mudança de estado dos serviços — uma execução do CodePipeline que falhou, um deploy do CodeDeploy que terminou, uma notificação do AWS Health — e uma **regra** com um padrão de evento os envia para SNS, Lambda, filas etc. Para **cotas de serviço**, o Service Quotas publica o uso de muitas cotas como métricas no CloudWatch (namespace \`AWS/Usage\`), e é possível criar alarmes quando o uso passa de uma porcentagem da cota. **CloudWatch Synthetics** (canaries) testa endpoints e fluxos periodicamente de fora da aplicação, e **dashboards** reúnem métricas, logs e alarmes num lugar só.
+
+## Relação com a prova DVA-C02
+
+Espere cenários sobre patch do SDK e subsegments, annotations no Lambda, "M de N" datapoints, \`treatMissingData\`, composite alarms, EventBridge para notificar falhas de pipeline/deploy e alarmes de uso de cotas.`;
+
+  const observabilityLessons: LessonSeed[] = [
+    {
+      order: 1,
+      estimatedMinutes: 12,
+      title: 'Logs estruturados e métricas customizadas',
+      content: logsMetricsInstrumentationLessonContent,
+      resources: [
+        {
+          title: 'Embedded Metric Format — documentação oficial',
+          url: 'https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch_Embedded_Metric_Format_Specification.html',
+        },
+        {
+          title: 'Controles avançados de logging do Lambda — documentação oficial',
+          url: 'https://docs.aws.amazon.com/lambda/latest/dg/monitoring-cloudwatchlogs-advanced.html',
+        },
+      ],
+    },
+    {
+      order: 2,
+      estimatedMinutes: 11,
+      title: 'Tracing, alarmes e notificações',
+      content: tracingAlarmsLessonContent,
+      resources: [
+        {
+          title: 'Instrumentando Python com o X-Ray SDK — documentação oficial',
+          url: 'https://docs.aws.amazon.com/xray/latest/devguide/xray-sdk-python.html',
+        },
+        {
+          title: 'Alarmes do CloudWatch — documentação oficial',
+          url: 'https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/AlarmThatSendsEmail.html',
+        },
+      ],
+    },
+  ];
+
+  await seedLessons(observabilityTopic.id, observabilityLessons);
+
+  const emfFunctionInstructions = `No Console do Lambda, crie a função \`devlab-metricas\` com Python 3.13. Substitua o código por este, que publica duas métricas via **Embedded Metric Format** — só escrevendo uma linha de log — e clique em "Deploy":
+
+\`\`\`python
+import json
+import random
+import time
+
+
+def lambda_handler(event, context):
+    valor = round(random.uniform(10, 500), 2)
+    aprovado = random.random() > 0.2
+    print(json.dumps({
+        "_aws": {
+            "Timestamp": int(time.time() * 1000),
+            "CloudWatchMetrics": [{
+                "Namespace": "DevLab/Pedidos",
+                "Dimensions": [["Servico"]],
+                "Metrics": [
+                    {"Name": "ValorPedido", "Unit": "None"},
+                    {"Name": "PagamentoRecusado", "Unit": "Count"}
+                ]
+            }]
+        },
+        "Servico": "checkout",
+        "ValorPedido": valor,
+        "PagamentoRecusado": 0 if aprovado else 1,
+        "pedidoId": context.aws_request_id
+    }))
+    return {"valor": valor, "aprovado": aprovado}
+\`\`\`
+
+Repare: \`pedidoId\` está no log, mas **não** é dimensão — tem cardinalidade alta demais para virar métrica.`;
+
+  const emfInvokeInstructions = `No AWS CloudShell, gere 40 pedidos:
+
+\`\`\`bash
+for i in $(seq 1 40); do
+  aws lambda invoke --function-name devlab-metricas saida.json > /dev/null
+done
+echo concluido
+\`\`\``;
+
+  const xrayLayerInstructions = `No AWS CloudShell, empacote o X-Ray SDK como layer, com as wheels do runtime Python 3.13 (a mesma técnica do laboratório de layers do tópico "Preparação de artefatos de deploy"):
+
+\`\`\`bash
+mkdir -p xray/python
+pip3 install aws-xray-sdk -t xray/python --platform manylinux2014_x86_64 --python-version 3.13 --implementation cp --only-binary=:all:
+cd xray && zip -r ../xray.zip python && cd ..
+aws lambda publish-layer-version --layer-name devlab-xray-sdk --zip-file fileb://xray.zip --compatible-runtimes python3.13 --compatible-architectures x86_64
+\`\`\``;
+
+  const instrumentedCodeInstructions = `Substitua o código da função \`devlab-observavel\` por este e clique em "Deploy":
+
+\`\`\`python
+import logging
+
+import boto3
+from aws_xray_sdk.core import patch_all, xray_recorder
+
+patch_all()  # cria subsegments para as chamadas do boto3
+logger = logging.getLogger()
+sts = boto3.client("sts")
+
+
+def lambda_handler(event, context):
+    cliente = event.get("cliente", "anonimo")
+    # No Lambda, annotations vão num subsegment criado pelo código.
+    with xray_recorder.in_subsegment("processar_pedido") as subsegment:
+        subsegment.put_annotation("cliente", cliente)
+        subsegment.put_metadata("evento", event)
+        conta = sts.get_caller_identity()["Account"]
+    logger.info("pedido processado para %s", cliente)
+    logger.debug("detalhe que só aparece com nível DEBUG")
+    return {"cliente": cliente, "conta": conta[-4:]}
+\`\`\``;
+
+  const instrumentedInvokeInstructions = `No CloudShell, invoque a função algumas vezes com clientes diferentes:
+
+\`\`\`bash
+for cliente in ana bruno ana carla ana; do
+  aws lambda invoke --function-name devlab-observavel --cli-binary-format raw-in-base64-out --payload "{\\"cliente\\": \\"$cliente\\"}" saida.json > /dev/null
+done
+echo concluido
+\`\`\`
+
+Depois, no CloudWatch Logs Insights, consulte o log group \`/aws/lambda/devlab-observavel\`:
+
+\`\`\`
+fields @timestamp, level, message, requestId
+| filter level = "INFO"
+| sort @timestamp desc
+\`\`\``;
+
+  const observabilityLabs: LabSeed[] = [
+    {
+      title: 'Métricas customizadas com Embedded Metric Format e um alarme',
+      data: {
+        level: 2,
+        order: 1,
+        estimatedMinutes: 30,
+        objective:
+          'Ao final deste laboratório você terá publicado métricas de negócio no CloudWatch a partir de uma função Lambda usando o Embedded Metric Format, sem nenhuma chamada a PutMetricData, e criado um alarme com notificação por e-mail sobre uma delas.',
+        prerequisites:
+          'Conta AWS com acesso ao Console e ao AWS CloudShell, e um e-mail seu para receber a notificação. Ter lido a lição "Logs estruturados e métricas customizadas" ajuda.',
+        context:
+          'O time de negócio quer acompanhar o valor dos pedidos e ser avisado quando muitos pagamentos forem recusados. A função de checkout já existe; o desafio é publicar essas métricas sem adicionar latência e custo de chamadas de API a cada pedido.',
+        troubleshooting:
+          'O namespace `DevLab/Pedidos` não aparece: as métricas extraídas do log podem levar alguns minutos para surgir; confira também se a linha de log é JSON válido com o bloco `_aws` (abra o log no CloudWatch Logs). \n\nO alarme fica em `INSUFFICIENT_DATA`: não houve dados no período — gere mais tráfego com o laço do passo 2. \n\nO e-mail de notificação não chega: a assinatura do tópico SNS precisa ser confirmada pelo link do e-mail "AWS Notification - Subscription Confirmation" (confira o spam).',
+        cleanup:
+          'Exclua o alarme `devlab-pagamentos-recusados`, o tópico SNS criado para ele, a função `devlab-metricas` e o log group `/aws/lambda/devlab-metricas`. Métricas customizadas não podem ser excluídas: param de ser cobradas quando deixam de receber dados e expiram sozinhas.',
+        costWarning:
+          'Métricas customizadas e alarmes do CloudWatch têm uma cota gratuita mensal (10 métricas e 10 alarmes no Free Tier); fora dela, custam centavos por mês, proporcionalmente. As invocações ficam no Free Tier do Lambda.',
+      },
+      steps: [
+        {
+          order: 1,
+          title: 'Criar a função que publica métricas',
+          instructions: emfFunctionInstructions,
+          validation: 'Um teste no Console devolve `valor` e `aprovado`, e o log da execução mostra a linha JSON com o bloco `_aws`.',
+        },
+        {
+          order: 2,
+          title: 'Gerar pedidos',
+          instructions: emfInvokeInstructions,
+          validation: 'O laço termina com `concluido`, sem erros.',
+        },
+        {
+          order: 3,
+          title: 'Ver as métricas no CloudWatch',
+          instructions:
+            'Espere alguns minutos. No Console do CloudWatch, abra "Metrics" > "All metrics" > namespace `DevLab/Pedidos` > dimensão `Servico`. Grafique `PagamentoRecusado` com a estatística **Sum** e `ValorPedido` com **p90**, em períodos de 1 minuto.',
+          validation:
+            'As duas métricas aparecem sob `Servico = checkout`: a soma de recusas fica em torno de 20% dos pedidos, e o p90 mostra o valor abaixo do qual estão 90% dos pedidos — métricas criadas só a partir de logs.',
+        },
+        {
+          order: 4,
+          title: 'Criar o alarme com notificação',
+          instructions:
+            'Na métrica `PagamentoRecusado`, clique no ícone de sino ("Create alarm"). Estatística **Sum**, período de **5 minutos**, condição **maior ou igual a 3**. Em "Notification", crie um novo tópico SNS com o seu e-mail e confirme a assinatura pelo link recebido. Nomeie o alarme `devlab-pagamentos-recusados`.',
+          validation: 'O alarme aparece na lista e a assinatura do tópico SNS está confirmada.',
+        },
+        {
+          order: 5,
+          title: 'Disparar o alarme',
+          instructions: 'Rode o laço do passo 2 mais uma vez e acompanhe o alarme por alguns minutos.',
+          validation:
+            'Com cerca de 8 recusas em 40 pedidos, o alarme passa para **ALARM** e você recebe o e-mail do SNS — do log da função até o alerta, sem uma única chamada a `PutMetricData`.',
+        },
+      ],
+    },
+    {
+      title: 'Logs em JSON e tracing com o X-Ray SDK',
+      data: {
+        level: 3,
+        order: 2,
+        estimatedMinutes: 35,
+        objective:
+          'Ao final deste laboratório você terá uma função Lambda com logs em formato JSON e nível de log configurável sem mudar código, e com instrumentação do X-Ray SDK — subsegments automáticos para o SDK da AWS e uma annotation usada para filtrar traces por cliente.',
+        prerequisites:
+          'Conta AWS com acesso ao Console e ao AWS CloudShell. Ter feito o laboratório de layers do tópico "Preparação de artefatos de deploy" e lido a lição "Tracing, alarmes e notificações" ajuda.',
+        context:
+          'O suporte recebe reclamações de clientes específicos e precisa encontrar as requisições deles rapidamente. Hoje os logs são texto livre e os traces só mostram "a função demorou". Você vai instrumentar a função para que dê para filtrar traces por cliente e consultar logs por campo.',
+        troubleshooting:
+          '`No module named \'aws_xray_sdk\'`: confira se a layer `devlab-xray-sdk` foi adicionada e se a função é Python 3.13 x86_64, igual à layer. \n\nNenhum trace com a annotation: o active tracing precisa estar ligado; e, no Lambda, a annotation só funciona dentro do subsegment criado pelo código (colocá-la fora gera erro de "facade segment"). \n\nOs logs continuam em texto: o formato JSON é configurado em "Logging configuration" da função — confira se salvou como JSON. \n\nA consulta por `level` não retorna nada: amplie o intervalo de tempo; com o formato JSON, os campos `level`, `message` e `requestId` são descobertos automaticamente.',
+        cleanup:
+          'Exclua a função `devlab-observavel`, o log group `/aws/lambda/devlab-observavel` e a layer: `aws lambda delete-layer-version --layer-name devlab-xray-sdk --version-number 1`.',
+        costWarning:
+          'As invocações e os poucos traces ficam dentro das cotas gratuitas do Lambda e do X-Ray. A chamada `sts get-caller-identity` usada no código não tem custo.',
+      },
+      steps: [
+        {
+          order: 1,
+          title: 'Publicar a layer do X-Ray SDK',
+          instructions: xrayLayerInstructions,
+          validation: 'A resposta traz um `LayerVersionArn` terminando em `:devlab-xray-sdk:1`.',
+        },
+        {
+          order: 2,
+          title: 'Criar e configurar a função',
+          instructions:
+            'Crie a função `devlab-observavel` com Python 3.13 (x86_64) e adicione a layer `devlab-xray-sdk` (versão 1). Em "Configuration" > "Monitoring and operations tools": ative o **Active tracing** do X-Ray e, em "Logging configuration", escolha **Log format: JSON** e **Application log level: INFO**.',
+          validation: 'A configuração mostra active tracing habilitado, formato de log JSON e nível de aplicação INFO.',
+        },
+        {
+          order: 3,
+          title: 'Instrumentar o código',
+          instructions: instrumentedCodeInstructions,
+          validation: 'Um teste com `{"cliente": "ana"}` devolve o cliente e os 4 últimos dígitos da conta.',
+        },
+        {
+          order: 4,
+          title: 'Gerar tráfego e consultar os logs',
+          instructions: instrumentedInvokeInstructions,
+          validation:
+            'Cada linha é um JSON com `level`, `message` (ex.: "pedido processado para ana") e `requestId` — e a mensagem `DEBUG` não aparece, porque o nível da aplicação é INFO. Trocando o nível para DEBUG na configuração (sem mudar o código) e invocando de novo, ela passa a aparecer.',
+        },
+        {
+          order: 5,
+          title: 'Filtrar traces por annotation',
+          instructions:
+            'No Console do CloudWatch, abra "X-Ray traces" > "Traces" e filtre com `annotation.cliente = "ana"`. Abra um dos traces.',
+          validation:
+            'Só aparecem os 3 traces da cliente "ana". O trace mostra o subsegment `processar_pedido` com a annotation e, dentro dele, um subsegment `STS` criado automaticamente pelo `patch_all()` — o tempo da chamada ao SDK visível dentro do código.',
+        },
+      ],
+    },
+  ];
+
+  await seedLabs(observabilityTopic.id, observabilityLabs);
+
+  const observabilityQuestionsToSeed: QuestionSeed[] = [
+    {
+      prompt: 'Quais são os três pilares normalmente associados à observabilidade?',
+      type: 'KNOWLEDGE',
+      difficulty: 'EASY',
+      explanation:
+        'Logs, métricas e traces. Juntos, e ligados por identificadores em comum, permitem responder perguntas novas sobre o sistema sem mudar o código.',
+      options: [
+        { text: 'Logs, métricas e traces', isCorrect: true, explanation: 'Correto.' },
+        { text: 'Backups, snapshots e réplicas', isCorrect: false, explanation: 'Isso é resiliência de dados.' },
+        { text: 'Usuários, grupos e roles', isCorrect: false, explanation: 'Isso é gerenciamento de identidade.' },
+        { text: 'Build, teste e deploy', isCorrect: false, explanation: 'Isso é CI/CD.' },
+      ],
+    },
+    {
+      prompt: 'Um time quer um alarme de uso de memória de instâncias EC2, mas não encontra essa métrica no CloudWatch. Por quê?',
+      type: 'KNOWLEDGE',
+      difficulty: 'EASY',
+      explanation:
+        'Métricas de dentro do sistema operacional, como memória e disco, não são coletadas por padrão. É preciso instalar e configurar o CloudWatch agent nas instâncias.',
+      options: [
+        { text: 'Memória não é coletada por padrão; é preciso o CloudWatch agent.', isCorrect: true, explanation: 'Correto.' },
+        { text: 'É preciso habilitar o monitoramento detalhado (1 minuto).', isCorrect: false, explanation: 'Isso aumenta a frequência das métricas padrão, mas não adiciona memória.' },
+        { text: 'A métrica só existe em instâncias com mais de 8 GB de memória.', isCorrect: false, explanation: 'Não existe essa regra.' },
+        { text: 'É preciso habilitar o X-Ray.', isCorrect: false, explanation: 'O X-Ray trata de traces, não de métricas do sistema operacional.' },
+      ],
+    },
+    {
+      prompt:
+        'Um desenvolvedor quer publicar uma métrica customizada com o ID de cada usuário como dimensão, para ver a latência por usuário. Por que isso não é recomendado?',
+      type: 'KNOWLEDGE',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Cada combinação de dimensões vira uma métrica separada e cobrada. Valores de alta cardinalidade (IDs de usuário ou de pedido) criariam milhares de métricas; eles devem ir para os logs (por exemplo, no mesmo evento EMF), onde podem ser consultados.',
+      options: [
+        {
+          text: 'Cada valor de dimensão vira uma métrica separada e cobrada; IDs de alta cardinalidade devem ir para os logs.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'Dimensões só aceitam valores numéricos.', isCorrect: false, explanation: 'Dimensões são texto.' },
+        { text: 'Métricas customizadas não aceitam dimensões.', isCorrect: false, explanation: 'Aceitam até 30 dimensões.' },
+        { text: 'O CloudWatch rejeita qualquer dimensão chamada usuario.', isCorrect: false, explanation: 'Não existe essa restrição de nome.' },
+      ],
+    },
+    {
+      prompt:
+        'Uma função Lambda chama PutMetricData a cada requisição, o que adiciona latência e às vezes gera throttling. Qual alternativa publica as mesmas métricas sem chamadas de API no caminho da requisição?',
+      type: 'APPLICATION',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Com o Embedded Metric Format, a função escreve um log JSON com o bloco _aws e o CloudWatch extrai as métricas de forma assíncrona, sem chamada de API.',
+      officialReferences:
+        'https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch_Embedded_Metric_Format_Specification.html',
+      options: [
+        { text: 'Embedded Metric Format (EMF) nos logs da função.', isCorrect: true, explanation: 'Correto.' },
+        { text: 'Aumentar a memória da função.', isCorrect: false, explanation: 'Não elimina a chamada de API.' },
+        { text: 'Criar um metric filter para cada requisição.', isCorrect: false, explanation: 'Metric filters são definidos uma vez por padrão, não por requisição; e o EMF é a forma recomendada para métricas com valores.' },
+        { text: 'Publicar as métricas no X-Ray.', isCorrect: false, explanation: 'O X-Ray guarda traces, não métricas do CloudWatch.' },
+      ],
+    },
+    {
+      prompt:
+        'Uma aplicação precisa de alarmes que reajam em 10 segundos a picos numa métrica customizada. O que é necessário?',
+      type: 'APPLICATION',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Métricas de alta resolução (StorageResolution = 1 segundo) permitem alarmes com períodos de 10 ou 30 segundos. Métricas de resolução padrão têm granularidade de 60 segundos.',
+      options: [
+        {
+          text: 'Publicar a métrica em alta resolução (1 segundo) e usar um alarme com período de 10 segundos.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'Usar a resolução padrão e um período de 10 segundos.', isCorrect: false, explanation: 'Métricas padrão têm granularidade de 60 segundos.' },
+        { text: 'Habilitar o monitoramento detalhado do EC2.', isCorrect: false, explanation: 'Dá métricas de 1 minuto das instâncias, não de uma métrica customizada.' },
+        { text: 'Usar um composite alarm.', isCorrect: false, explanation: 'Combina alarmes, mas não reduz o período.' },
+      ],
+    },
+    {
+      prompt:
+        'Numa função Lambda com active tracing, um desenvolvedor chama put_annotation diretamente no segmento atual e recebe um erro. Qual é a forma correta de adicionar a annotation?',
+      type: 'APPLICATION',
+      difficulty: 'HARD',
+      explanation:
+        'No Lambda, o segmento da função é um facade segment criado pelo serviço e não pode ser alterado pelo código. Annotations e metadata devem ser adicionadas a um subsegment criado pelo código.',
+      options: [
+        {
+          text: 'Criar um subsegment no código e adicionar a annotation nele.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'Desligar o active tracing e criar o segmento manualmente.', isCorrect: false, explanation: 'Perde o tracing integrado do Lambda.' },
+        { text: 'Usar metadata em vez de annotation no segmento da função.', isCorrect: false, explanation: 'O facade segment também não aceita metadata.' },
+        { text: 'Adicionar a annotation como variável de ambiente.', isCorrect: false, explanation: 'Variáveis de ambiente não viram annotations.' },
+      ],
+    },
+    {
+      prompt:
+        'Uma requisição passa por três microsserviços, e o time precisa encontrar nos logs de todos eles as linhas da mesma requisição. Qual prática resolve isso?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Logs estruturados com um ID de correlação (por exemplo, o trace ID do X-Ray ou um ID propagado nos cabeçalhos) em todas as linhas permitem juntar os logs de uma requisição entre serviços.',
+      options: [
+        {
+          text: 'Logs estruturados com um ID de correlação propagado entre os serviços.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'Usar o mesmo log group para os três serviços.', isCorrect: false, explanation: 'Sem um ID comum, as linhas continuam impossíveis de relacionar.' },
+        { text: 'Aumentar a retenção dos logs.', isCorrect: false, explanation: 'Não ajuda a relacionar linhas.' },
+        { text: 'Logar tudo em nível DEBUG.', isCorrect: false, explanation: 'Mais volume não resolve a correlação.' },
+      ],
+    },
+    {
+      prompt:
+        'Durante um incidente, o time quer ver temporariamente logs de nível DEBUG de uma função Lambda, sem alterar nem republicar o código. Qual recurso permite isso?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Os controles avançados de logging do Lambda (com formato JSON) permitem mudar o nível de log da aplicação na configuração da função, filtrando ou liberando mensagens sem mudar o código.',
+      officialReferences: 'https://docs.aws.amazon.com/lambda/latest/dg/monitoring-cloudwatchlogs-advanced.html',
+      options: [
+        {
+          text: 'Mudar o application log level para DEBUG nos controles avançados de logging da função.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'Aumentar a retenção do log group.', isCorrect: false, explanation: 'Não muda o que é logado.' },
+        { text: 'Habilitar o active tracing do X-Ray.', isCorrect: false, explanation: 'Gera traces, não logs de DEBUG.' },
+        { text: 'Criar um metric filter para DEBUG.', isCorrect: false, explanation: 'Metric filters leem logs existentes; não fazem a função logar mais.' },
+      ],
+    },
+    {
+      prompt:
+        'Um alarme de latência dispara várias vezes por dia por picos isolados de um único minuto, que não afetam os usuários. Como reduzir esses alarmes falsos sem esconder problemas reais?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Configurar "datapoints to alarm" como M de N (ex.: 3 de 5 períodos) faz o alarme exigir uma violação sustentada, ignorando picos isolados.',
+      options: [
+        {
+          text: 'Exigir M de N datapoints (ex.: 3 de 5 períodos) acima do limite.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'Aumentar muito o limite do alarme.', isCorrect: false, explanation: 'Esconde problemas reais.' },
+        { text: 'Desligar o alarme durante o horário comercial.', isCorrect: false, explanation: 'Esconde problemas no horário de maior uso.' },
+        { text: 'Trocar a estatística para Minimum.', isCorrect: false, explanation: 'Ignoraria justamente a latência alta.' },
+      ],
+    },
+    {
+      prompt:
+        'Um time quer receber um e-mail sempre que uma execução do CodePipeline falhar. Qual é a solução mais direta?',
+      type: 'SCENARIO',
+      difficulty: 'HARD',
+      explanation:
+        'O CodePipeline emite eventos de mudança de estado no EventBridge. Uma regra que casa com execuções no estado FAILED e tem um tópico SNS (com a assinatura de e-mail) como destino resolve.',
+      options: [
+        {
+          text: 'Uma regra do EventBridge para execuções do pipeline com estado FAILED, enviando para um tópico SNS.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'Um alarme do CloudWatch na métrica CPUUtilization.', isCorrect: false, explanation: 'Não tem relação com o pipeline.' },
+        { text: 'Um metric filter no log do CodeBuild procurando a palavra "pipeline".', isCorrect: false, explanation: 'Frágil e indireto; o evento de estado já existe.' },
+        { text: 'Uma consulta diária do CloudTrail.', isCorrect: false, explanation: 'Não notifica na hora.' },
+      ],
+    },
+    {
+      prompt:
+        'Um alarme sobre uma métrica de um serviço de pouco tráfego fica indo para ALARM ou INSUFFICIENT_DATA nos períodos sem nenhuma requisição. Como corrigir?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'HARD',
+      explanation:
+        'A opção treat missing data define como períodos sem dados são tratados. Com notBreaching, períodos sem requisições contam como dentro do limite.',
+      options: [
+        { text: 'Configurar treat missing data como notBreaching.', isCorrect: true, explanation: 'Correto.' },
+        { text: 'Configurar treat missing data como breaching.', isCorrect: false, explanation: 'Faria os períodos vazios dispararem o alarme.' },
+        { text: 'Publicar a métrica em alta resolução.', isCorrect: false, explanation: 'Não resolve a ausência de dados.' },
+        { text: 'Aumentar o número de evaluation periods para 100.', isCorrect: false, explanation: 'Atrasa a detecção de problemas reais.' },
+      ],
+    },
+    {
+      prompt:
+        'Um time quer ser avisado antes de atingir a cota de execuções concorrentes do Lambda na conta. Qual abordagem atende?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'MEDIUM',
+      explanation:
+        'A métrica de uso (ConcurrentExecutions no Lambda, ou as métricas de uso do Service Quotas no namespace AWS/Usage) permite um alarme quando o uso passa de uma porcentagem da cota.',
+      options: [
+        {
+          text: 'Um alarme do CloudWatch sobre o uso de concorrência (ConcurrentExecutions ou a métrica de uso do Service Quotas) em relação à cota.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'Um alarme sobre a métrica Throttles.', isCorrect: false, explanation: 'Throttles só aparece depois que a cota já foi atingida.' },
+        { text: 'Uma regra do EventBridge para cada invocação.', isCorrect: false, explanation: 'Gera eventos demais e não mede a concorrência.' },
+        { text: 'Habilitar o X-Ray.', isCorrect: false, explanation: 'Não acompanha cotas.' },
+      ],
+    },
+    {
+      prompt:
+        'Um time quer instrumentar uma aplicação com um padrão aberto, enviando traces ao X-Ray e métricas ao CloudWatch, sem ficar preso a um SDK proprietário. Qual opção atende?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'MEDIUM',
+      explanation:
+        'O AWS Distro for OpenTelemetry (ADOT) usa o padrão aberto OpenTelemetry e exporta traces para o X-Ray e métricas para o CloudWatch.',
+      options: [
+        { text: 'AWS Distro for OpenTelemetry (ADOT).', isCorrect: true, explanation: 'Correto.' },
+        { text: 'CloudWatch Synthetics.', isCorrect: false, explanation: 'Testa endpoints de fora; não instrumenta o código.' },
+        { text: 'AWS CloudTrail.', isCorrect: false, explanation: 'Registra chamadas de API da conta.' },
+        { text: 'Amazon Macie.', isCorrect: false, explanation: 'Descobre dados sensíveis no S3.' },
+      ],
+    },
+    {
+      prompt: 'Por que o percentil p99 costuma ser preferível à média para monitorar latência?',
+      type: 'KNOWLEDGE',
+      difficulty: 'MEDIUM',
+      explanation:
+        'A média esconde a cauda lenta: poucas requisições muito lentas quase não a movem. O p99 mostra a latência que 1% dos usuários experimenta ou supera.',
+      options: [
+        {
+          text: 'Porque a média esconde as requisições mais lentas; o p99 mostra a cauda que afeta usuários reais.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'Porque o p99 é mais barato de calcular.', isCorrect: false, explanation: 'Custo não é o motivo.' },
+        { text: 'Porque a média não existe no CloudWatch.', isCorrect: false, explanation: 'Average existe como estatística.' },
+        { text: 'Porque o p99 ignora as requisições lentas.', isCorrect: false, explanation: 'É o contrário: ele as destaca.' },
+      ],
+    },
+  ];
+
+  await seedQuestions(observabilityTopic.id, observabilityQuestionsToSeed);
+
+  const observabilityFlashcardsToSeed: FlashcardSeed[] = [
+    {
+      conceptName: 'Logging, monitoramento e observabilidade',
+      conceptDescription: 'Diferença entre os três conceitos e os pilares da observabilidade.',
+      serviceId: cloudWatchService.id,
+      front: 'Qual a diferença entre monitoramento e observabilidade?',
+      back: 'Monitoramento acompanha indicadores conhecidos e alerta. Observabilidade permite responder perguntas novas sem mudar o código, combinando logs, métricas e traces ligados por IDs comuns.',
+    },
+    {
+      conceptName: 'Logs estruturados',
+      conceptDescription: 'Boas práticas de logging em JSON.',
+      serviceId: cloudWatchService.id,
+      front: 'O que um log estruturado útil deve ter?',
+      back: 'JSON com nível, ID de correlação (request ID/trace ID) e contexto de negócio — sem segredos nem dados sensíveis sem mascarar.',
+    },
+    {
+      conceptName: 'Controles avançados de logging do Lambda',
+      conceptDescription: 'Formato JSON, níveis de log e log group customizado no Lambda.',
+      serviceId: lambdaService.id,
+      front: 'O que os controles avançados de logging do Lambda permitem?',
+      back: 'Formato JSON para logs da função e do sistema, nível de log da aplicação e do sistema configurável sem mudar código, e log group customizado.',
+    },
+    {
+      conceptName: 'Embedded Metric Format',
+      conceptDescription: 'Publicação de métricas customizadas a partir de logs.',
+      serviceId: cloudWatchService.id,
+      front: 'Por que usar o Embedded Metric Format (EMF) em vez de PutMetricData?',
+      back: 'EMF é uma linha de log JSON com o bloco _aws; o CloudWatch extrai as métricas de forma assíncrona — sem chamada de API, latência ou throttling no caminho da requisição.',
+    },
+    {
+      conceptName: 'Dimensões e cardinalidade',
+      conceptDescription: 'Uso correto de dimensões em métricas customizadas.',
+      serviceId: cloudWatchService.id,
+      front: 'Por que não usar o ID do usuário como dimensão de uma métrica?',
+      back: 'Cada combinação de dimensões é uma métrica separada e cobrada (até 30 dimensões por métrica). IDs de alta cardinalidade vão para os logs.',
+    },
+    {
+      conceptName: 'Alta resolução e percentis',
+      conceptDescription: 'Granularidade de métricas e estatísticas de latência.',
+      serviceId: cloudWatchService.id,
+      front: 'Quando usar métricas de alta resolução e por que olhar percentis?',
+      back: 'Alta resolução (1 s) permite alarmes de 10/30 s. Percentis (p90/p99) mostram a cauda lenta que a média esconde. Memória/disco de EC2 exigem o CloudWatch agent.',
+    },
+    {
+      conceptName: 'Instrumentação com o X-Ray SDK',
+      conceptDescription: 'Patch de clientes, subsegments e annotations no código.',
+      serviceId: xrayService.id,
+      front: 'Como instrumentar código com o X-Ray SDK e onde colocar annotations no Lambda?',
+      back: 'patch_all()/captureAWSv3Client cria subsegments para chamadas ao SDK; subsegments customizados marcam trechos. No Lambda, o segmento da função é um facade: annotations vão em subsegments do código.',
+    },
+    {
+      conceptName: 'Alarmes sem ruído',
+      conceptDescription: 'Configurações de alarmes do CloudWatch que evitam falsos positivos.',
+      serviceId: cloudWatchService.id,
+      front: 'Como evitar alarmes falsos no CloudWatch?',
+      back: 'Datapoints to alarm (M de N), treat missing data (ex.: notBreaching em pouco tráfego), composite alarms (AND/OR) e anomaly detection.',
+    },
+    {
+      conceptName: 'Notificações com EventBridge',
+      conceptDescription: 'Notificação de eventos de serviços da AWS por regras.',
+      serviceId: eventBridgeService.id,
+      front: 'Como ser avisado quando um pipeline falha ou um deploy termina?',
+      back: 'Regra do EventBridge com padrão para o evento de mudança de estado (ex.: CodePipeline FAILED), com destino SNS, Lambda ou fila.',
+    },
+    {
+      conceptName: 'ADOT',
+      conceptDescription: 'AWS Distro for OpenTelemetry.',
+      serviceId: xrayService.id,
+      front: 'O que é o AWS Distro for OpenTelemetry (ADOT)?',
+      back: 'A distribuição da AWS do OpenTelemetry: instrumentação com padrão aberto que envia traces ao X-Ray e métricas ao CloudWatch.',
+    },
+  ];
+
+  await seedFlashcards(observabilityTopic.id, observabilityFlashcardsToSeed);
+
   const domainCount = await prisma.domain.count({ where: { examVersionId: examVersion.id } });
   const topicCount = await prisma.topic.count({ where: { domain: { examVersionId: examVersion.id } } });
 
