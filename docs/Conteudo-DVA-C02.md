@@ -63,7 +63,7 @@ lifecycle no S3), 14 questões e 9 flashcards.
 | # | Tópico | Status | Aula | Lab | Questões | Flashcards |
 |---|--------|--------|------|-----|----------|------------|
 | 1 | Autenticação e autorização de aplicações | ✅ Feito (Sessão 19) | 1 | 1 | 5 | 5 |
-| 2 | Criptografia com serviços AWS | ⬜ Pendente | — | — | — | — |
+| 2 | Criptografia com serviços AWS | ✅ Feito (Sessão 22) | 2 | 2 | 13 | 9 |
 | 3 | Dados sensíveis no código da aplicação | ⬜ Pendente | — | — | — | — |
 
 ### Domain 3 — Deployment (24%)
@@ -85,12 +85,12 @@ lifecycle no S3), 14 questões e 9 flashcards.
 
 ## Volume total pra fechar a trilha
 
-Hoje: **32 questões** e **24 flashcards** no banco.
+Hoje: **45 questões** e **33 flashcards** no banco.
 
-- **9 tópicos** ainda vazios (de 13)
-- **~9-14 aulas** e **~9-14 labs** novos (conforme a amplitude de cada tópico)
-- **~90-135 questões** novas → banco total sobe para **~120-165 questões**
-- **~50-80 flashcards** novos
+- **8 tópicos** ainda vazios (de 13)
+- **~8-13 aulas** e **~8-13 labs** novos (conforme a amplitude de cada tópico)
+- **~80-120 questões** novas → banco total sobe para **~125-165 questões**
+- **~45-70 flashcards** novos
 
 ## Reforços pendentes
 
@@ -107,7 +107,7 @@ Por peso do domínio (maior impacto na nota primeiro), que já bate com a ordem
 numérica que o schema usa hoje:
 
 1. ~~Domain 1 restante~~ — concluído (Sessões 20-21)
-2. Domain 2 restante (2 tópicos)
+2. Domain 2 restante (1 tópico — Criptografia concluída na Sessão 22)
 3. Domain 3 (4 tópicos)
 4. Domain 4 (3 tópicos)
 
