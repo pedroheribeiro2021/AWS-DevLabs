@@ -588,3 +588,23 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 **Decisions:** none architectural.
 
 **Next steps:** Domain 4 — "Instrumentação de código para observabilidade", then "Otimização de aplicações" (the last topic).
+
+---
+
+## 2026-09-26 — Session 29: content topic 11 of 12 (observability instrumentation)
+
+**Goal:** Pedro asked what's left in the project; agreed order: finish the 2 remaining topics, then reinforce the 3 pre-readiness-bar topics (Lambda, Cognito, Architecture), then Phase 8 (Analytics). This session: "Instrumentação de código para observabilidade".
+
+**Changes:**
+
+- `packages/database/prisma/seed.ts`, to the exam-readiness bar:
+  - **Lesson 1** "Logs estruturados e métricas customizadas" (12 min) and **Lesson 2** "Tracing, alarmes e notificações" (11 min).
+  - **Lab 1** "Métricas customizadas com Embedded Metric Format e um alarme" (Level 2, 5 steps): a checkout function that prints one EMF JSON line per call (`ValorPedido`, `PagamentoRecusado`, dimension `Servico`, with the high-cardinality `pedidoId` kept out of the dimensions), 40 invocations, Sum/p90 graphs, and an SNS e-mail alarm that fires on ≥3 refusals in 5 minutes.
+  - **Lab 2** "Logs em JSON e tracing com o X-Ray SDK" (Level 3, 5 steps): the X-Ray SDK packaged as a layer with the Python 3.13 wheels (reusing the Session 24 technique), JSON log format with application level INFO (then DEBUG, without code changes), `patch_all()` so the STS call becomes a subsegment, and an annotation set inside a code-created subsegment (the Lambda facade segment can't take annotations) used to filter traces with `annotation.cliente = "ana"`. Uses `sts get-caller-identity` because it needs no IAM permission on the default execution role.
+  - **14 questions**, **10 flashcards**; new `AWSService` row Amazon EventBridge.
+- Docs: checklist (140 questions, 103 flashcards; 1 topic left) and Pendências.
+- Verified: typecheck clean; seed twice with no duplicates (2 lessons, 2 labs/10 steps, 14 questions, 10 flashcards); escaped JSON payload in the bash loop checked in the seeded row; unit tests 28/28 and e2e 39/39.
+
+**Decisions:** none architectural.
+
+**Next steps:** the last topic, "Otimização de aplicações"; then reinforce Lambda/Cognito/Architecture; then Phase 8 (Analytics).
