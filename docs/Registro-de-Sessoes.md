@@ -545,3 +545,24 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 **Decisions:** none yet — the keep-alive replacement waits on Pedro choosing/creating the external monitor account.
 
 **Next steps:** Domain 3's last topic, "Deploy de código com serviços de CI/CD da AWS"; external keep-alive once Pedro has the account.
+
+---
+
+## 2026-09-26 — Session 27: content topic 9 of 12 (CI/CD deploys); cold start accepted; Vercel API project
+
+**Goal:** Pedro merged #36, said to stop raising the API cold start ("se leva um tempo, deixa assim") and finish the app, and asked whether the old `aws-devlab-api` Vercel project still serves any purpose since it shows up in CI.
+
+**Changes:**
+
+- `packages/database/prisma/seed.ts`, to the exam-readiness bar:
+  - **Lesson 1** "CodePipeline, CodeDeploy e estratégias de deploy" (13 min) and **Lesson 2** "Deploy com SAM, CDK, Elastic Beanstalk e Amplify" (11 min).
+  - **Lab 1** "Deploy canary de uma função Lambda com SAM e CodeDeploy" (Level 2, 5 steps): `AutoPublishAlias: live` + `DeploymentPreference: Canary10Percent5Minutes`, packaged/deployed with `aws cloudformation package`/`deploy` (same CloudShell reasoning as Session 24); the second deploy is watched in CodeDeploy while a second CloudShell tab invokes `live` 20 times.
+  - **Lab 2** "Pipeline no CodePipeline com teste, aprovação manual e deploy" (Level 3, 5 steps): versioned S3 source bucket → CodeBuild running pytest → manual approval stage → S3 deploy with extraction; a failing test stops the pipeline before approval/deploy.
+  - **14 questions**, **10 flashcards**; new `AWSService` rows AWS CodeDeploy and AWS Cloud Development Kit.
+- Docs: checklist (112 questions, 83 flashcards; 3 topics left, Domain 3 complete) and Pendências (keep-alive item closed as accepted; Vercel project item rewritten as an approved deletion).
+- Verified: typecheck clean; seed twice with no duplicates (2 lessons, 2 labs/10 steps, 14 questions, 10 flashcards); API suite (26 unit + 39 e2e) green.
+- **Vercel `aws-devlab-api`:** confirmed it has no purpose (the API has been on Render since Session 9) and Pedro approved deleting it. Couldn't do it from here — the Vercel connector has no delete-project action and the local Vercel CLI (34.1.1) isn't logged in — so Pedro deletes it from the dashboard.
+
+**Decisions:** the Render free-plan cold start is accepted as is (Pedro's call); no external keep-alive.
+
+**Next steps:** Domain 4 — "Análise de causa raiz", "Instrumentação de código para observabilidade", "Otimização de aplicações".
