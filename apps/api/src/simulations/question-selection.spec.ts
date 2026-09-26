@@ -70,6 +70,36 @@ describe('selectSimulationQuestionIds', () => {
     expect(selected.every((id) => id.startsWith('q'))).toBe(true);
   });
 
+  it('never selects more than requested when every domain has questions (rounding overshoot)', () => {
+    // Rounding each share on its own turns 3 questions at 32/26/24/18% into
+    // 1+1+1+1 = 4; the largest-remainder quotas must add up to exactly 3.
+    const pools = [
+      { domainId: 'domain-1', weightPercent: 32, questionIds: Array.from({ length: 10 }, (_, i) => `a${i}`) },
+      { domainId: 'domain-2', weightPercent: 26, questionIds: Array.from({ length: 10 }, (_, i) => `b${i}`) },
+      { domainId: 'domain-3', weightPercent: 24, questionIds: Array.from({ length: 10 }, (_, i) => `c${i}`) },
+      { domainId: 'domain-4', weightPercent: 18, questionIds: Array.from({ length: 10 }, (_, i) => `d${i}`) },
+    ];
+
+    expect(selectSimulationQuestionIds(pools, 3, fixedRandom)).toHaveLength(3);
+  });
+
+  it('builds a full 65-question exam with the real domain weights', () => {
+    // 32/26/24/18% of 65 is 20.8/16.9/15.6/11.7: rounded independently that
+    // would be 21+17+16+12 = 66. Largest remainder gives 21+17+15+12 = 65.
+    const pools = [
+      { domainId: 'domain-1', weightPercent: 32, questionIds: Array.from({ length: 40 }, (_, i) => `a${i}`) },
+      { domainId: 'domain-2', weightPercent: 26, questionIds: Array.from({ length: 40 }, (_, i) => `b${i}`) },
+      { domainId: 'domain-3', weightPercent: 24, questionIds: Array.from({ length: 40 }, (_, i) => `c${i}`) },
+      { domainId: 'domain-4', weightPercent: 18, questionIds: Array.from({ length: 40 }, (_, i) => `d${i}`) },
+    ];
+
+    const selected = selectSimulationQuestionIds(pools, 65, fixedRandom);
+    const countFor = (prefix: string) => selected.filter((id) => id.startsWith(prefix)).length;
+
+    expect(selected).toHaveLength(65);
+    expect([countFor('a'), countFor('b'), countFor('c'), countFor('d')]).toEqual([21, 17, 15, 12]);
+  });
+
   it('returns an empty array when there are no questions at all', () => {
     const selected = selectSimulationQuestionIds([], 10, fixedRandom);
     expect(selected).toEqual([]);
