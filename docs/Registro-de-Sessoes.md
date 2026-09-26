@@ -414,3 +414,25 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 **Decisions:** none — content authoring.
 
 **Next steps:** Domain 1 topic 3, "Armazenamento de dados em aplicações" (the checklist flags it as a candidate for 2 lessons/2 labs given how broad its objective is).
+
+---
+
+## 2026-09-26 — Session 21: content-authoring push, topic 3 of 12 (data storage) + exam-readiness bar
+
+**Goal:** author Domain 1's last topic, "Armazenamento de dados em aplicações". Pedro approved the checklist's suggestion of 2 lessons + 2 labs for this broad topic and set the overall bar: the tool must have enough material to leave him ready for a real certification exam.
+
+**Changes:**
+
+- `packages/database/prisma/seed.ts`:
+  - Extracted `seedQuestions(topicId, questions)` and `seedFlashcards(topicId, cards)` (plus `QuestionSeed`/`FlashcardSeed` types) — the update-or-create loops were copy-pasted per topic and 9 more topics are coming. The Cognito and Architecture blocks were switched to them (behavior unchanged; verified by the per-topic counts after reseeding). The original Lambda block was left as is.
+  - New topic content:
+    - **Lesson 1** "Modelagem e operações no Amazon DynamoDB" (13 min): relational vs. NoSQL; partition/sort keys and hot partitions; GetItem/Query/Scan, 1 MB pagination with `LastEvaluatedKey`; Put/Update/Delete, `ConditionExpression` and optimistic locking, batch and transactional APIs; LSI vs. GSI; consistency and RCU/WCU math; on-demand; TTL and Streams.
+    - **Lesson 2** "Estratégias de cache e ciclo de vida de dados no S3" (11 min): lazy loading, write-through, read-through, TTL; ElastiCache Redis/Valkey vs. Memcached; DAX; S3 storage classes with minimum durations; lifecycle transitions/expiration, noncurrent versions, incomplete multipart uploads.
+    - **Lab 1** "Modelar uma tabela DynamoDB: Query, Scan e um GSI" (Level 1, 30 min, 5 steps) and **Lab 2** "Versionamento e regras de ciclo de vida no S3" (Level 1, 20 min, 4 steps) — both Free Tier.
+    - **14 questions** (heavy on DynamoDB: RCU and WCU calculations, hot partitions, optimistic locking, pagination, LSI-only-at-creation vs. GSI-no-strong-consistency, TTL timing) and **9 flashcards**. New `AWSService` rows: Amazon DynamoDB, Amazon ElastiCache, Amazon S3.
+- `docs/Conteudo-DVA-C02.md`: added the exam-readiness criterion (supersedes the minimal baseline as the target), marked the topic done (2/2/14/9), updated totals (32 questions, 24 flashcards today; ~150+ target) and added a "Reforços pendentes" list for Lambda/Cognito/Architecture.
+- Verified: typecheck clean; `pnpm db:seed` twice, no duplicates (per-topic counts checked for Cognito, Architecture and Storage); API suite (26 unit + 39 e2e) green. Checked that no web/API code assumes one lesson or lab per topic (only e2e tests index `[0]`, deliberately). Not checked in the browser.
+
+**Decisions:** content bar raised from "minimal baseline" to "exam readiness" (recorded in `docs/Conteudo-DVA-C02.md` rather than an ADR, since it's a content-scope decision, not an architectural one).
+
+**Next steps:** Domain 2 — "Criptografia com serviços AWS" (KMS, envelope encryption, ACM), then "Dados sensíveis no código da aplicação" (Secrets Manager vs. Parameter Store), both to the readiness bar.

@@ -43,6 +43,94 @@ async function upsertTopicWithObjective(
   });
 }
 
+type QuestionSeed = {
+  prompt: string;
+  type: 'KNOWLEDGE' | 'APPLICATION' | 'SCENARIO' | 'EXAM_LEVEL';
+  difficulty: 'EASY' | 'MEDIUM' | 'HARD';
+  explanation: string;
+  officialReferences?: string;
+  options: { text: string; isCorrect: boolean; explanation: string }[];
+};
+
+/**
+ * Seeds a topic's questions with the update-or-create pattern: scalar fields
+ * sync on reseed, options are only created once (see docs/Pendencias.md for
+ * the nested-relation sync gap).
+ */
+async function seedQuestions(topicId: string, questions: QuestionSeed[]) {
+  for (const q of questions) {
+    const questionData = {
+      type: q.type,
+      difficulty: q.difficulty,
+      explanation: q.explanation,
+      officialReferences: q.officialReferences,
+    };
+
+    const existingQuestion = await prisma.question.findFirst({ where: { topicId, prompt: q.prompt } });
+
+    if (existingQuestion) {
+      await prisma.question.update({ where: { id: existingQuestion.id }, data: questionData });
+    } else {
+      await prisma.question.create({
+        data: {
+          topicId,
+          prompt: q.prompt,
+          ...questionData,
+          options: {
+            create: q.options.map((option, index) => ({
+              text: option.text,
+              isCorrect: option.isCorrect,
+              explanation: option.explanation,
+              order: index + 1,
+            })),
+          },
+        },
+      });
+    }
+  }
+}
+
+type FlashcardSeed = {
+  conceptName: string;
+  conceptDescription: string;
+  serviceId: string;
+  front: string;
+  back: string;
+};
+
+/** Seeds one Concept + Flashcard per entry, update-or-create like seedQuestions. */
+async function seedFlashcards(topicId: string, cards: FlashcardSeed[]) {
+  for (const card of cards) {
+    const existingConcept = await prisma.concept.findFirst({ where: { topicId, name: card.conceptName } });
+
+    const concept = existingConcept
+      ? await prisma.concept.update({
+          where: { id: existingConcept.id },
+          data: { description: card.conceptDescription },
+        })
+      : await prisma.concept.create({
+          data: {
+            topicId,
+            name: card.conceptName,
+            description: card.conceptDescription,
+            awsServices: { connect: { id: card.serviceId } },
+          },
+        });
+
+    const existingFlashcard = await prisma.flashcard.findFirst({
+      where: { conceptId: concept.id, front: card.front },
+    });
+
+    if (existingFlashcard) {
+      await prisma.flashcard.update({ where: { id: existingFlashcard.id }, data: { back: card.back } });
+    } else {
+      await prisma.flashcard.create({
+        data: { conceptId: concept.id, front: card.front, back: card.back },
+      });
+    }
+  }
+}
+
 async function main() {
   // Every upsert below passes the same fields to `update` and `create` (rather
   // than `update: {}`), so a wording/value edit made here actually reaches an
@@ -862,14 +950,7 @@ Autenticação e autorização aparecem no domínio Security — espere questõe
     });
   }
 
-  const authQuestionsToSeed: {
-    prompt: string;
-    type: 'KNOWLEDGE' | 'APPLICATION' | 'SCENARIO' | 'EXAM_LEVEL';
-    difficulty: 'EASY' | 'MEDIUM' | 'HARD';
-    explanation: string;
-    officialReferences?: string;
-    options: { text: string; isCorrect: boolean; explanation: string }[];
-  }[] = [
+  const authQuestionsToSeed: QuestionSeed[] = [
     {
       prompt: 'Qual é a principal diferença entre um Amazon Cognito User Pool e um Identity Pool?',
       type: 'KNOWLEDGE',
@@ -1025,40 +1106,9 @@ Autenticação e autorização aparecem no domínio Security — espere questõe
     },
   ];
 
-  for (const q of authQuestionsToSeed) {
-    const questionData = {
-      type: q.type,
-      difficulty: q.difficulty,
-      explanation: q.explanation,
-      officialReferences: q.officialReferences,
-    };
+  await seedQuestions(authTopic.id, authQuestionsToSeed);
 
-    const existingQuestion = await prisma.question.findFirst({
-      where: { topicId: authTopic.id, prompt: q.prompt },
-    });
-
-    if (existingQuestion) {
-      await prisma.question.update({ where: { id: existingQuestion.id }, data: questionData });
-    } else {
-      await prisma.question.create({
-        data: {
-          topicId: authTopic.id,
-          prompt: q.prompt,
-          ...questionData,
-          options: {
-            create: q.options.map((option, index) => ({
-              text: option.text,
-              isCorrect: option.isCorrect,
-              explanation: option.explanation,
-              order: index + 1,
-            })),
-          },
-        },
-      });
-    }
-  }
-
-  const authFlashcardsToSeed: { conceptName: string; conceptDescription: string; front: string; back: string }[] = [
+  const authFlashcardsToSeed: Omit<FlashcardSeed, 'serviceId'>[] = [
     {
       conceptName: 'Cognito User Pool',
       conceptDescription: 'Diretório de usuários gerenciado que autentica usuários e emite tokens JWT (ID, access, refresh).',
@@ -1091,37 +1141,10 @@ Autenticação e autorização aparecem no domínio Security — espere questõe
     },
   ];
 
-  for (const card of authFlashcardsToSeed) {
-    const existingConcept = await prisma.concept.findFirst({
-      where: { topicId: authTopic.id, name: card.conceptName },
-    });
-
-    const concept = existingConcept
-      ? await prisma.concept.update({
-          where: { id: existingConcept.id },
-          data: { description: card.conceptDescription },
-        })
-      : await prisma.concept.create({
-          data: {
-            topicId: authTopic.id,
-            name: card.conceptName,
-            description: card.conceptDescription,
-            awsServices: { connect: { id: cognitoService.id } },
-          },
-        });
-
-    const existingFlashcard = await prisma.flashcard.findFirst({
-      where: { conceptId: concept.id, front: card.front },
-    });
-
-    if (existingFlashcard) {
-      await prisma.flashcard.update({ where: { id: existingFlashcard.id }, data: { back: card.back } });
-    } else {
-      await prisma.flashcard.create({
-        data: { conceptId: concept.id, front: card.front, back: card.back },
-      });
-    }
-  }
+  await seedFlashcards(
+    authTopic.id,
+    authFlashcardsToSeed.map((card) => ({ ...card, serviceId: cognitoService.id })),
+  );
 
   // ---------------------------------------------------------------------
   // Content-authoring push, topic 2 of 12: Domain 1 "Padrões de arquitetura
@@ -1318,14 +1341,7 @@ Espere questões de cenário pedindo para desacoplar componentes com SQS, escolh
     });
   }
 
-  const architectureQuestionsToSeed: {
-    prompt: string;
-    type: 'KNOWLEDGE' | 'APPLICATION' | 'SCENARIO' | 'EXAM_LEVEL';
-    difficulty: 'EASY' | 'MEDIUM' | 'HARD';
-    explanation: string;
-    officialReferences?: string;
-    options: { text: string; isCorrect: boolean; explanation: string }[];
-  }[] = [
+  const architectureQuestionsToSeed: QuestionSeed[] = [
     {
       prompt: 'O que é uma dead-letter queue (DLQ) no Amazon SQS?',
       type: 'KNOWLEDGE',
@@ -1542,46 +1558,9 @@ Espere questões de cenário pedindo para desacoplar componentes com SQS, escolh
     },
   ];
 
-  for (const q of architectureQuestionsToSeed) {
-    const questionData = {
-      type: q.type,
-      difficulty: q.difficulty,
-      explanation: q.explanation,
-      officialReferences: q.officialReferences,
-    };
+  await seedQuestions(architectureTopic.id, architectureQuestionsToSeed);
 
-    const existingQuestion = await prisma.question.findFirst({
-      where: { topicId: architectureTopic.id, prompt: q.prompt },
-    });
-
-    if (existingQuestion) {
-      await prisma.question.update({ where: { id: existingQuestion.id }, data: questionData });
-    } else {
-      await prisma.question.create({
-        data: {
-          topicId: architectureTopic.id,
-          prompt: q.prompt,
-          ...questionData,
-          options: {
-            create: q.options.map((option, index) => ({
-              text: option.text,
-              isCorrect: option.isCorrect,
-              explanation: option.explanation,
-              order: index + 1,
-            })),
-          },
-        },
-      });
-    }
-  }
-
-  const architectureFlashcardsToSeed: {
-    conceptName: string;
-    conceptDescription: string;
-    serviceId: string;
-    front: string;
-    back: string;
-  }[] = [
+  const architectureFlashcardsToSeed: FlashcardSeed[] = [
     {
       conceptName: 'Fanout SNS + SQS',
       conceptDescription: 'Padrão em que um tópico SNS entrega cada mensagem a várias filas SQS assinantes, uma por consumidor independente.',
@@ -1619,37 +1598,791 @@ Espere questões de cenário pedindo para desacoplar componentes com SQS, escolh
     },
   ];
 
-  for (const card of architectureFlashcardsToSeed) {
-    const existingConcept = await prisma.concept.findFirst({
-      where: { topicId: architectureTopic.id, name: card.conceptName },
+  await seedFlashcards(architectureTopic.id, architectureFlashcardsToSeed);
+
+  // ---------------------------------------------------------------------
+  // Content-authoring push, topic 3 of 12: Domain 1 "Armazenamento de dados
+  // em aplicações". Its objective spans DynamoDB design, caching and S3
+  // lifecycle, so it gets 2 lessons + 2 labs and a larger question bank
+  // than the 1+1 baseline (see docs/Conteudo-DVA-C02.md).
+  // ---------------------------------------------------------------------
+
+  const storageTopic = await prisma.topic.findFirstOrThrow({
+    where: { domainId: domain.id, name: 'Armazenamento de dados em aplicações' },
+  });
+
+  const dynamoServiceData = {
+    shortName: 'DynamoDB',
+    category: 'Database',
+    description:
+      'Banco NoSQL chave-valor e de documentos, totalmente gerenciado, com latência de milissegundos em qualquer escala.',
+  };
+  const dynamoService = await prisma.aWSService.upsert({
+    where: { name: 'Amazon DynamoDB' },
+    update: dynamoServiceData,
+    create: { name: 'Amazon DynamoDB', ...dynamoServiceData },
+  });
+
+  const elastiCacheServiceData = {
+    shortName: 'ElastiCache',
+    category: 'Database',
+    description: 'Cache em memória gerenciado, compatível com Redis/Valkey e Memcached.',
+  };
+  const elastiCacheService = await prisma.aWSService.upsert({
+    where: { name: 'Amazon ElastiCache' },
+    update: elastiCacheServiceData,
+    create: { name: 'Amazon ElastiCache', ...elastiCacheServiceData },
+  });
+
+  const s3ServiceData = {
+    shortName: 'S3',
+    category: 'Storage',
+    description:
+      'Armazenamento de objetos com várias classes de armazenamento e regras de ciclo de vida para otimizar custo.',
+  };
+  const s3Service = await prisma.aWSService.upsert({
+    where: { name: 'Amazon S3' },
+    update: s3ServiceData,
+    create: { name: 'Amazon S3', ...s3ServiceData },
+  });
+
+  const dynamoLessonContent = `## Objetivo
+
+Ao final desta lição você vai conseguir decidir entre um banco relacional e o DynamoDB, projetar chaves e índices a partir dos padrões de acesso, calcular capacidade de leitura/escrita e usar as operações do DynamoDB do jeito que a prova DVA-C02 espera.
+
+## Relacional ou NoSQL?
+
+Bancos relacionais (Amazon RDS, Amazon Aurora) são a escolha quando os dados têm relacionamentos ricos, consultas ad hoc com joins e transações complexas entre muitas tabelas. O Amazon DynamoDB é a escolha quando os padrões de acesso são conhecidos de antemão (buscar por uma chave, listar itens de um cliente), a escala é alta ou imprevisível e se quer latência de milissegundos sem gerenciar servidores. No DynamoDB, você modela a tabela a partir das consultas que vai fazer — não o contrário.
+
+## Chaves primárias e partições
+
+Toda tabela tem uma chave primária: só a partition key (chave simples) ou partition key + sort key (chave composta). O DynamoDB usa o hash da partition key para distribuir os itens entre partições físicas, então ela precisa ter alta cardinalidade e acessos bem distribuídos (ex.: \`clienteId\`, não \`status\`). Uma partition key com poucos valores concentra tráfego numa partição ("hot partition") e causa throttling mesmo com capacidade sobrando na tabela. A sort key ordena os itens de uma mesma partition key e permite consultas por intervalo (ex.: pedidos de um cliente entre duas datas).
+
+## Query, Scan e operações de escrita
+
+\`GetItem\` busca um item pela chave primária completa. \`Query\` busca todos os itens de uma partition key, opcionalmente filtrando pela sort key — é eficiente porque lê só aquela partição. \`Scan\` lê a tabela inteira; um \`FilterExpression\` é aplicado depois da leitura, então consome a mesma capacidade que ler tudo. Prefira sempre \`Query\` (numa tabela ou num índice) a \`Scan\`. Cada chamada de \`Query\`/\`Scan\` retorna no máximo 1 MB de dados; se houver mais, a resposta traz \`LastEvaluatedKey\`, que você envia como \`ExclusiveStartKey\` na próxima chamada para paginar. \`ProjectionExpression\` reduz os atributos retornados, mas não o consumo de capacidade.
+
+Para escrita: \`PutItem\` cria ou substitui um item inteiro, \`UpdateItem\` altera atributos específicos (incluindo contadores atômicos) e \`DeleteItem\` remove. Uma \`ConditionExpression\` faz a escrita só acontecer se uma condição for verdadeira — a base do optimistic locking: guarde um atributo \`versao\` e só atualize se ele ainda tiver o valor que você leu. \`BatchWriteItem\`/\`BatchGetItem\` agrupam operações (podem devolver \`UnprocessedItems\`/\`UnprocessedKeys\`, que você deve reenviar com backoff), e \`TransactWriteItems\`/\`TransactGetItems\` dão atomicidade tudo-ou-nada, consumindo o dobro de capacidade.
+
+## Índices secundários: LSI e GSI
+
+Um Local Secondary Index (LSI) usa a mesma partition key da tabela com outra sort key; só pode ser criado junto com a tabela e permite leituras fortemente consistentes. Um Global Secondary Index (GSI) usa uma partition key (e sort key) totalmente diferentes; pode ser criado a qualquer momento, tem capacidade própria e só suporta leituras eventualmente consistentes. Na prática, GSI é a ferramenta do dia a dia para "consultar por outro atributo" sem recorrer a \`Scan\`.
+
+## Consistência e capacidade
+
+Leituras são eventualmente consistentes por padrão; com \`ConsistentRead: true\` ficam fortemente consistentes (só na tabela e em LSIs) e custam o dobro. No modo provisionado: 1 RCU = 1 leitura fortemente consistente por segundo de até 4 KB (ou 2 eventualmente consistentes); 1 WCU = 1 escrita por segundo de até 1 KB. Tamanhos arredondam para cima: ler um item de 6 KB com consistência forte custa 2 RCU; escrever um item de 2,5 KB custa 3 WCU. No modo on-demand você paga por requisição, sem planejar capacidade — bom para tráfego imprevisível. Ao exceder a capacidade, o DynamoDB devolve \`ProvisionedThroughputExceededException\`, que os SDKs repetem com backoff exponencial.
+
+## TTL e Streams
+
+O TTL apaga automaticamente itens cujo atributo de expiração (um timestamp em epoch, em segundos) já passou, sem consumir WCU — ideal para sessões e dados temporários. A exclusão não é imediata (normalmente acontece em alguns dias), então filtre itens expirados nas consultas se isso importar. O DynamoDB Streams registra as mudanças nos itens e pode acionar uma função Lambda para reagir a elas.
+
+## Relação com a prova DVA-C02
+
+Espere cálculos de RCU/WCU, escolha de partition key para evitar hot partitions, Query vs. Scan, LSI vs. GSI (e qual pode ser criado depois), paginação com \`LastEvaluatedKey\`, optimistic locking com \`ConditionExpression\`, e TTL para expirar dados.`;
+
+  const cacheLessonContent = `## Objetivo
+
+Ao final desta lição você vai conseguir escolher uma estratégia de cache (lazy loading, write-through, read-through, TTL), decidir entre ElastiCache e DAX, e definir classes de armazenamento e regras de ciclo de vida no Amazon S3.
+
+## Por que cache
+
+Um cache em memória guarda o resultado de leituras caras (consultas ao banco, chamadas a APIs lentas) para servir as próximas em microssegundos ou poucos milissegundos, reduzindo latência e carga no banco. O custo é lidar com dados que podem ficar desatualizados em relação à fonte.
+
+## Lazy loading (cache-aside)
+
+A aplicação consulta o cache primeiro; num cache miss, lê do banco, grava no cache e devolve. Vantagens: só fica em cache o que é realmente lido, e uma falha no cache não derruba a aplicação (ela só fica mais lenta). Desvantagens: todo miss custa três viagens (cache, banco, gravação no cache), e o dado pode ficar desatualizado se o banco mudar depois.
+
+## Write-through
+
+A cada escrita no banco, a aplicação também atualiza o cache. Vantagem: o dado em cache nunca fica desatualizado. Desvantagens: toda escrita fica mais lenta (write penalty), dados que nunca serão lidos ocupam o cache (cache churn), e um nó de cache novo começa vazio até as escritas o preencherem — por isso write-through costuma ser combinado com lazy loading.
+
+## Read-through e TTL
+
+No read-through, é o próprio cache que busca o dado na fonte num miss, e não a aplicação — o Amazon DynamoDB Accelerator (DAX) funciona assim para o DynamoDB, e também faz write-through. Qualquer que seja a estratégia, um TTL em cada chave limita por quanto tempo um dado desatualizado pode ser servido e evita que o cache cresça indefinidamente.
+
+## ElastiCache e DAX
+
+O Amazon ElastiCache oferece Redis/Valkey e Memcached gerenciados. Redis/Valkey suporta replicação, failover Multi-AZ, persistência, backups e estruturas de dados ricas (sorted sets para rankings, pub/sub) — a escolha para armazenar sessões ou quando o cache precisa de alta disponibilidade. Memcached é mais simples: multithread, sem persistência nem replicação, bom para cache puro e descartável. O DAX é um cache específico para o DynamoDB, compatível com a API dele (troca-se o cliente do SDK, quase sem mudar código), com latência de microssegundos para leituras; leituras fortemente consistentes passam direto para a tabela, sem cache.
+
+## Classes de armazenamento do S3
+
+O S3 Standard é para dados acessados com frequência. S3 Standard-IA e One Zone-IA custam menos por GB, mas cobram por recuperação e têm duração mínima de 30 dias (One Zone-IA guarda os dados numa única AZ). S3 Intelligent-Tiering move objetos entre camadas automaticamente conforme o padrão de acesso — bom quando esse padrão é desconhecido. As classes Glacier são para arquivamento: Glacier Instant Retrieval (acesso em milissegundos, mínimo de 90 dias), Glacier Flexible Retrieval (minutos a horas, mínimo de 90 dias) e Glacier Deep Archive (a mais barata, recuperação padrão em até 12 horas, mínimo de 180 dias).
+
+## Regras de ciclo de vida
+
+Uma lifecycle rule automatiza ações sobre objetos (de um bucket inteiro ou filtrados por prefixo/tag): transition move objetos para uma classe mais barata depois de N dias, e expiration os exclui. Com versionamento habilitado, há ações separadas para versões não atuais (ex.: expirar versões antigas 30 dias depois de serem substituídas), e uma regra também pode abortar multipart uploads incompletos, que de outra forma ocupam espaço cobrado sem aparecer na listagem de objetos. Desde 2020, o S3 tem consistência forte de leitura após escrita para todas as operações.
+
+## Relação com a prova DVA-C02
+
+Espere cenários pedindo a estratégia de cache certa para um requisito ("dados nunca desatualizados" → write-through; "só cachear o que é lido" → lazy loading), DAX vs. ElastiCache, Redis vs. Memcached, e desenhar uma lifecycle rule a partir de um padrão de acesso e de um prazo de retenção.`;
+
+  const storageLessons = [
+    {
+      order: 1,
+      estimatedMinutes: 13,
+      title: 'Modelagem e operações no Amazon DynamoDB',
+      content: dynamoLessonContent,
+      resources: [
+        {
+          title: 'Boas práticas de design no DynamoDB — documentação oficial',
+          url: 'https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-general-nosql-design.html',
+        },
+        {
+          title: 'Índices secundários no DynamoDB — documentação oficial',
+          url: 'https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/SecondaryIndexes.html',
+        },
+      ],
+    },
+    {
+      order: 2,
+      estimatedMinutes: 11,
+      title: 'Estratégias de cache e ciclo de vida de dados no S3',
+      content: cacheLessonContent,
+      resources: [
+        {
+          title: 'Estratégias de cache no ElastiCache — documentação oficial',
+          url: 'https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/Strategies.html',
+        },
+        {
+          title: 'Ciclo de vida de objetos no S3 — documentação oficial',
+          url: 'https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lifecycle-mgmt.html',
+        },
+      ],
+    },
+  ];
+
+  for (const lessonDef of storageLessons) {
+    const existingLesson = await prisma.lesson.findFirst({
+      where: { topicId: storageTopic.id, title: lessonDef.title },
     });
 
-    const concept = existingConcept
-      ? await prisma.concept.update({
-          where: { id: existingConcept.id },
-          data: { description: card.conceptDescription },
-        })
-      : await prisma.concept.create({
-          data: {
-            topicId: architectureTopic.id,
-            name: card.conceptName,
-            description: card.conceptDescription,
-            awsServices: { connect: { id: card.serviceId } },
-          },
-        });
-
-    const existingFlashcard = await prisma.flashcard.findFirst({
-      where: { conceptId: concept.id, front: card.front },
-    });
-
-    if (existingFlashcard) {
-      await prisma.flashcard.update({ where: { id: existingFlashcard.id }, data: { back: card.back } });
+    if (existingLesson) {
+      await prisma.lesson.update({
+        where: { id: existingLesson.id },
+        data: { order: lessonDef.order, estimatedMinutes: lessonDef.estimatedMinutes, content: lessonDef.content },
+      });
     } else {
-      await prisma.flashcard.create({
-        data: { conceptId: concept.id, front: card.front, back: card.back },
+      await prisma.lesson.create({
+        data: {
+          topicId: storageTopic.id,
+          order: lessonDef.order,
+          estimatedMinutes: lessonDef.estimatedMinutes,
+          title: lessonDef.title,
+          content: lessonDef.content,
+          resources: {
+            create: lessonDef.resources.map((resource, index) => ({
+              ...resource,
+              type: 'documentation',
+              order: index + 1,
+            })),
+          },
+        },
       });
     }
   }
+
+  const storageLabs = [
+    {
+      title: 'Modelar uma tabela DynamoDB: Query, Scan e um GSI',
+      data: {
+        level: 1,
+        order: 1,
+        estimatedMinutes: 30,
+        objective:
+          'Ao final deste laboratório você terá criado uma tabela DynamoDB com chave composta, comparado Query e Scan na prática, e criado um Global Secondary Index para consultar por um atributo que não faz parte da chave primária.',
+        prerequisites:
+          'Conta AWS com acesso ao Console (Free Tier é suficiente). Ter lido a lição "Modelagem e operações no Amazon DynamoDB" ajuda.',
+        context:
+          'Uma loja virtual guarda pedidos no DynamoDB. O padrão de acesso principal é "listar os pedidos de um cliente, do mais recente para o mais antigo", mas o time de operações também precisa listar todos os pedidos pendentes — e alguém sugeriu resolver isso com um Scan. Você vai modelar a tabela e mostrar a alternativa correta.',
+        troubleshooting:
+          'A consulta não retorna nada: partition key e sort key diferenciam maiúsculas de minúsculas e tipos — confira se o valor digitado (ex.: `cliente-1`) é idêntico ao gravado e se o atributo foi criado como String. \n\nNão aparece a opção de consultar o índice: o GSI ainda está sendo criado — espere o status dele ficar "Active" na aba "Indexes". \n\nUm pedido não aparece no GSI: itens sem o atributo `status` não entram no índice (índices esparsos) — confira se o item tem `status` gravado exatamente com esse nome.',
+        cleanup:
+          'Exclua a tabela `devlab-pedidos` pelo Console (Actions > Delete table). Isso remove também o GSI e todos os itens.',
+        costWarning:
+          'Com as configurações padrão do Console a tabela usa capacidade provisionada baixa, coberta pelo Free Tier do DynamoDB (25 GB de armazenamento e 25 RCU/25 WCU provisionadas por mês). Exclua a tabela ao final para não deixar capacidade provisionada ativa.',
+      },
+      steps: [
+        {
+          order: 1,
+          title: 'Criar a tabela',
+          instructions:
+            'No Console da AWS, acesse o DynamoDB e clique em "Create table". Nome: `devlab-pedidos`; partition key `clienteId` (String); sort key `dataPedido` (String). Mantenha "Default settings" e crie a tabela.',
+          validation: 'A tabela `devlab-pedidos` aparece com status "Active".',
+        },
+        {
+          order: 2,
+          title: 'Inserir pedidos',
+          instructions:
+            'Em "Explore table items", use "Create item" para criar 4 itens, adicionando também os atributos `status` (String) e `valor` (Number): (`cliente-1`, `2026-09-01`, `ENTREGUE`, 120), (`cliente-1`, `2026-09-15`, `PENDENTE`, 80), (`cliente-2`, `2026-09-10`, `PENDENTE`, 45) e (`cliente-3`, `2026-09-12`, `ENTREGUE`, 200).',
+          validation: 'Um Scan sem filtros em "Explore table items" lista os 4 itens.',
+        },
+        {
+          order: 3,
+          title: 'Consultar com Query',
+          instructions:
+            'Ainda em "Explore table items", escolha "Query". Informe `clienteId` = `cliente-1` e, na sort key, a condição "Greater than" com o valor `2026-09-10`. Execute.',
+          validation:
+            'Só o pedido de `2026-09-15` do `cliente-1` é retornado — a Query leu apenas a partição do `cliente-1` e usou a sort key para filtrar o intervalo de datas.',
+        },
+        {
+          order: 4,
+          title: 'Buscar pendentes com Scan',
+          instructions:
+            'Escolha "Scan" e adicione um filtro: atributo `status`, tipo String, condição "Equal to", valor `PENDENTE`. Execute e observe que o Scan precisa ler a tabela inteira e só depois aplicar o filtro.',
+          validation:
+            'Dois itens são retornados (`cliente-1`/`2026-09-15` e `cliente-2`/`2026-09-10`), mas os 4 itens da tabela foram lidos para chegar neles — numa tabela grande, isso consome capacidade proporcional à tabela inteira.',
+        },
+        {
+          order: 5,
+          title: 'Criar um GSI e consultá-lo',
+          instructions:
+            'Na aba "Indexes", clique em "Create index": partition key `status` (String), sort key `dataPedido` (String), nome `status-dataPedido-index`. Quando o índice estiver "Active", volte a "Explore table items", escolha "Query", selecione o índice `status-dataPedido-index` e consulte `status` = `PENDENTE`.',
+          validation:
+            'Os mesmos dois pedidos pendentes são retornados, agora por uma Query no índice — lendo só os itens pendentes, sem varrer a tabela.',
+        },
+      ],
+    },
+    {
+      title: 'Versionamento e regras de ciclo de vida no S3',
+      data: {
+        level: 1,
+        order: 2,
+        estimatedMinutes: 20,
+        objective:
+          'Ao final deste laboratório você terá habilitado o versionamento num bucket S3, visto como o S3 guarda versões antigas de um objeto, e criado uma lifecycle rule que move objetos para classes mais baratas e expira versões antigas automaticamente.',
+        prerequisites:
+          'Conta AWS com acesso ao Console (Free Tier é suficiente). Ter lido a lição "Estratégias de cache e ciclo de vida de dados no S3" ajuda.',
+        context:
+          'Uma aplicação grava relatórios diários num bucket S3. Os relatórios são consultados com frequência no primeiro mês, raramente até o terceiro, e depois só precisam ser guardados por exigência de auditoria. Relatórios às vezes são regerados, e as versões antigas só precisam ficar disponíveis por 30 dias. Você vai configurar o bucket para que isso aconteça sozinho.',
+        troubleshooting:
+          'O nome do bucket é recusado: nomes de bucket são globais em toda a AWS — acrescente um sufixo único (ex.: suas iniciais e a data). \n\nNão aparecem versões antigas: o versionamento precisa estar habilitado antes do segundo upload; use o botão "Show versions" na listagem de objetos. \n\nA lifecycle rule não aparece aplicada aos objetos: as ações rodam de forma assíncrona (uma vez por dia) e contam os dias a partir da criação do objeto — o resultado imediato a verificar é a própria regra e o resumo de ações que o Console mostra.',
+        cleanup:
+          'Selecione o bucket, use "Empty" (que remove todas as versões dos objetos) e depois "Delete".',
+        costWarning:
+          'O Free Tier do S3 inclui 5 GB no S3 Standard. Este laboratório grava dois arquivos de texto pequenos, então não deve gerar cobrança.',
+      },
+      steps: [
+        {
+          order: 1,
+          title: 'Criar o bucket com versionamento',
+          instructions:
+            'No Console do S3, clique em "Create bucket" e dê um nome único, como `devlab-relatorios-<suas-iniciais>-<data>`. Mantenha o bloqueio de acesso público ligado e, em "Bucket Versioning", escolha "Enable". Crie o bucket.',
+          validation: 'O bucket aparece na lista e a aba "Properties" mostra "Bucket Versioning: Enabled".',
+        },
+        {
+          order: 2,
+          title: 'Gerar duas versões de um objeto',
+          instructions:
+            'Crie localmente um arquivo `relatorio.txt` com o texto "versão 1" e faça upload no bucket, dentro de um prefixo `relatorios/`. Depois altere o conteúdo do arquivo para "versão 2" e faça upload de novo com o mesmo nome e prefixo.',
+          validation:
+            'Com "Show versions" ativado, `relatorios/relatorio.txt` aparece com duas versões, cada uma com seu próprio Version ID — a mais recente é a versão atual.',
+        },
+        {
+          order: 3,
+          title: 'Criar a lifecycle rule',
+          instructions:
+            'Na aba "Management", clique em "Create lifecycle rule". Nome: `relatorios-ciclo-de-vida`; escopo limitado ao prefixo `relatorios/`. Marque as ações: mover versões atuais para Standard-IA após 30 dias e para Glacier Deep Archive após 90 dias; excluir versões não atuais 30 dias depois de deixarem de ser atuais; e excluir multipart uploads incompletos após 7 dias.',
+          validation:
+            'Antes de salvar, o Console mostra uma linha do tempo com as transições (dia 30 → Standard-IA, dia 90 → Glacier Deep Archive) e as expirações configuradas.',
+        },
+        {
+          order: 4,
+          title: 'Revisar a regra criada',
+          instructions:
+            'Salve a regra e volte à aba "Management". Relacione cada ação com o requisito do contexto: acesso frequente no primeiro mês, raro até o terceiro, arquivamento depois, e versões antigas guardadas por 30 dias.',
+          validation:
+            'A regra `relatorios-ciclo-de-vida` aparece como "Enabled", com escopo `relatorios/` e as quatro ações configuradas.',
+        },
+      ],
+    },
+  ];
+
+  for (const labDef of storageLabs) {
+    const existingLab = await prisma.lab.findFirst({
+      where: { topicId: storageTopic.id, title: labDef.title },
+    });
+
+    if (existingLab) {
+      await prisma.lab.update({ where: { id: existingLab.id }, data: labDef.data });
+    } else {
+      await prisma.lab.create({
+        data: {
+          topicId: storageTopic.id,
+          title: labDef.title,
+          ...labDef.data,
+          steps: { create: labDef.steps },
+        },
+      });
+    }
+  }
+
+  const storageQuestionsToSeed: QuestionSeed[] = [
+    {
+      prompt: 'Qual é a principal diferença entre as operações Query e Scan no DynamoDB?',
+      type: 'KNOWLEDGE',
+      difficulty: 'EASY',
+      explanation:
+        'Query lê apenas os itens de uma partition key (opcionalmente filtrando pela sort key). Scan lê a tabela ou o índice inteiro, e qualquer FilterExpression é aplicado depois da leitura — por isso consome capacidade proporcional ao tamanho da tabela.',
+      options: [
+        {
+          text: 'Query lê só os itens de uma partition key; Scan lê a tabela inteira e filtra depois da leitura.',
+          isCorrect: true,
+          explanation: 'Correto: por isso Query é a operação preferida sempre que o padrão de acesso permite.',
+        },
+        {
+          text: 'Scan é mais eficiente que Query quando se usa um FilterExpression.',
+          isCorrect: false,
+          explanation: 'O filtro do Scan é aplicado depois da leitura; a capacidade consumida é a mesma de ler tudo.',
+        },
+        {
+          text: 'Query só funciona em índices secundários; Scan só na tabela base.',
+          isCorrect: false,
+          explanation: 'As duas operações funcionam tanto na tabela quanto em índices.',
+        },
+        {
+          text: 'Não há diferença de custo: as duas cobram só pelos itens retornados.',
+          isCorrect: false,
+          explanation: 'O custo é pelos dados lidos, não pelos retornados — e Scan lê tudo.',
+        },
+      ],
+    },
+    {
+      prompt: 'Uma tabela DynamoDB já está em produção. Que tipo de índice pode ser adicionado a ela agora?',
+      type: 'KNOWLEDGE',
+      difficulty: 'EASY',
+      explanation:
+        'GSIs podem ser criados (e removidos) a qualquer momento. LSIs só podem ser definidos na criação da tabela.',
+      officialReferences:
+        'https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/SecondaryIndexes.html',
+      options: [
+        {
+          text: 'Um Global Secondary Index (GSI).',
+          isCorrect: true,
+          explanation: 'Correto: GSIs podem ser adicionados a uma tabela existente.',
+        },
+        {
+          text: 'Um Local Secondary Index (LSI).',
+          isCorrect: false,
+          explanation: 'LSIs precisam ser definidos quando a tabela é criada.',
+        },
+        {
+          text: 'Nenhum: índices só podem ser criados junto com a tabela.',
+          isCorrect: false,
+          explanation: 'Isso vale só para LSIs.',
+        },
+        {
+          text: 'Qualquer um dos dois, desde que a tabela esteja em modo on-demand.',
+          isCorrect: false,
+          explanation: 'O modo de capacidade não muda a regra: LSI continua só na criação.',
+        },
+      ],
+    },
+    {
+      prompt: 'Qual tipo de nó do Amazon ElastiCache atende a um cache que precisa de replicação, failover Multi-AZ e sorted sets para um ranking de jogadores?',
+      type: 'KNOWLEDGE',
+      difficulty: 'EASY',
+      explanation:
+        'Redis (ou Valkey, compatível com ele) suporta replicação, failover automático, persistência e estruturas de dados como sorted sets. Memcached é mais simples: multithread, sem replicação nem persistência.',
+      options: [
+        {
+          text: 'ElastiCache para Redis/Valkey.',
+          isCorrect: true,
+          explanation: 'Correto: replicação, Multi-AZ e sorted sets são recursos do Redis/Valkey.',
+        },
+        {
+          text: 'ElastiCache para Memcached.',
+          isCorrect: false,
+          explanation: 'Memcached não oferece replicação, persistência nem sorted sets.',
+        },
+        {
+          text: 'DynamoDB Accelerator (DAX).',
+          isCorrect: false,
+          explanation: 'DAX é um cache específico para leituras do DynamoDB, não um armazenamento de estruturas como sorted sets.',
+        },
+        {
+          text: 'Qualquer um: os dois motores têm os mesmos recursos.',
+          isCorrect: false,
+          explanation: 'Os motores têm capacidades bem diferentes — é exatamente o que a prova cobra.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Uma aplicação faz 10 leituras fortemente consistentes por segundo de itens de 6 KB numa tabela DynamoDB provisionada. Quantas RCUs são necessárias?',
+      type: 'APPLICATION',
+      difficulty: 'MEDIUM',
+      explanation:
+        '1 RCU = 1 leitura fortemente consistente por segundo de até 4 KB. 6 KB arredonda para 8 KB = 2 RCU por leitura; 10 leituras/s × 2 = 20 RCU. Com leituras eventualmente consistentes seriam 10 RCU.',
+      options: [
+        { text: '20 RCU', isCorrect: true, explanation: 'Correto: 6 KB → 8 KB (2 blocos de 4 KB) × 10 leituras/s.' },
+        { text: '10 RCU', isCorrect: false, explanation: 'Seria o valor com leituras eventualmente consistentes, que custam metade.' },
+        { text: '15 RCU', isCorrect: false, explanation: 'O tamanho arredonda para o próximo múltiplo de 4 KB (8 KB), não para 6 KB.' },
+        { text: '60 RCU', isCorrect: false, explanation: 'O cálculo usa blocos de 4 KB para leitura, não de 1 KB.' },
+      ],
+    },
+    {
+      prompt: 'Uma aplicação grava 5 itens de 2,5 KB por segundo numa tabela DynamoDB provisionada. Quantas WCUs são necessárias?',
+      type: 'APPLICATION',
+      difficulty: 'MEDIUM',
+      explanation:
+        '1 WCU = 1 escrita por segundo de até 1 KB. 2,5 KB arredonda para 3 KB = 3 WCU por escrita; 5 escritas/s × 3 = 15 WCU.',
+      options: [
+        { text: '15 WCU', isCorrect: true, explanation: 'Correto: 2,5 KB → 3 KB × 5 escritas/s.' },
+        { text: '12,5 WCU', isCorrect: false, explanation: 'Não existe WCU fracionada: o tamanho arredonda para cima, para 3 KB.' },
+        { text: '5 WCU', isCorrect: false, explanation: 'Seria verdade só para itens de até 1 KB.' },
+        { text: '10 WCU', isCorrect: false, explanation: 'Arredondou 2,5 KB para 2 KB; o arredondamento é sempre para cima.' },
+      ],
+    },
+    {
+      prompt:
+        'Uma aplicação faz muitas leituras de uma tabela DynamoDB e precisa reduzir a latência de milissegundos para microssegundos, com o mínimo de mudança no código. Qual solução é a mais adequada?',
+      type: 'APPLICATION',
+      difficulty: 'MEDIUM',
+      explanation:
+        'O DAX é um cache em memória específico para o DynamoDB, compatível com a API dele: basta trocar o cliente do SDK pelo cliente do DAX. ElastiCache também reduziria latência, mas exige implementar a lógica de cache na aplicação.',
+      options: [
+        {
+          text: 'Colocar um cluster DynamoDB Accelerator (DAX) na frente da tabela.',
+          isCorrect: true,
+          explanation: 'Correto: latência de microssegundos com mudança mínima de código.',
+        },
+        {
+          text: 'Implementar lazy loading com ElastiCache para Redis.',
+          isCorrect: false,
+          explanation: 'Funciona, mas exige escrever a lógica de cache — não é a menor mudança de código.',
+        },
+        {
+          text: 'Trocar a tabela para o modo on-demand.',
+          isCorrect: false,
+          explanation: 'Muda o modelo de cobrança e capacidade, não a latência de leitura.',
+        },
+        {
+          text: 'Usar leituras fortemente consistentes.',
+          isCorrect: false,
+          explanation: 'Leituras fortemente consistentes custam mais e não ficam mais rápidas.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Uma tabela DynamoDB de pedidos usa o atributo status (com 3 valores possíveis) como partition key. Mesmo com capacidade provisionada sobrando no total, a aplicação recebe erros de throttling. Qual é a causa mais provável e a correção?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Uma partition key de baixa cardinalidade concentra o tráfego em poucas partições (hot partitions), que atingem seu limite individual mesmo com capacidade sobrando na tabela. A correção é usar uma chave de alta cardinalidade e bem distribuída, como o ID do pedido ou do cliente — e, para consultar por status, um GSI.',
+      options: [
+        {
+          text: 'Hot partition por baixa cardinalidade da chave; usar uma partition key de alta cardinalidade (ex.: pedidoId) e um GSI para consultar por status.',
+          isCorrect: true,
+          explanation: 'Correto: distribuir a chave resolve o gargalo, e o GSI preserva a consulta por status.',
+        },
+        {
+          text: 'A tabela precisa de mais RCU/WCU no total.',
+          isCorrect: false,
+          explanation: 'O enunciado diz que há capacidade sobrando; o problema é a distribuição, não o total.',
+        },
+        {
+          text: 'Trocar Query por Scan para distribuir as leituras.',
+          isCorrect: false,
+          explanation: 'Scan consome ainda mais capacidade e não resolve escritas concentradas.',
+        },
+        {
+          text: 'Habilitar TTL na tabela.',
+          isCorrect: false,
+          explanation: 'TTL expira itens; não muda a distribuição do tráfego entre partições.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Duas instâncias de uma aplicação leem o mesmo item do DynamoDB, alteram e gravam de volta ao mesmo tempo, e uma alteração sobrescreve a outra. Como evitar isso sem bloquear o item?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Optimistic locking: o item guarda um atributo de versão, e cada atualização usa uma ConditionExpression exigindo que a versão ainda seja a que foi lida (e a incrementa). Se outra instância gravou antes, a condição falha com ConditionalCheckFailedException e a aplicação relê e tenta de novo.',
+      officialReferences:
+        'https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.ConditionExpressions.html',
+      options: [
+        {
+          text: 'Usar um atributo de versão e uma ConditionExpression na atualização (optimistic locking).',
+          isCorrect: true,
+          explanation: 'Correto: a escrita só acontece se ninguém alterou o item desde a leitura.',
+        },
+        {
+          text: 'Usar leituras fortemente consistentes.',
+          isCorrect: false,
+          explanation: 'Garante ler o valor mais recente, mas não impede que outra escrita aconteça entre a leitura e a gravação.',
+        },
+        {
+          text: 'Usar BatchWriteItem em vez de PutItem.',
+          isCorrect: false,
+          explanation: 'BatchWriteItem não suporta condições e não resolve a concorrência.',
+        },
+        {
+          text: 'Aumentar a WCU da tabela.',
+          isCorrect: false,
+          explanation: 'Capacidade não tem relação com escritas concorrentes no mesmo item.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Um catálogo de produtos é lido com muita frequência e atualizado raramente. A aplicação tolera dados alguns minutos desatualizados, e o cache deve conter só os produtos que realmente são consultados. Qual estratégia de cache atende melhor?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Lazy loading só coloca em cache o que é lido (num miss), e um TTL de alguns minutos limita por quanto tempo um dado desatualizado pode ser servido.',
+      officialReferences: 'https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/Strategies.html',
+      options: [
+        {
+          text: 'Lazy loading com TTL.',
+          isCorrect: true,
+          explanation: 'Correto: cacheia só o que é lido e o TTL controla o quanto os dados podem ficar desatualizados.',
+        },
+        {
+          text: 'Write-through sem TTL.',
+          isCorrect: false,
+          explanation: 'Cachearia todos os produtos escritos, inclusive os nunca consultados (cache churn).',
+        },
+        {
+          text: 'Nenhum cache: ler sempre do banco.',
+          isCorrect: false,
+          explanation: 'Ignora o requisito de leituras muito frequentes, que é justamente o caso de uso de cache.',
+        },
+        {
+          text: 'Cachear o catálogo inteiro na inicialização da aplicação, sem expiração.',
+          isCorrect: false,
+          explanation: 'Cacheia produtos não consultados e nunca atualiza o cache.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Uma aplicação exige que o dado em cache nunca fique desatualizado em relação ao banco depois de uma escrita. Qual estratégia atende isso, e qual é sua principal desvantagem?',
+      type: 'SCENARIO',
+      difficulty: 'HARD',
+      explanation:
+        'Write-through atualiza o cache a cada escrita no banco, então o cache nunca fica desatualizado. O custo é uma escrita mais lenta (write penalty) e dados que nunca serão lidos ocupando o cache (cache churn) — por isso costuma ser combinado com TTL.',
+      options: [
+        {
+          text: 'Write-through; toda escrita fica mais lenta e dados nunca lidos ocupam o cache.',
+          isCorrect: true,
+          explanation: 'Correto: frescor garantido em troca de write penalty e cache churn.',
+        },
+        {
+          text: 'Lazy loading; todo cache miss custa três viagens.',
+          isCorrect: false,
+          explanation: 'A desvantagem descrita é real, mas lazy loading pode servir dados desatualizados — não atende o requisito.',
+        },
+        {
+          text: 'Lazy loading com TTL longo; o cache ocupa pouca memória.',
+          isCorrect: false,
+          explanation: 'Um TTL longo aumenta a janela de dados desatualizados.',
+        },
+        {
+          text: 'Write-through; o cache não pode ser usado junto com lazy loading.',
+          isCorrect: false,
+          explanation: 'As duas estratégias são frequentemente combinadas.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Logs de aplicação num bucket S3 são acessados com frequência nos primeiros 30 dias, raramente até 90 dias, e depois precisam ser guardados por 7 anos para auditoria, com recuperação em até 12 horas quando solicitados. Qual lifecycle rule tem o menor custo atendendo aos requisitos?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'S3 Standard nos primeiros 30 dias, Standard-IA até 90 dias (acesso raro, mas imediato), e Glacier Deep Archive depois — a classe mais barata, com recuperação padrão em até 12 horas. Uma expiração em 7 anos remove os logs ao fim da retenção.',
+      officialReferences: 'https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lifecycle-mgmt.html',
+      options: [
+        {
+          text: 'Standard → Standard-IA aos 30 dias → Glacier Deep Archive aos 90 dias → expirar após 7 anos.',
+          isCorrect: true,
+          explanation: 'Correto: cada fase usa a classe mais barata que atende ao padrão de acesso e ao prazo de recuperação.',
+        },
+        {
+          text: 'Manter tudo em S3 Standard e expirar após 7 anos.',
+          isCorrect: false,
+          explanation: 'Atende, mas é a opção mais cara para dados raramente acessados.',
+        },
+        {
+          text: 'Mover para Glacier Deep Archive no dia 1.',
+          isCorrect: false,
+          explanation: 'Os logs precisam de acesso frequente e imediato nos primeiros 30 dias.',
+        },
+        {
+          text: 'Standard → S3 One Zone-IA aos 30 dias e manter lá por 7 anos.',
+          isCorrect: false,
+          explanation: 'Mais caro que Deep Archive para 7 anos de arquivamento, e guarda dados de auditoria numa única AZ.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Uma Query no DynamoDB deveria retornar todos os pedidos de um cliente, mas retorna só parte deles, e a resposta inclui o campo LastEvaluatedKey. O que está acontecendo e como corrigir?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'HARD',
+      explanation:
+        'Query e Scan retornam no máximo 1 MB de dados por chamada. Quando há mais resultados, a resposta traz LastEvaluatedKey, que deve ser enviado como ExclusiveStartKey na próxima chamada, repetindo até a resposta não trazer mais LastEvaluatedKey (os SDKs oferecem paginadores para isso).',
+      officialReferences:
+        'https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Query.Pagination.html',
+      options: [
+        {
+          text: 'A resposta atingiu o limite de 1 MB; paginar enviando LastEvaluatedKey como ExclusiveStartKey até ele não vir mais.',
+          isCorrect: true,
+          explanation: 'Correto: é o mecanismo padrão de paginação do DynamoDB.',
+        },
+        {
+          text: 'A tabela está sofrendo throttling; aumentar a RCU.',
+          isCorrect: false,
+          explanation: 'Throttling gera erro (ProvisionedThroughputExceededException), não uma resposta parcial com LastEvaluatedKey.',
+        },
+        {
+          text: 'A Query precisa de ConsistentRead: true para retornar tudo.',
+          isCorrect: false,
+          explanation: 'A consistência não altera o limite de 1 MB por resposta.',
+        },
+        {
+          text: 'Trocar a Query por um Scan, que não tem limite de tamanho.',
+          isCorrect: false,
+          explanation: 'Scan tem o mesmo limite de 1 MB por chamada — e é menos eficiente.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Uma tabela DynamoDB existente tem partition key clienteId. Um novo requisito pede consultar os pedidos de um cliente por valor total, com leitura fortemente consistente. Qual é a solução correta?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'HARD',
+      explanation:
+        'Consultar a mesma partition key com outra sort key e consistência forte é o caso de um LSI — mas LSIs só podem ser criados junto com a tabela. Como GSIs não suportam leitura fortemente consistente, é preciso criar uma nova tabela com o LSI e migrar os dados.',
+      officialReferences:
+        'https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/SecondaryIndexes.html',
+      options: [
+        {
+          text: 'Criar uma nova tabela com um LSI (clienteId + valorTotal) e migrar os dados.',
+          isCorrect: true,
+          explanation: 'Correto: só o LSI atende a consistência forte, e ele não pode ser adicionado à tabela existente.',
+        },
+        {
+          text: 'Adicionar um LSI à tabela existente.',
+          isCorrect: false,
+          explanation: 'LSIs só podem ser definidos na criação da tabela.',
+        },
+        {
+          text: 'Criar um GSI (clienteId + valorTotal) e usar ConsistentRead: true.',
+          isCorrect: false,
+          explanation: 'GSIs só suportam leituras eventualmente consistentes.',
+        },
+        {
+          text: 'Fazer um Scan com ConsistentRead: true e filtrar por cliente.',
+          isCorrect: false,
+          explanation: 'Funciona tecnicamente, mas lê a tabela inteira a cada consulta — não é uma solução adequada.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Uma aplicação guarda sessões de usuário no DynamoDB e quer que sessões expiradas sejam removidas automaticamente, sem custo de escrita. Qual solução atende, e qual cuidado é necessário?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'HARD',
+      explanation:
+        'O TTL do DynamoDB exclui itens cujo atributo de expiração (timestamp epoch em segundos) já passou, sem consumir WCU. A exclusão não é imediata — normalmente ocorre em alguns dias —, então a aplicação deve ignorar sessões expiradas ao ler (ex.: filtrando pelo atributo de expiração).',
+      officialReferences: 'https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/TTL.html',
+      options: [
+        {
+          text: 'Habilitar TTL com um atributo de expiração em epoch (segundos) e filtrar itens expirados nas leituras, pois a exclusão não é imediata.',
+          isCorrect: true,
+          explanation: 'Correto: TTL não consome WCU, mas itens expirados podem continuar visíveis por um tempo.',
+        },
+        {
+          text: 'Habilitar TTL; os itens são excluídos exatamente no segundo em que expiram.',
+          isCorrect: false,
+          explanation: 'A exclusão pelo TTL é assíncrona e pode levar dias.',
+        },
+        {
+          text: 'Agendar uma função Lambda que faz Scan e DeleteItem a cada hora.',
+          isCorrect: false,
+          explanation: 'Funciona, mas consome RCU/WCU — o contrário do requisito de não ter custo de escrita.',
+        },
+        {
+          text: 'Usar um atributo de expiração no formato de data ISO 8601 (ex.: 2026-09-30T12:00:00Z).',
+          isCorrect: false,
+          explanation: 'O TTL exige um número com o timestamp epoch em segundos; outros formatos são ignorados.',
+        },
+      ],
+    },
+  ];
+
+  await seedQuestions(storageTopic.id, storageQuestionsToSeed);
+
+  const storageFlashcardsToSeed: FlashcardSeed[] = [
+    {
+      conceptName: 'Query vs. Scan',
+      conceptDescription: 'As duas formas de ler múltiplos itens no DynamoDB, com custos muito diferentes.',
+      serviceId: dynamoService.id,
+      front: 'Por que preferir Query a Scan no DynamoDB?',
+      back: 'Query lê só a partição de uma partition key. Scan lê a tabela inteira e aplica o filtro depois, consumindo capacidade proporcional à tabela toda.',
+    },
+    {
+      conceptName: 'LSI vs. GSI',
+      conceptDescription: 'Os dois tipos de índice secundário do DynamoDB.',
+      serviceId: dynamoService.id,
+      front: 'Quais as diferenças entre um LSI e um GSI no DynamoDB?',
+      back: 'LSI: mesma partition key, outra sort key, só na criação da tabela, permite leitura fortemente consistente. GSI: chaves diferentes, criado a qualquer momento, capacidade própria, só eventualmente consistente.',
+    },
+    {
+      conceptName: 'Cálculo de RCU e WCU',
+      conceptDescription: 'Unidades de capacidade provisionada de leitura e escrita do DynamoDB.',
+      serviceId: dynamoService.id,
+      front: 'Quanto vale 1 RCU e 1 WCU no DynamoDB?',
+      back: '1 RCU = 1 leitura fortemente consistente/s de até 4 KB (ou 2 eventualmente consistentes). 1 WCU = 1 escrita/s de até 1 KB. Tamanhos arredondam para cima.',
+    },
+    {
+      conceptName: 'Hot partition',
+      conceptDescription: 'Partição física que concentra tráfego por causa de uma partition key de baixa cardinalidade.',
+      serviceId: dynamoService.id,
+      front: 'O que causa uma hot partition no DynamoDB e como evitar?',
+      back: 'Uma partition key com poucos valores ou acessos concentrados. Evite com uma chave de alta cardinalidade e acessos bem distribuídos (ex.: clienteId em vez de status).',
+    },
+    {
+      conceptName: 'Optimistic locking',
+      conceptDescription: 'Controle de concorrência com atributo de versão e escrita condicional.',
+      serviceId: dynamoService.id,
+      front: 'Como evitar que escritas concorrentes no DynamoDB se sobrescrevam sem bloquear o item?',
+      back: 'Optimistic locking: guardar um atributo de versão e atualizar com uma ConditionExpression exigindo a versão lida. Se falhar (ConditionalCheckFailedException), reler e tentar de novo.',
+    },
+    {
+      conceptName: 'DynamoDB TTL',
+      conceptDescription: 'Expiração automática de itens do DynamoDB sem consumo de WCU.',
+      serviceId: dynamoService.id,
+      front: 'Como o TTL do DynamoDB funciona e qual o cuidado ao usá-lo?',
+      back: 'Exclui itens cujo atributo de expiração (epoch em segundos) já passou, sem consumir WCU. A exclusão não é imediata (pode levar dias), então filtre itens expirados nas leituras.',
+    },
+    {
+      conceptName: 'Lazy loading vs. write-through',
+      conceptDescription: 'As duas estratégias principais de preenchimento de cache.',
+      serviceId: elastiCacheService.id,
+      front: 'Qual a diferença entre lazy loading e write-through?',
+      back: 'Lazy loading: grava no cache só num miss (cacheia só o que é lido, mas pode ficar desatualizado). Write-through: atualiza o cache a cada escrita (nunca desatualizado, mas write penalty e cache churn).',
+    },
+    {
+      conceptName: 'DAX',
+      conceptDescription: 'DynamoDB Accelerator: cache em memória read-through/write-through específico para o DynamoDB.',
+      serviceId: dynamoService.id,
+      front: 'Quando usar o DAX em vez do ElastiCache?',
+      back: 'Quando o cache é para leituras do DynamoDB: DAX é compatível com a API dele (mudança mínima de código) e dá latência de microssegundos. Leituras fortemente consistentes não são cacheadas.',
+    },
+    {
+      conceptName: 'Lifecycle rules do S3',
+      conceptDescription: 'Regras que movem objetos entre classes de armazenamento e os expiram automaticamente.',
+      serviceId: s3Service.id,
+      front: 'Quais ações uma lifecycle rule do S3 pode executar?',
+      back: 'Transition (mover para uma classe mais barata após N dias), expiration (excluir), ações para versões não atuais e abortar multipart uploads incompletos.',
+    },
+  ];
+
+  await seedFlashcards(storageTopic.id, storageFlashcardsToSeed);
 
   const domainCount = await prisma.domain.count({ where: { examVersionId: examVersion.id } });
   const topicCount = await prisma.topic.count({ where: { domain: { examVersionId: examVersion.id } } });

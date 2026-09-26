@@ -9,10 +9,29 @@ A prova real DVA-C02 tem 65 questões, 130 minutos, cobrindo 4 domínios com os 
 já refletidos no schema (`Domain.weightPercent`). 13 tópicos no total, um por task
 statement do exam guide oficial da AWS.
 
-## Meta por tópico (linha de base)
+## Critério de "pronto": prontidão real para a prova
+
+Definido pelo Pedro em 2026-09-26 (Sessão 21): a trilha precisa ter material
+suficiente para deixá-lo **pronto para passar numa prova de certificação real** —
+não só "cada tópico deixou de estar vazio". Na prática, isso significa dimensionar
+cada tópico pela amplitude do objetivo do exam guide, e não pela linha de base
+abaixo:
+
+- tópicos amplos ganham **2 aulas e 2 labs** (ex.: Armazenamento de dados, Sessão 21);
+- **10-15 questões por tópico**, com peso maior em cenários e nas pegadinhas
+  clássicas da prova (cálculos de RCU/WCU, LSI vs. GSI, onde vai a DLQ etc.);
+- flashcards em número suficiente para cobrir cada conceito cobrável do tópico
+  (tipicamente 5-10).
+
+Meta de banco total ao fim da trilha: **~150+ questões**, o que já permite vários
+simulados de 65 questões com pouca repetição. Os tópicos feitos antes desse
+critério (Lambda, Cognito, Arquitetura) ficam abaixo dele e estão listados em
+"Reforços pendentes" abaixo.
+
+## Linha de base mínima (referência histórica)
 
 Baseado no que o tópico do Lambda (Sessão 3–6) e o do Cognito (Sessão 19) já
-entregaram, a linha de base por tópico é:
+entregaram, a linha de base mínima por tópico era:
 
 - **1 aula** em Markdown (~8-10 min de leitura)
 - **1 laboratório** prático no Console real da AWS (Nível 1-2)
@@ -33,13 +52,11 @@ pra sair do zero, não o teto.
 |---|--------|--------|------|-----|----------|------------|
 | 1 | Fundamentos do AWS Lambda | ✅ Feito (Sessão 3–6) | 1 | 1 | 6 | 5 |
 | 2 | Padrões de arquitetura e tolerância a falhas | ✅ Feito (Sessão 20) | 1 | 1 | 7 | 5 |
-| 3 | Armazenamento de dados em aplicações | ⬜ Pendente | — | — | — | — |
+| 3 | Armazenamento de dados em aplicações | ✅ Feito (Sessão 21) | 2 | 2 | 14 | 9 |
 
-Tópicos 2 e 3 são amplos (o objetivo de aprendizagem já escrito cobre
-orientado-a-eventos/microsserviços/monolito + retry/DLQ no primeiro, e
-relacional-vs-NoSQL + DynamoDB + cache + S3 lifecycle no segundo) — candidatos a
-**2 aulas e 2 labs** cada, em vez de 1, se quisermos cobrir o objetivo por inteiro.
-Linha de base assume 1+1 por enquanto; posso expandir depois se fizer falta.
+O tópico 3 foi o primeiro feito com o critério de prontidão: 2 aulas (DynamoDB;
+cache + S3), 2 labs (modelagem de tabela com Query/Scan/GSI; versionamento +
+lifecycle no S3), 14 questões e 9 flashcards.
 
 ### Domain 2 — Security (26%)
 
@@ -66,31 +83,37 @@ Linha de base assume 1+1 por enquanto; posso expandir depois se fizer falta.
 | 2 | Instrumentação de código para observabilidade | ⬜ Pendente | — | — | — | — |
 | 3 | Otimização de aplicações | ⬜ Pendente | — | — | — | — |
 
-## Volume total pra fechar a linha de base
+## Volume total pra fechar a trilha
 
-- **10 tópicos** ainda vazios (de 13)
-- **~10 aulas** novas (mais se Domain 1 #3 virar 2 aulas)
-- **~10 labs** novos
-- **~65-75 questões** novas → banco total sobe de 18 para **~85-95 questões**
-- **~50 flashcards** novos → total sobe de 15 para **~65**
+Hoje: **32 questões** e **24 flashcards** no banco.
 
-Com ~85-95 questões, um simulado real de 65 questões já fica possível sem repetir
-demais — ainda longe do ideal, mas sai do "praticamente inexistente" de hoje.
+- **9 tópicos** ainda vazios (de 13)
+- **~9-14 aulas** e **~9-14 labs** novos (conforme a amplitude de cada tópico)
+- **~90-135 questões** novas → banco total sobe para **~120-165 questões**
+- **~50-80 flashcards** novos
+
+## Reforços pendentes
+
+Tópicos feitos antes do critério de prontidão, a completar até ~10-12 questões
+cada depois que os tópicos vazios estiverem cobertos:
+
+- Fundamentos do AWS Lambda (6 questões)
+- Autenticação e autorização de aplicações (5 questões)
+- Padrões de arquitetura e tolerância a falhas (7 questões)
 
 ## Ordem sugerida
 
 Por peso do domínio (maior impacto na nota primeiro), que já bate com a ordem
 numérica que o schema usa hoje:
 
-1. Domain 1 restante (2 tópicos) — maior peso individual da prova
+1. ~~Domain 1 restante~~ — concluído (Sessões 20-21)
 2. Domain 2 restante (2 tópicos)
 3. Domain 3 (4 tópicos)
 4. Domain 4 (3 tópicos)
 
 ## Ritmo
 
-Cada tópico na linha de base (1 aula + 1 lab + 6-8 questões + 5 flashcards, todos
-com conteúdo tecnicamente preciso, revisados) é comparável ao trabalho da Sessão 19
-(Cognito) — uma sessão de trabalho focada por tópico é uma estimativa razoável,
-mas varia com a complexidade do serviço AWS envolvido. Não é uma tarefa de "gerar
+Cada tópico (com conteúdo tecnicamente preciso, revisado) é uma sessão de trabalho
+focada — a Sessão 21 (Armazenamento de dados) é a referência de tamanho para um
+tópico amplo — e o tamanho varia com a complexidade do serviço AWS envolvido. Não é uma tarefa de "gerar
 tudo de uma vez"; cada tópico authored vale uma revisão antes do próximo.
