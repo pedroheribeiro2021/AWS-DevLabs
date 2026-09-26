@@ -481,3 +481,25 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 **Decisions:** none architectural.
 
 **Next steps:** Domain 3 (Deployment, 4 topics), starting with "Preparação de artefatos de deploy".
+
+---
+
+## 2026-09-26 — Session 24: content topic 6 of 12 (deploy artifacts)
+
+**Goal:** Pedro merged #33 and asked to continue; next in order is Domain 3's "Preparação de artefatos de deploy".
+
+**Changes:**
+
+- `packages/database/prisma/seed.ts`, to the exam-readiness bar:
+  - **Lesson 1** "Pacotes de deploy do Lambda: zip, layers e imagens de container" (12 min): .zip structure and handler path, the 50 MB / 250 MB / 4 KB / 10 GB limits, memory 128–10,240 MB with proportional CPU, `/tmp`, native dependencies (Amazon Linux, architecture, runtime version; `sam build --use-container` or `pip --platform`), layers (`/opt/python`, `nodejs/node_modules`, max 5, immutable versions), container images in ECR (no layers).
+  - **Lesson 2** "Empacotamento e configuração: SAM, CloudFormation, Elastic Beanstalk e AppConfig" (11 min): config vs. code (env vars, Parameter Store/Secrets Manager, AppConfig with validators, gradual deployment and alarm rollback), SAM project layout and template (`Transform`, `Globals`, `CodeUri`), `cloudformation package`/`deploy` and capabilities, `sam build`/`sam deploy`, Elastic Beanstalk source bundle rules, `.ebextensions`, `Procfile`, `.platform` hooks.
+  - **Lab 1** "Criar uma layer do Lambda com dependências do runtime certo" (Level 2, 5 steps) — `pip install --platform manylinux2014_x86_64 --python-version 3.13 --only-binary=:all:` from CloudShell, which ships a different Python than the Lambda runtime, so the lab doubles as the native-dependency lesson; ImportModuleError before the layer, success after, then a second layer version to show immutability.
+  - **Lab 2** "Empacotar e publicar uma função com um template SAM" (Level 2, 5 steps) — deliberately uses `aws cloudformation package`/`deploy` instead of `sam build`, since `sam build` in CloudShell would fail its Python version check against a `python3.13` runtime; the dependency-free function makes the build step unnecessary and keeps the focus on what `package` does to `CodeUri`.
+  - **13 questions**, **10 flashcards**; new `AWSService` rows AWS CloudFormation, Amazon ECR, AWS Elastic Beanstalk, AWS AppConfig.
+- Docs: checklist (71 questions, 53 flashcards; 6 topics left) and Pendências.
+- Verified: typecheck clean; seed twice with no duplicates (2 lessons, 2 labs/10 steps, 13 questions, 10 flashcards); API suite (26 unit + 39 e2e) green.
+- Keep-alive check: still only the manual run at 12:23 Brasília; no `schedule` run by 12:53. Left the Pendências item open.
+
+**Decisions:** none architectural.
+
+**Next steps:** Domain 3 topic 2, "Testes de aplicações em ambientes de desenvolvimento" (Lambda versions/aliases, API Gateway stages, mocks, SAM local).

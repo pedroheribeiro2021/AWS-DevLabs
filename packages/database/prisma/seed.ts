@@ -3791,6 +3791,737 @@ def lambda_handler(event, context):
 
   await seedFlashcards(sensitiveDataTopic.id, sensitiveDataFlashcardsToSeed);
 
+  // ---------------------------------------------------------------------
+  // Content-authoring push, topic 6 of 12: Domain 3 "Preparação de
+  // artefatos de deploy", to the exam-readiness bar.
+  // ---------------------------------------------------------------------
+
+  const deploymentDomain = await prisma.domain.findUniqueOrThrow({
+    where: { examVersionId_code: { examVersionId: examVersion.id, code: 'domain-3' } },
+  });
+  const artifactsTopic = await prisma.topic.findFirstOrThrow({
+    where: { domainId: deploymentDomain.id, name: 'Preparação de artefatos de deploy' },
+  });
+
+  const cloudFormationServiceData = {
+    shortName: 'CloudFormation',
+    category: 'Management & Governance',
+    description:
+      'Provisiona infraestrutura como código a partir de templates; o AWS SAM é uma extensão dele para aplicações serverless.',
+  };
+  const cloudFormationService = await prisma.aWSService.upsert({
+    where: { name: 'AWS CloudFormation' },
+    update: cloudFormationServiceData,
+    create: { name: 'AWS CloudFormation', ...cloudFormationServiceData },
+  });
+
+  const ecrServiceData = {
+    shortName: 'ECR',
+    category: 'Containers',
+    description: 'Registro gerenciado de imagens de container, usado por ECS, EKS e funções Lambda empacotadas como imagem.',
+  };
+  const ecrService = await prisma.aWSService.upsert({
+    where: { name: 'Amazon Elastic Container Registry' },
+    update: ecrServiceData,
+    create: { name: 'Amazon Elastic Container Registry', ...ecrServiceData },
+  });
+
+  const beanstalkServiceData = {
+    shortName: 'Elastic Beanstalk',
+    category: 'Compute',
+    description:
+      'Plataforma que faz deploy e gerencia a infraestrutura de aplicações web a partir de um pacote de código (source bundle).',
+  };
+  const beanstalkService = await prisma.aWSService.upsert({
+    where: { name: 'AWS Elastic Beanstalk' },
+    update: beanstalkServiceData,
+    create: { name: 'AWS Elastic Beanstalk', ...beanstalkServiceData },
+  });
+
+  const appConfigServiceData = {
+    shortName: 'AppConfig',
+    category: 'Management & Governance',
+    description:
+      'Gerencia e publica configurações e feature flags com validação, deploy gradual e rollback automático, sem redeploy do código.',
+  };
+  const appConfigService = await prisma.aWSService.upsert({
+    where: { name: 'AWS AppConfig' },
+    update: appConfigServiceData,
+    create: { name: 'AWS AppConfig', ...appConfigServiceData },
+  });
+
+  const lambdaPackagingLessonContent = `## Objetivo
+
+Ao final desta lição você vai conseguir montar um pacote de deploy do Lambda corretamente, decidir entre pacote .zip, layers e imagem de container, e evitar os erros clássicos de dependências e limites que a prova DVA-C02 cobra.
+
+## O pacote .zip
+
+Um pacote .zip contém o código da função e as dependências que não vêm no runtime. O handler precisa estar no caminho que a configuração aponta (ex.: \`lambda_function.lambda_handler\` → arquivo \`lambda_function.py\` na raiz do zip). Em Python, as bibliotecas são instaladas ao lado do código (\`pip install -r requirements.txt -t .\`); em Node.js, a pasta \`node_modules\` vai junto. O SDK da AWS já vem nos runtimes gerenciados, mas fixar a sua própria versão dentro do pacote evita surpresas quando o runtime é atualizado.
+
+Os limites que mais aparecem na prova:
+
+- **50 MB** para um .zip enviado diretamente pela API/Console; acima disso (até o limite descompactado), o pacote é enviado via S3.
+- **250 MB descompactados**, somando o código da função e todas as suas layers.
+- **4 KB** no total de variáveis de ambiente.
+- Memória de **128 MB a 10.240 MB** — e a CPU é alocada proporcionalmente à memória (por volta de 1.769 MB a função recebe o equivalente a 1 vCPU), então aumentar a memória também acelera código limitado por CPU.
+- \`/tmp\` (armazenamento efêmero) de **512 MB a 10.240 MB**.
+
+## Dependências nativas
+
+Bibliotecas com partes compiladas (ex.: bibliotecas de criptografia, processamento de imagem, drivers de banco) precisam ser compiladas para o sistema do Lambda — Amazon Linux — e para a arquitetura da função (\`x86_64\` ou \`arm64\`), e para a versão exata do runtime. Um pacote montado no Windows ou no macOS costuma falhar com erros de import ou "invalid ELF header". As saídas: construir o pacote num ambiente Amazon Linux (ou num container, como faz \`sam build --use-container\`), ou pedir ao pip as wheels certas com \`--platform manylinux2014_x86_64 --python-version 3.13 --only-binary=:all:\`.
+
+## Layers
+
+Uma layer é um .zip com bibliotecas, runtimes customizados ou arquivos de configuração que várias funções podem compartilhar. Ela é extraída em \`/opt\` no ambiente de execução, e cada runtime procura bibliotecas num subcaminho específico — para Python, o zip precisa ter a pasta \`python/\` na raiz (vira \`/opt/python\`); para Node.js, \`nodejs/node_modules/\`. Pontos importantes:
+
+- Uma função pode usar **até 5 layers**, e o limite de 250 MB descompactados inclui todas elas.
+- Cada publicação cria uma **versão imutável** (\`...:layer:minha-layer:3\`). A função referencia uma versão específica; publicar uma versão nova não altera nenhuma função até que a configuração dela seja atualizada.
+- Layers diminuem o pacote de cada função (deploys mais rápidos, e o código continua editável no Console) e centralizam dependências comuns.
+
+## Imagens de container
+
+Funções também podem ser empacotadas como imagens de container de **até 10 GB**, guardadas no Amazon ECR. É a escolha para dependências grandes (ex.: bibliotecas de machine learning) que estouram os 250 MB, ou para times que já padronizaram o build em containers. A imagem parte de uma imagem base da AWS para o runtime (ou de uma imagem própria com o runtime interface client) e é construída com um Dockerfile. Funções empacotadas como imagem **não usam layers** — as dependências vão dentro da própria imagem. Boas práticas no ECR: tags imutáveis e versionadas (em vez de sempre \`latest\`) e varredura de vulnerabilidades das imagens.
+
+## Relação com a prova DVA-C02
+
+Espere cenários sobre os limites de 50 MB/250 MB/10 GB, quando usar layers vs. imagem de container, a estrutura de pastas de uma layer, versões imutáveis de layers, erros de dependências nativas, e a relação entre memória e CPU no Lambda.`;
+
+  const packagingConfigLessonContent = `## Objetivo
+
+Ao final desta lição você vai conseguir organizar um projeto serverless com o AWS SAM, entender o que \`package\` e \`deploy\` fazem com os artefatos, preparar um source bundle do Elastic Beanstalk e separar configuração de código.
+
+## Configuração separada do código
+
+O mesmo artefato deve ser promovido entre ambientes (dev, homologação, produção) sem ser reconstruído — o que muda entre eles é a configuração. As opções, da mais simples à mais controlada:
+
+- **Variáveis de ambiente** — valores simples por função, definidos no template ou na configuração.
+- **Parameter Store / Secrets Manager** — configurações compartilhadas e segredos, lidos em tempo de execução (ver o tópico de dados sensíveis).
+- **AWS AppConfig** — configurações e feature flags que mudam com frequência sem redeploy do código: valida a configuração antes de publicar (JSON Schema ou uma função Lambda), faz o deploy gradual segundo uma estratégia (ex.: 10% a cada minuto) e faz rollback automático se um alarme do CloudWatch disparar.
+
+## Estrutura de um projeto SAM
+
+Um projeto do AWS SAM costuma ter um \`template.yaml\` na raiz, uma pasta por função (ex.: \`hello_world/\` com \`app.py\` e \`requirements.txt\`), \`events/\` com eventos de teste e \`tests/\`. O template começa com \`Transform: AWS::Serverless-2016-10-31\`, que faz o CloudFormation expandir recursos simplificados (\`AWS::Serverless::Function\`, \`AWS::Serverless::Api\`, \`AWS::Serverless::SimpleTable\`, \`AWS::Serverless::LayerVersion\`) em recursos completos. A seção \`Globals\` define propriedades comuns a todas as funções (runtime, timeout, memória, variáveis de ambiente). \`CodeUri\` aponta para a pasta local do código de cada função.
+
+## Do código local ao artefato no S3
+
+O CloudFormation não lê arquivos do seu computador: todo código referenciado precisa estar no S3 (ou no ECR, para imagens). Por isso existe o passo de empacotamento:
+
+- \`aws cloudformation package\` (ou \`sam package\`) compacta cada caminho local (\`CodeUri\`, \`ContentUri\` etc.), envia para um bucket S3 e gera um novo template com esses caminhos trocados por URIs \`s3://\`.
+- \`aws cloudformation deploy\` cria um change set com o template empacotado e o executa. Templates que criam roles do IAM exigem \`--capabilities CAPABILITY_IAM\` (ou \`CAPABILITY_NAMED_IAM\`, com nomes fixos), e templates com transforms usam \`CAPABILITY_AUTO_EXPAND\`.
+- Com o SAM CLI, \`sam build\` instala as dependências de cada função (opcionalmente dentro de um container compatível com o Lambda, com \`--use-container\`) e \`sam deploy\` faz o package e o deploy juntos (\`--guided\` salva as escolhas em \`samconfig.toml\`).
+
+## Source bundle do Elastic Beanstalk
+
+No Elastic Beanstalk, o artefato é um source bundle: um único arquivo .zip (ou .war) de **até 500 MB**, **sem uma pasta-pai** envolvendo o conteúdo — os arquivos da aplicação ficam na raiz do zip. Junto do código podem ir: arquivos \`.config\` (YAML ou JSON) em \`.ebextensions/\` para instalar pacotes, criar arquivos, rodar comandos e definir opções do ambiente; um \`Procfile\` com o comando que inicia a aplicação; e hooks em \`.platform/\` para plataformas baseadas em Amazon Linux 2 ou mais recentes. Cada deploy cria uma application version guardada no S3.
+
+## Relação com a prova DVA-C02
+
+Espere cenários sobre o que \`cloudformation package\` faz, a estrutura de um template SAM (\`Transform\`, \`Globals\`, \`CodeUri\`), capabilities exigidas no deploy, \`.ebextensions\` e as regras do source bundle, e AppConfig para feature flags com deploy gradual e rollback.`;
+
+  const artifactsLessons: LessonSeed[] = [
+    {
+      order: 1,
+      estimatedMinutes: 12,
+      title: 'Pacotes de deploy do Lambda: zip, layers e imagens de container',
+      content: lambdaPackagingLessonContent,
+      resources: [
+        {
+          title: 'Pacotes de deploy do Lambda (.zip) — documentação oficial',
+          url: 'https://docs.aws.amazon.com/lambda/latest/dg/configuration-function-zip.html',
+        },
+        {
+          title: 'Layers do Lambda — documentação oficial',
+          url: 'https://docs.aws.amazon.com/lambda/latest/dg/chapter-layers.html',
+        },
+      ],
+    },
+    {
+      order: 2,
+      estimatedMinutes: 11,
+      title: 'Empacotamento e configuração: SAM, CloudFormation, Elastic Beanstalk e AppConfig',
+      content: packagingConfigLessonContent,
+      resources: [
+        {
+          title: 'AWS SAM — documentação oficial',
+          url: 'https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/what-is-sam.html',
+        },
+        {
+          title: 'Source bundle do Elastic Beanstalk — documentação oficial',
+          url: 'https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/applications-sourcebundle.html',
+        },
+      ],
+    },
+  ];
+
+  await seedLessons(artifactsTopic.id, artifactsLessons);
+
+  const layerBuildInstructions = `No AWS CloudShell, instale a biblioteca \`requests\` numa pasta \`python/\` (o caminho que o runtime Python procura dentro de \`/opt\`), pedindo ao pip as wheels do Lambda — Linux x86_64, Python 3.13 — e não as do próprio CloudShell:
+
+\`\`\`bash
+mkdir -p camada/python
+pip3 install requests -t camada/python --platform manylinux2014_x86_64 --python-version 3.13 --implementation cp --only-binary=:all:
+cd camada && zip -r ../camada.zip python && cd ..
+unzip -l camada.zip | head
+\`\`\``;
+
+  const layerFunctionCode = `No Console do Lambda, crie a função \`devlab-com-camada\` com o runtime **Python 3.13** e arquitetura **x86_64** (os mesmos da layer). Em "Code", substitua \`lambda_function.py\` por:
+
+\`\`\`python
+import requests
+
+
+def lambda_handler(event, context):
+    resposta = requests.get("https://checkip.amazonaws.com", timeout=5)
+    return {"status": resposta.status_code, "ip": resposta.text.strip()}
+\`\`\`
+
+Clique em "Deploy" e execute um teste com o evento padrão.`;
+
+  const samProjectInstructions = `Crie a estrutura do projeto: uma pasta de código e um template SAM na raiz.
+
+\`\`\`bash
+mkdir -p devlab-sam/src && cd devlab-sam
+cat > src/app.py <<'FIM'
+import os
+
+
+def handler(event, context):
+    return {"mensagem": "ola do pacote", "ambiente": os.environ["AMBIENTE"]}
+FIM
+cat > template.yaml <<'FIM'
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Lab DevLab - empacotamento com SAM
+
+Globals:
+  Function:
+    Runtime: python3.13
+    Timeout: 10
+    MemorySize: 256
+
+Resources:
+  DevlabFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: devlab-empacotada
+      CodeUri: src/
+      Handler: app.handler
+      Environment:
+        Variables:
+          AMBIENTE: dev
+FIM
+\`\`\``;
+
+  const artifactsLabs: LabSeed[] = [
+    {
+      title: 'Criar uma layer do Lambda com dependências do runtime certo',
+      data: {
+        level: 2,
+        order: 1,
+        estimatedMinutes: 25,
+        objective:
+          'Ao final deste laboratório você terá empacotado uma biblioteca Python como layer do Lambda com a estrutura de pastas correta e as wheels do runtime certo, visto a função falhar sem a layer e funcionar com ela, e publicado uma segunda versão da layer para entender que versões são imutáveis.',
+        prerequisites:
+          'Conta AWS com acesso ao Console e ao AWS CloudShell. Ter lido a lição "Pacotes de deploy do Lambda: zip, layers e imagens de container" ajuda.',
+        context:
+          'Várias funções de um time usam a biblioteca `requests`, e cada uma a empacota junto do próprio código — os pacotes cresceram e não dá mais para editar o código no Console. O time decidiu mover a dependência para uma layer compartilhada.',
+        troubleshooting:
+          '"No matching distribution found" no pip: confira se todos os parâmetros (`--platform`, `--python-version`, `--implementation`, `--only-binary`) foram copiados — eles só funcionam juntos com `-t`. \n\n`Runtime.ImportModuleError: No module named \'requests\'` mesmo com a layer: confira se o zip tem `python/` na raiz (`unzip -l camada.zip`) e se a função usa Python 3.13, a mesma versão da layer. \n\nA layer não aparece em "Custom layers": a lista mostra só layers compatíveis com o runtime e a arquitetura da função — confira se a função é Python 3.13 e x86_64.',
+        cleanup:
+          'Exclua a função `devlab-com-camada` (e seu log group `/aws/lambda/devlab-com-camada`, se quiser). No CloudShell, exclua as duas versões da layer: `aws lambda delete-layer-version --layer-name devlab-requests --version-number 1` e o mesmo com `--version-number 2`.',
+        costWarning:
+          'Layers não têm custo próprio além do armazenamento de código do Lambda (gratuito em pequenas quantidades), e as invocações ficam dentro do Free Tier.',
+      },
+      steps: [
+        {
+          order: 1,
+          title: 'Montar o zip da layer',
+          instructions: layerBuildInstructions,
+          validation:
+            'A listagem do zip mostra caminhos começando com `python/` (ex.: `python/requests/__init__.py`) — é essa pasta que vira `/opt/python` na função.',
+        },
+        {
+          order: 2,
+          title: 'Publicar a layer',
+          instructions:
+            'Rode:\n\n```bash\naws lambda publish-layer-version --layer-name devlab-requests --zip-file fileb://camada.zip --compatible-runtimes python3.13 --compatible-architectures x86_64\n```',
+          validation: 'A resposta traz um `LayerVersionArn` terminando em `:devlab-requests:1` e `Version` igual a 1.',
+        },
+        {
+          order: 3,
+          title: 'Criar a função e testar sem a layer',
+          instructions: layerFunctionCode,
+          validation:
+            'O teste falha com `Runtime.ImportModuleError` ("No module named \'requests\'"): a biblioteca não está no runtime nem no pacote da função.',
+        },
+        {
+          order: 4,
+          title: 'Adicionar a layer e testar de novo',
+          instructions:
+            'Na página da função, em "Layers", clique em "Add a layer", escolha "Custom layers", selecione `devlab-requests` e a versão 1. Execute o teste de novo.',
+          validation:
+            'O teste devolve `status` 200 e um endereço IP. Em "Code properties", o tamanho do pacote da função continua de poucos KB — a dependência está na layer, não no código.',
+        },
+        {
+          order: 5,
+          title: 'Publicar uma nova versão da layer',
+          instructions:
+            'No CloudShell, publique o mesmo zip de novo (repita o comando do passo 2) e depois liste as versões com `aws lambda list-layer-versions --layer-name devlab-requests --query "LayerVersions[].Version"`. Volte à função e veja qual versão ela usa.',
+          validation:
+            'Existem as versões 1 e 2, mas a função continua usando a versão 1: versões de layer são imutáveis, e a função só passa a usar a nova quando a configuração dela for atualizada.',
+        },
+      ],
+    },
+    {
+      title: 'Empacotar e publicar uma função com um template SAM',
+      data: {
+        level: 2,
+        order: 2,
+        estimatedMinutes: 30,
+        objective:
+          'Ao final deste laboratório você terá organizado um projeto serverless com um template SAM, visto o comando `aws cloudformation package` enviar o código ao S3 e reescrever o template, e publicado a função com `aws cloudformation deploy`.',
+        prerequisites:
+          'Conta AWS com acesso ao AWS CloudShell. Ter lido a lição "Empacotamento e configuração: SAM, CloudFormation, Elastic Beanstalk e AppConfig" ajuda.',
+        context:
+          'Um time cria funções Lambda pelo Console, e ninguém sabe dizer qual configuração está em produção. A decisão é passar a descrever tudo num template SAM versionado junto do código. Antes de adotar o SAM CLI e um pipeline, você vai entender o que acontece com o código local no caminho até a AWS.',
+        troubleshooting:
+          '"Unable to upload artifact src/ referenced by CodeUri": rode o `package` de dentro da pasta `devlab-sam`, onde está a pasta `src/`. \n\n"Requires capabilities": o deploy precisa de `--capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND`, porque o SAM cria uma role do IAM para a função. \n\nA stack fica em `ROLLBACK_COMPLETE`: veja a causa com `aws cloudformation describe-stack-events --stack-name devlab-empacotada --max-items 10`, exclua a stack e faça o deploy de novo. \n\nO heredoc não terminou (o terminal continua esperando): a linha `FIM` precisa estar sozinha e sem espaços antes.',
+        cleanup:
+          'No CloudShell, rode `aws cloudformation delete-stack --stack-name devlab-empacotada` (remove a função e a role) e `aws s3 rb s3://NOME-DO-BUCKET --force` (remove o bucket de artefatos e seu conteúdo).',
+        costWarning:
+          'A stack cria só uma função Lambda e uma role; as invocações e os poucos KB no S3 ficam dentro do Free Tier. O CloudFormation em si não cobra nada: você paga só pelos recursos que a stack cria.',
+      },
+      steps: [
+        {
+          order: 1,
+          title: 'Criar o bucket de artefatos',
+          instructions:
+            'No AWS CloudShell, crie um bucket para os artefatos de deploy, com um nome único:\n\n```bash\naws s3 mb s3://devlab-artefatos-SUAS-INICIAIS-DATA\n```\n\nNos próximos passos, `NOME-DO-BUCKET` é esse nome.',
+          validation: 'O comando responde `make_bucket: devlab-artefatos-...`.',
+        },
+        {
+          order: 2,
+          title: 'Criar o projeto',
+          instructions: samProjectInstructions,
+          validation:
+            '`find .` dentro de `devlab-sam` mostra `./template.yaml` e `./src/app.py` — o template na raiz e o código na pasta que o `CodeUri` aponta.',
+        },
+        {
+          order: 3,
+          title: 'Empacotar',
+          instructions:
+            'Ainda em `devlab-sam`, rode:\n\n```bash\naws cloudformation package --template-file template.yaml --s3-bucket NOME-DO-BUCKET --output-template-file packaged.yaml\ncat packaged.yaml\n```',
+          validation:
+            'No `packaged.yaml`, o `CodeUri` deixou de ser `src/` e virou `s3://NOME-DO-BUCKET/...` — o `package` compactou a pasta, enviou ao S3 e reescreveu o template. O `template.yaml` original não mudou.',
+        },
+        {
+          order: 4,
+          title: 'Publicar',
+          instructions:
+            'Rode:\n\n```bash\naws cloudformation deploy --template-file packaged.yaml --stack-name devlab-empacotada --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND\n```',
+          validation:
+            'O comando termina com "Successfully created/updated stack - devlab-empacotada". No Console do CloudFormation, a stack mostra na aba "Resources" a função e uma role criadas a partir do `AWS::Serverless::Function`.',
+        },
+        {
+          order: 5,
+          title: 'Invocar a função',
+          instructions:
+            'Rode:\n\n```bash\naws lambda invoke --function-name devlab-empacotada resposta.json && cat resposta.json\n```',
+          validation:
+            'A resposta é `{"mensagem": "ola do pacote", "ambiente": "dev"}` — o valor da variável de ambiente veio do template, não do código.',
+        },
+      ],
+    },
+  ];
+
+  await seedLabs(artifactsTopic.id, artifactsLabs);
+
+  const artifactsQuestionsToSeed: QuestionSeed[] = [
+    {
+      prompt:
+        'Qual é o tamanho máximo, descompactado, do código de uma função Lambda empacotada como .zip, somando todas as suas layers?',
+      type: 'KNOWLEDGE',
+      difficulty: 'EASY',
+      explanation:
+        'O limite descompactado é de 250 MB, incluindo a função e todas as layers. O upload direto de um .zip é limitado a 50 MB (acima disso, via S3). Para mais que 250 MB, usa-se uma imagem de container (até 10 GB).',
+      officialReferences: 'https://docs.aws.amazon.com/lambda/latest/dg/gettingstarted-limits.html',
+      options: [
+        { text: '250 MB', isCorrect: true, explanation: 'Correto: função + layers, descompactados.' },
+        { text: '50 MB', isCorrect: false, explanation: 'É o limite de upload direto do .zip compactado.' },
+        { text: '10 GB', isCorrect: false, explanation: 'É o limite de uma imagem de container.' },
+        { text: '512 MB', isCorrect: false, explanation: 'É o tamanho padrão do /tmp, não do pacote.' },
+      ],
+    },
+    {
+      prompt: 'Quantas layers uma única função Lambda pode usar?',
+      type: 'KNOWLEDGE',
+      difficulty: 'EASY',
+      explanation: 'Uma função pode referenciar até 5 layers, e o total descompactado (função + layers) continua limitado a 250 MB.',
+      options: [
+        { text: '5', isCorrect: true, explanation: 'Correto.' },
+        { text: '1', isCorrect: false, explanation: 'É possível combinar várias layers.' },
+        { text: '10', isCorrect: false, explanation: 'O limite é 5.' },
+        { text: 'Ilimitadas, desde que caibam em 250 MB.', isCorrect: false, explanation: 'Há um limite de quantidade: 5.' },
+      ],
+    },
+    {
+      prompt: 'O que acontece com a CPU disponível para uma função Lambda quando a memória configurada aumenta?',
+      type: 'KNOWLEDGE',
+      difficulty: 'MEDIUM',
+      explanation:
+        'O Lambda aloca CPU proporcionalmente à memória configurada (por volta de 1.769 MB a função recebe o equivalente a 1 vCPU). Aumentar a memória também acelera código limitado por CPU.',
+      options: [
+        {
+          text: 'Aumenta proporcionalmente à memória.',
+          isCorrect: true,
+          explanation: 'Correto: memória é o único controle de CPU no Lambda.',
+        },
+        { text: 'Não muda; CPU é configurada separadamente.', isCorrect: false, explanation: 'Não existe configuração separada de CPU no Lambda.' },
+        { text: 'Diminui, para compensar o custo.', isCorrect: false, explanation: 'Mais memória significa mais CPU, não menos.' },
+        { text: 'Só muda em funções empacotadas como imagem de container.', isCorrect: false, explanation: 'A regra vale para qualquer tipo de pacote.' },
+      ],
+    },
+    {
+      prompt:
+        'Um desenvolvedor cria uma layer com uma biblioteca Python. Qual deve ser a estrutura do arquivo .zip para que a função consiga importar a biblioteca?',
+      type: 'APPLICATION',
+      difficulty: 'MEDIUM',
+      explanation:
+        'A layer é extraída em /opt, e o runtime Python procura bibliotecas em /opt/python. Por isso a biblioteca precisa estar dentro de uma pasta python/ na raiz do zip.',
+      officialReferences: 'https://docs.aws.amazon.com/lambda/latest/dg/packaging-layers.html',
+      options: [
+        {
+          text: 'A biblioteca dentro de uma pasta python/ na raiz do zip.',
+          isCorrect: true,
+          explanation: 'Correto: vira /opt/python, que está no caminho de import.',
+        },
+        {
+          text: 'A biblioteca solta na raiz do zip.',
+          isCorrect: false,
+          explanation: 'Iria para /opt, que não está no caminho de import do Python.',
+        },
+        {
+          text: 'A biblioteca dentro de uma pasta lib/ na raiz do zip.',
+          isCorrect: false,
+          explanation: 'Esse caminho não é procurado pelo runtime Python.',
+        },
+        {
+          text: 'A estrutura não importa; o Lambda encontra a biblioteca automaticamente.',
+          isCorrect: false,
+          explanation: 'O runtime só procura em caminhos específicos de /opt.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Uma função Lambda em Python depende de uma biblioteca com código compilado. O pacote, montado no notebook Windows do desenvolvedor, falha ao importar a biblioteca no Lambda. Qual é a correção?',
+      type: 'APPLICATION',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Partes compiladas precisam ser construídas para Amazon Linux, para a arquitetura da função e para a versão do runtime. Construir num ambiente compatível (container ou Amazon Linux, como sam build --use-container) ou baixar as wheels certas (pip --platform manylinux...) resolve.',
+      options: [
+        {
+          text: 'Montar o pacote num ambiente compatível com o Lambda (ex.: sam build --use-container) ou baixar as wheels para a plataforma e a versão do runtime.',
+          isCorrect: true,
+          explanation: 'Correto: o binário precisa bater com o sistema, a arquitetura e o runtime do Lambda.',
+        },
+        { text: 'Aumentar a memória da função.', isCorrect: false, explanation: 'O problema é de compatibilidade do binário, não de recursos.' },
+        { text: 'Mover a biblioteca para uma layer, sem recompilar.', isCorrect: false, explanation: 'O binário continuaria incompatível dentro da layer.' },
+        { text: 'Trocar o handler para o formato do Windows.', isCorrect: false, explanation: 'O Lambda roda em Amazon Linux; não existe formato Windows.' },
+      ],
+    },
+    {
+      prompt:
+        'Doze funções Lambda de um time empacotam as mesmas bibliotecas de acesso a dados. Os pacotes cresceram, os deploys ficaram lentos e o código não pode mais ser editado no Console. Qual é a melhor solução?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Uma layer com as bibliotecas compartilhadas reduz o pacote de cada função, acelera os deploys e centraliza a versão das dependências.',
+      options: [
+        {
+          text: 'Mover as bibliotecas comuns para uma layer usada pelas doze funções.',
+          isCorrect: true,
+          explanation: 'Correto: é o caso de uso típico de layers.',
+        },
+        {
+          text: 'Juntar as doze funções numa só.',
+          isCorrect: false,
+          explanation: 'Mistura responsabilidades e não resolve o compartilhamento de dependências.',
+        },
+        {
+          text: 'Aumentar o limite de tamanho do pacote pelo suporte.',
+          isCorrect: false,
+          explanation: 'O limite de 250 MB não é ajustável, e o problema é duplicação.',
+        },
+        {
+          text: 'Guardar as bibliotecas no /tmp em tempo de execução.',
+          isCorrect: false,
+          explanation: 'Baixar bibliotecas a cada cold start aumenta a latência e a complexidade.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Uma função de inferência de machine learning precisa de bibliotecas que somam 3 GB. Qual forma de empacotamento do Lambda comporta isso?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Imagens de container podem ter até 10 GB e são guardadas no Amazon ECR. Pacotes .zip, mesmo com layers, são limitados a 250 MB descompactados.',
+      options: [
+        {
+          text: 'Imagem de container armazenada no Amazon ECR.',
+          isCorrect: true,
+          explanation: 'Correto: até 10 GB.',
+        },
+        { text: 'Pacote .zip enviado via S3.', isCorrect: false, explanation: 'O S3 só evita o limite de upload de 50 MB; os 250 MB descompactados continuam valendo.' },
+        { text: 'Cinco layers de 600 MB cada.', isCorrect: false, explanation: 'Layers contam no mesmo limite de 250 MB descompactados.' },
+        { text: 'Pacote .zip com as bibliotecas compactadas em nível máximo.', isCorrect: false, explanation: 'O limite é sobre o tamanho descompactado.' },
+      ],
+    },
+    {
+      prompt: 'O que o comando aws cloudformation package faz com um template que referencia código local em CodeUri?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'O package compacta cada caminho local referenciado, envia os artefatos para um bucket S3 e gera um novo template com os caminhos trocados pelas URIs do S3. Quem cria os recursos é o deploy.',
+      officialReferences: 'https://docs.aws.amazon.com/cli/latest/reference/cloudformation/package.html',
+      options: [
+        {
+          text: 'Envia o código local para o S3 e gera um novo template apontando para as URIs do S3.',
+          isCorrect: true,
+          explanation: 'Correto: o CloudFormation só consegue usar artefatos que estão no S3 (ou no ECR).',
+        },
+        { text: 'Cria a stack e os recursos na conta.', isCorrect: false, explanation: 'Isso é o deploy (ou create-stack).' },
+        { text: 'Valida a sintaxe do template sem enviar nada.', isCorrect: false, explanation: 'Isso é o validate-template.' },
+        { text: 'Instala as dependências de cada função.', isCorrect: false, explanation: 'Isso é o sam build; o package só empacota o que já está na pasta.' },
+      ],
+    },
+    {
+      prompt:
+        'Uma aplicação no Elastic Beanstalk precisa instalar um pacote do sistema operacional e definir variáveis de ambiente em cada deploy, com essa configuração versionada junto do código. Onde colocar essa configuração?',
+      type: 'SCENARIO',
+      difficulty: 'HARD',
+      explanation:
+        'Arquivos .config (YAML ou JSON) na pasta .ebextensions/, na raiz do source bundle, permitem instalar pacotes, criar arquivos, rodar comandos e definir option settings (incluindo variáveis de ambiente) em cada deploy.',
+      officialReferences: 'https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/ebextensions.html',
+      options: [
+        {
+          text: 'Em arquivos .config na pasta .ebextensions/ na raiz do source bundle.',
+          isCorrect: true,
+          explanation: 'Correto: é o mecanismo de configuração versionada do Elastic Beanstalk.',
+        },
+        {
+          text: 'Num buildspec.yml na raiz do projeto.',
+          isCorrect: false,
+          explanation: 'O buildspec é do CodeBuild, não do Elastic Beanstalk.',
+        },
+        {
+          text: 'Num appspec.yml na raiz do projeto.',
+          isCorrect: false,
+          explanation: 'O appspec é do CodeDeploy.',
+        },
+        {
+          text: 'Configurando cada instância manualmente por SSH.',
+          isCorrect: false,
+          explanation: 'Não é versionado e se perde quando instâncias são substituídas.',
+        },
+      ],
+    },
+    {
+      prompt: 'Qual regra um source bundle do Elastic Beanstalk precisa seguir?',
+      type: 'KNOWLEDGE',
+      difficulty: 'MEDIUM',
+      explanation:
+        'O source bundle é um único .zip ou .war de até 500 MB, sem uma pasta-pai de nível superior envolvendo o conteúdo — os arquivos da aplicação ficam na raiz.',
+      options: [
+        {
+          text: 'Um único .zip ou .war de até 500 MB, sem uma pasta-pai envolvendo os arquivos.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        {
+          text: 'Um .zip com todos os arquivos dentro de uma pasta com o nome da aplicação.',
+          isCorrect: false,
+          explanation: 'Uma pasta-pai de nível superior não é permitida.',
+        },
+        {
+          text: 'Vários arquivos .zip, um por componente da aplicação.',
+          isCorrect: false,
+          explanation: 'O bundle é um único arquivo.',
+        },
+        {
+          text: 'Uma imagem de container de até 10 GB.',
+          isCorrect: false,
+          explanation: 'Esse é o limite de imagens para o Lambda.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Um time quer ligar e desligar funcionalidades (feature flags) em produção sem novo deploy do código, com validação da configuração, liberação gradual e rollback automático se um alarme do CloudWatch disparar. Qual serviço atende?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'HARD',
+      explanation:
+        'O AWS AppConfig valida configurações (JSON Schema ou função Lambda), publica segundo uma estratégia de deploy gradual e faz rollback automático quando um alarme do CloudWatch associado dispara.',
+      officialReferences: 'https://docs.aws.amazon.com/appconfig/latest/userguide/what-is-appconfig.html',
+      options: [
+        { text: 'AWS AppConfig', isCorrect: true, explanation: 'Correto: validação, deploy gradual e rollback são o propósito dele.' },
+        {
+          text: 'Variáveis de ambiente do Lambda',
+          isCorrect: false,
+          explanation: 'Mudá-las altera a configuração da função de uma vez, sem validação nem liberação gradual.',
+        },
+        {
+          text: 'Parameter Store',
+          isCorrect: false,
+          explanation: 'Guarda valores, mas não faz deploy gradual nem rollback por alarme.',
+        },
+        {
+          text: 'Um arquivo de configuração dentro do pacote de deploy',
+          isCorrect: false,
+          explanation: 'Mudar o arquivo exige novo deploy do código.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Um desenvolvedor publica uma versão nova de uma layer com uma correção, mas as funções que usam a layer continuam com o comportamento antigo. Por quê?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'HARD',
+      explanation:
+        'Versões de layer são imutáveis e cada função referencia um ARN de versão específico. Publicar a versão nova não altera nenhuma função; é preciso atualizar a configuração de cada função para o novo ARN.',
+      options: [
+        {
+          text: 'Cada função referencia uma versão específica e imutável da layer; é preciso atualizar as funções para a nova versão.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        {
+          text: 'O Lambda leva até 24 horas para propagar versões novas de layers.',
+          isCorrect: false,
+          explanation: 'Não há propagação automática; a função nunca muda de versão sozinha.',
+        },
+        {
+          text: 'A layer nova precisa ter o mesmo tamanho da anterior.',
+          isCorrect: false,
+          explanation: 'Tamanho não tem relação com isso.',
+        },
+        {
+          text: 'As funções estão em cache no CloudFront.',
+          isCorrect: false,
+          explanation: 'O CloudFront não participa da execução de funções Lambda.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Uma função Lambda foi migrada de pacote .zip para imagem de container. O time quer continuar usando a layer de monitoramento que as outras funções usam. Qual é a abordagem correta?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Funções empacotadas como imagem de container não usam layers. O conteúdo da layer precisa ser copiado para dentro da imagem durante o build (ex.: no Dockerfile).',
+      options: [
+        {
+          text: 'Incluir o conteúdo da layer dentro da imagem no build (ex.: pelo Dockerfile).',
+          isCorrect: true,
+          explanation: 'Correto: com imagem, tudo vai dentro da imagem.',
+        },
+        {
+          text: 'Adicionar a layer na configuração da função, como nas funções .zip.',
+          isCorrect: false,
+          explanation: 'Funções de imagem de container não aceitam layers.',
+        },
+        {
+          text: 'Publicar a layer no ECR.',
+          isCorrect: false,
+          explanation: 'Layers não são publicadas no ECR.',
+        },
+        {
+          text: 'Não é possível monitorar funções de imagem de container.',
+          isCorrect: false,
+          explanation: 'É possível; só não por layer.',
+        },
+      ],
+    },
+  ];
+
+  await seedQuestions(artifactsTopic.id, artifactsQuestionsToSeed);
+
+  const artifactsFlashcardsToSeed: FlashcardSeed[] = [
+    {
+      conceptName: 'Limites de pacote do Lambda',
+      conceptDescription: 'Tamanhos máximos para pacotes .zip e imagens de container no Lambda.',
+      serviceId: lambdaService.id,
+      front: 'Quais são os limites de tamanho de pacote no Lambda?',
+      back: '.zip: 50 MB no upload direto (acima disso, via S3) e 250 MB descompactados somando as layers. Imagem de container: até 10 GB.',
+    },
+    {
+      conceptName: 'Estrutura de uma layer',
+      conceptDescription: 'Caminhos que cada runtime procura dentro de /opt.',
+      serviceId: lambdaService.id,
+      front: 'Onde uma layer é extraída e qual pasta uma layer Python precisa ter?',
+      back: 'Em /opt. Para Python, a pasta python/ na raiz do zip (vira /opt/python); para Node.js, nodejs/node_modules/.',
+    },
+    {
+      conceptName: 'Versões de layer',
+      conceptDescription: 'Imutabilidade das versões de layers e como as funções as referenciam.',
+      serviceId: lambdaService.id,
+      front: 'Publicar uma nova versão de uma layer atualiza as funções que a usam?',
+      back: 'Não. Versões são imutáveis e cada função aponta para um ARN de versão; é preciso atualizar a configuração da função. Máximo de 5 layers por função.',
+    },
+    {
+      conceptName: 'Lambda como imagem de container',
+      conceptDescription: 'Empacotamento de funções Lambda como imagens de container no ECR.',
+      serviceId: ecrService.id,
+      front: 'Quando empacotar uma função Lambda como imagem de container, e qual a restrição?',
+      back: 'Quando as dependências passam de 250 MB (até 10 GB) ou o time já usa containers. A imagem fica no ECR e não usa layers — tudo vai dentro da imagem.',
+    },
+    {
+      conceptName: 'Memória e CPU no Lambda',
+      conceptDescription: 'Relação entre a memória configurada e a CPU alocada a uma função.',
+      serviceId: lambdaService.id,
+      front: 'Como aumentar a CPU disponível para uma função Lambda?',
+      back: 'Aumentando a memória (128 MB a 10.240 MB): a CPU é alocada proporcionalmente (~1.769 MB = 1 vCPU).',
+    },
+    {
+      conceptName: 'Dependências nativas no Lambda',
+      conceptDescription: 'Compatibilidade de bibliotecas compiladas com o ambiente do Lambda.',
+      serviceId: lambdaService.id,
+      front: 'Por que um pacote com bibliotecas compiladas montado no Windows/macOS falha no Lambda?',
+      back: 'O binário precisa ser para Amazon Linux, para a arquitetura (x86_64/arm64) e para a versão do runtime. Monte em container (sam build --use-container) ou baixe as wheels certas (pip --platform).',
+    },
+    {
+      conceptName: 'cloudformation package e deploy',
+      conceptDescription: 'Passos de empacotamento e deploy de templates com artefatos locais.',
+      serviceId: cloudFormationService.id,
+      front: 'O que fazem aws cloudformation package e aws cloudformation deploy?',
+      back: 'package: envia o código local (CodeUri) ao S3 e gera um template com URIs s3://. deploy: cria e executa um change set; roles do IAM exigem CAPABILITY_IAM, e transforms, CAPABILITY_AUTO_EXPAND.',
+    },
+    {
+      conceptName: 'Template SAM',
+      conceptDescription: 'Elementos principais de um template do AWS SAM.',
+      serviceId: cloudFormationService.id,
+      front: 'O que identifica um template SAM e para que servem Globals e CodeUri?',
+      back: 'Transform: AWS::Serverless-2016-10-31. Globals define propriedades comuns a todas as funções; CodeUri aponta para a pasta local (ou S3) do código de cada função.',
+    },
+    {
+      conceptName: '.ebextensions e source bundle',
+      conceptDescription: 'Configuração versionada e regras de pacote do Elastic Beanstalk.',
+      serviceId: beanstalkService.id,
+      front: 'Quais as regras do source bundle do Elastic Beanstalk e para que serve .ebextensions?',
+      back: 'Um único .zip/.war de até 500 MB, sem pasta-pai. Arquivos .config em .ebextensions/ instalam pacotes, rodam comandos e definem opções do ambiente em cada deploy.',
+    },
+    {
+      conceptName: 'AppConfig',
+      conceptDescription: 'Publicação de configurações e feature flags com segurança.',
+      serviceId: appConfigService.id,
+      front: 'O que o AWS AppConfig oferece além de guardar configuração?',
+      back: 'Validação (JSON Schema ou Lambda), deploy gradual por estratégia e rollback automático por alarme do CloudWatch — mudanças de configuração e feature flags sem redeploy do código.',
+    },
+  ];
+
+  await seedFlashcards(artifactsTopic.id, artifactsFlashcardsToSeed);
+
   const domainCount = await prisma.domain.count({ where: { examVersionId: examVersion.id } });
   const topicCount = await prisma.topic.count({ where: { domain: { examVersionId: examVersion.id } } });
 
