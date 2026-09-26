@@ -5094,6 +5094,692 @@ done | sort | uniq -c
 
   await seedFlashcards(devTestingTopic.id, devTestingFlashcardsToSeed);
 
+  // ---------------------------------------------------------------------
+  // Content-authoring push, topic 8 of 12: Domain 3 "Automação de testes
+  // de deploy", to the exam-readiness bar.
+  // ---------------------------------------------------------------------
+
+  const testAutomationTopic = await prisma.topic.findFirstOrThrow({
+    where: { domainId: deploymentDomain.id, name: 'Automação de testes de deploy' },
+  });
+
+  const codeBuildServiceData = {
+    shortName: 'CodeBuild',
+    category: 'Developer Tools',
+    description:
+      'Serviço de build gerenciado que compila código, roda testes e gera artefatos a partir de um buildspec, cobrando por minuto de build.',
+  };
+  const codeBuildService = await prisma.aWSService.upsert({
+    where: { name: 'AWS CodeBuild' },
+    update: codeBuildServiceData,
+    create: { name: 'AWS CodeBuild', ...codeBuildServiceData },
+  });
+
+  const codePipelineServiceData = {
+    shortName: 'CodePipeline',
+    category: 'Developer Tools',
+    description:
+      'Orquestra pipelines de entrega contínua em stages (source, build, test, deploy, aprovação) que rodam a cada mudança.',
+  };
+  const codePipelineService = await prisma.aWSService.upsert({
+    where: { name: 'AWS CodePipeline' },
+    update: codePipelineServiceData,
+    create: { name: 'AWS CodePipeline', ...codePipelineServiceData },
+  });
+
+  const amplifyServiceData = {
+    shortName: 'Amplify',
+    category: 'Front-End Web & Mobile',
+    description:
+      'Hospeda e publica aplicações web full-stack com CI/CD por branch do Git e ambientes de preview para pull requests.',
+  };
+  const amplifyService = await prisma.aWSService.upsert({
+    where: { name: 'AWS Amplify' },
+    update: amplifyServiceData,
+    create: { name: 'AWS Amplify', ...amplifyServiceData },
+  });
+
+  const pipelineTestsLessonContent = `## Objetivo
+
+Ao final desta lição você vai conseguir escrever um \`buildspec.yml\` que roda testes e publica relatórios no AWS CodeBuild, e posicionar testes unitários, de integração e aprovações num pipeline do AWS CodePipeline.
+
+## Onde os testes rodam
+
+Num pipeline da AWS, o CodePipeline orquestra os stages (source → build → teste → deploy) e o **CodeBuild** executa o trabalho pesado: instala dependências, roda os testes e gera artefatos, num container gerenciado que existe só durante o build. Se qualquer comando da fase \`build\` termina com código de saída diferente de zero, o build falha — e o pipeline para ali, sem chegar ao deploy.
+
+## O buildspec
+
+Por padrão, o CodeBuild procura um arquivo \`buildspec.yml\` na **raiz** do código-fonte (o nome e o caminho podem ser trocados na configuração do projeto). A estrutura:
+
+- \`version: 0.2\`
+- \`env\`: variáveis de ambiente — valores fixos (\`variables\`), valores do Parameter Store (\`parameter-store\`) e segredos do Secrets Manager (\`secrets-manager\`), sem colocar segredos no arquivo.
+- \`phases\`, nesta ordem: \`install\` (runtimes e ferramentas, com \`runtime-versions\`), \`pre_build\` (login no ECR, lint, preparação), \`build\` (compilação e testes) e \`post_build\` (empacotamento, push de imagens, notificações).
+- \`reports\`: arquivos de resultado de testes (JUnit XML, Cucumber, TestNG, NUnit...) e de cobertura, publicados num **report group** para acompanhar os resultados ao longo dos builds.
+- \`artifacts\`: o que sai do build para os próximos stages (ex.: o template empacotado pelo SAM).
+- \`cache\`: caminhos (ex.: o cache do pip ou \`node_modules\`) guardados entre builds, no S3 ou localmente, para acelerar instalações.
+
+Builds que precisam rodar Docker (construir imagens, \`sam build --use-container\`) exigem o **modo privilegiado** no ambiente do projeto.
+
+## Testes em cada stage
+
+- **Build**: testes unitários com mocks — rápidos, sem depender de nenhum ambiente.
+- **Deploy em teste**: o mesmo artefato é implantado num ambiente de teste (uma stack separada, um alias ou stage de teste).
+- **Teste**: uma ação do CodeBuild roda testes de integração e ponta a ponta contra o ambiente de teste, usando os outputs da stack (URL da API, nome da fila) e eventos de teste versionados no repositório (ex.: \`events/*.json\`).
+- **Aprovação manual** (opcional): uma ação de aprovação pausa o pipeline até alguém aprovar, antes da produção.
+- **Deploy em produção**: com o artefato que passou por tudo — nunca reconstruído.
+
+O artefato promovido deve ser sempre o mesmo e aprovado: uma versão publicada do Lambda, uma tag imutável da imagem de container (ou o digest), um template empacotado. Ferramentas como o **Amazon Q Developer** ajudam a gerar testes unitários a partir do código, que depois entram nesse fluxo.
+
+## Relação com a prova DVA-C02
+
+Espere perguntas sobre a estrutura e a ordem das fases do \`buildspec\`, onde o CodeBuild procura o arquivo, segredos via \`env\`, \`reports\` e \`cache\`, modo privilegiado para Docker, e a ordem dos testes e aprovações num pipeline.`;
+
+  const iacTestEnvLessonContent = `## Objetivo
+
+Ao final desta lição você vai conseguir criar ambientes de teste reproduzíveis e descartáveis com o AWS CloudFormation e o AWS SAM, usando parâmetros, condições, change sets, exports e proteções de dados.
+
+## Um template, vários ambientes
+
+Com infraestrutura como código, um ambiente de teste é idêntico ao de produção por construção — e pode ser criado e destruído a cada pull request. Os recursos do CloudFormation para isso:
+
+- **Parameters**: valores de entrada, como \`Ambiente\` (com \`AllowedValues: [teste, prod]\`), passados no deploy (\`--parameter-overrides Ambiente=teste\`).
+- **Mappings**: tabelas fixas consultadas com \`!FindInMap\` (ex.: tamanho de instância por ambiente).
+- **Conditions**: expressões como \`EhProd: !Equals [!Ref Ambiente, prod]\`, usadas para criar um recurso só em alguns ambientes (\`Condition: EhProd\`) ou escolher valores com \`!If\` — ex.: alarmes e retenção longa só em produção.
+- **Outputs** com **Export**: publicam valores (URL da API, nome da fila) que testes automatizados leem com \`describe-stacks\` e que outras stacks importam com \`!ImportValue\`. Uma stack não pode ser excluída enquanto outra importar um valor exportado por ela.
+
+## Mudanças com segurança
+
+- **Change sets** mostram o que uma atualização vai adicionar, modificar ou substituir antes de executá-la — essencial para perceber uma **substituição** (\`Replacement: True\`) de um recurso com dados.
+- **Rollback triggers**: a stack monitora alarmes do CloudWatch durante a criação/atualização (e por um período depois) e faz rollback automático se algum disparar.
+- **DeletionPolicy**: \`Retain\` mantém o recurso quando a stack é excluída, e \`Snapshot\` (RDS, EBS, entre outros) cria um snapshot antes de excluir. \`UpdateReplacePolicy\` faz o mesmo quando uma atualização substitui o recurso.
+- **Drift detection** encontra recursos alterados fora do CloudFormation.
+- Validação no pipeline, antes do deploy: \`aws cloudformation validate-template\`, \`sam validate\` e linters como o \`cfn-lint\`.
+
+## Escala: nested stacks e StackSets
+
+**Nested stacks** reutilizam pedaços de template (ex.: uma VPC padrão) dentro de outras stacks. **StackSets** implantam a mesma stack em várias contas e regiões a partir de uma conta administradora.
+
+## Ambientes por branch
+
+Além de stacks por branch em pipelines próprios, o **AWS Amplify** cria automaticamente um ambiente para cada branch conectada do Git e **previews** para cada pull request, com URL própria — o time testa a mudança isolada antes do merge.
+
+## Relação com a prova DVA-C02
+
+Espere cenários com parâmetros e conditions por ambiente, change sets para prever substituições, exports/\`ImportValue\` entre stacks, \`DeletionPolicy\` para proteger dados, rollback triggers com alarmes, ambientes efêmeros por pull request e ambientes por branch no Amplify.`;
+
+  const testAutomationLessons: LessonSeed[] = [
+    {
+      order: 1,
+      estimatedMinutes: 12,
+      title: 'Testes automatizados no pipeline: CodeBuild e buildspec',
+      content: pipelineTestsLessonContent,
+      resources: [
+        {
+          title: 'Referência do buildspec — documentação oficial',
+          url: 'https://docs.aws.amazon.com/codebuild/latest/userguide/build-spec-ref.html',
+        },
+        {
+          title: 'Relatórios de testes no CodeBuild — documentação oficial',
+          url: 'https://docs.aws.amazon.com/codebuild/latest/userguide/test-reporting.html',
+        },
+      ],
+    },
+    {
+      order: 2,
+      estimatedMinutes: 11,
+      title: 'Ambientes de teste com infraestrutura como código',
+      content: iacTestEnvLessonContent,
+      resources: [
+        {
+          title: 'Change sets do CloudFormation — documentação oficial',
+          url: 'https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/using-cfn-updating-stacks-changesets.html',
+        },
+        {
+          title: 'Conditions em templates do CloudFormation — documentação oficial',
+          url: 'https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/conditions-section-structure.html',
+        },
+      ],
+    },
+  ];
+
+  await seedLessons(testAutomationTopic.id, testAutomationLessons);
+
+  const codeBuildSourceInstructions = `No AWS CloudShell, crie um projeto Python com uma função, um teste e o \`buildspec.yml\`, compacte e envie para um bucket novo (troque \`NOME-DO-BUCKET\` por um nome único):
+
+\`\`\`bash
+mkdir -p devlab-build/tests && cd devlab-build
+cat > calculadora.py <<'FIM'
+def desconto(valor, percentual):
+    if not 0 <= percentual <= 100:
+        raise ValueError("percentual invalido")
+    return round(valor * (1 - percentual / 100), 2)
+FIM
+cat > tests/test_calculadora.py <<'FIM'
+import pytest
+
+from calculadora import desconto
+
+
+def test_desconto_simples():
+    assert desconto(200, 10) == 180
+
+
+def test_percentual_invalido():
+    with pytest.raises(ValueError):
+        desconto(100, 150)
+FIM
+cat > buildspec.yml <<'FIM'
+version: 0.2
+phases:
+  install:
+    runtime-versions:
+      python: 3.12
+    commands:
+      - pip install pytest
+  build:
+    commands:
+      - python -m pytest --junitxml=relatorios/unit.xml
+reports:
+  testes-unitarios:
+    files:
+      - unit.xml
+    base-directory: relatorios
+    file-format: JUNITXML
+FIM
+zip -r ../devlab-build.zip . && cd ..
+aws s3 mb s3://NOME-DO-BUCKET
+aws s3 cp devlab-build.zip s3://NOME-DO-BUCKET/devlab-build.zip
+\`\`\``;
+
+  const ephemeralTemplateInstructions = `No AWS CloudShell, crie o template de um ambiente com uma fila SQS, uma condição que só cria o alarme em produção e um output exportado:
+
+\`\`\`bash
+mkdir -p devlab-efemero && cd devlab-efemero
+cat > ambiente.yaml <<'FIM'
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Ambiente efemero do DevLab
+Parameters:
+  Ambiente:
+    Type: String
+    AllowedValues: [teste, prod]
+    Default: teste
+Conditions:
+  EhProd: !Equals [!Ref Ambiente, prod]
+Resources:
+  Fila:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: !If [EhProd, 1209600, 3600]
+  AlarmeFilaParada:
+    Type: AWS::CloudWatch::Alarm
+    Condition: EhProd
+    Properties:
+      AlarmDescription: Mensagem mais antiga da fila com mais de 5 minutos
+      Namespace: AWS/SQS
+      MetricName: ApproximateAgeOfOldestMessage
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt Fila.QueueName
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 5
+      Threshold: 300
+      ComparisonOperator: GreaterThanThreshold
+Outputs:
+  FilaUrl:
+    Value: !Ref Fila
+    Export:
+      Name: !Sub '\${AWS::StackName}-FilaUrl'
+FIM
+aws cloudformation validate-template --template-body file://ambiente.yaml
+\`\`\``;
+
+  const ephemeralTestInstructions = `Rode um "teste de integração" contra o ambiente, lendo a URL da fila do output da stack — exatamente como um teste automatizado no pipeline faria:
+
+\`\`\`bash
+FILA=$(aws cloudformation describe-stacks --stack-name devlab-teste --query "Stacks[0].Outputs[?OutputKey=='FilaUrl'].OutputValue" --output text)
+aws sqs send-message --queue-url "$FILA" --message-body "pedido-123"
+aws sqs receive-message --queue-url "$FILA" --query "Messages[0].Body" --output text
+\`\`\``;
+
+  const testAutomationLabs: LabSeed[] = [
+    {
+      title: 'Testes unitários no CodeBuild com relatório',
+      data: {
+        level: 2,
+        order: 1,
+        estimatedMinutes: 30,
+        objective:
+          'Ao final deste laboratório você terá um projeto do AWS CodeBuild que roda testes unitários a partir de um `buildspec.yml`, publica o resultado num report group, e falha o build quando um teste quebra.',
+        prerequisites:
+          'Conta AWS com acesso ao Console e ao AWS CloudShell. Ter lido a lição "Testes automatizados no pipeline: CodeBuild e buildspec" ajuda.',
+        context:
+          'Hoje os testes de uma aplicação só rodam quando alguém lembra de rodá-los no próprio computador. O primeiro passo para um pipeline confiável é um build automatizado que rode os testes sempre e falhe quando algum quebrar.',
+        troubleshooting:
+          '"Unknown runtime version" na fase install: a versão de Python precisa existir na imagem escolhida — confira a lista de runtimes da imagem na documentação do CodeBuild e ajuste `python: 3.12` no `buildspec.yml`. \n\n"YAML_FILE_ERROR" ou "buildspec.yml not found": o arquivo precisa estar na raiz do zip — confira com `unzip -l devlab-build.zip` que ele não está dentro de uma pasta. \n\nO build falha com AccessDenied no S3: confira se o bucket e a chave do objeto no projeto estão corretos e na mesma região do projeto. \n\nA aba "Reports" não mostra nada: o caminho em `base-directory`/`files` precisa bater com o arquivo gerado pelo pytest (`relatorios/unit.xml`).',
+        cleanup:
+          'Exclua o projeto `devlab-build` no CodeBuild e o report group `devlab-build-testes-unitarios`. Exclua o bucket com `aws s3 rb s3://NOME-DO-BUCKET --force`. A role de serviço criada pelo Console (`codebuild-devlab-build-service-role`) pode ser excluída no IAM.',
+        costWarning:
+          'O CodeBuild cobra por minuto de build; cada build deste laboratório leva cerca de 1 a 2 minutos na menor configuração, o que custa centavos (e contas elegíveis ao Free Tier têm minutos de build gratuitos por mês).',
+      },
+      steps: [
+        {
+          order: 1,
+          title: 'Criar o código, o teste e o buildspec',
+          instructions: codeBuildSourceInstructions,
+          validation:
+            '`aws s3 ls s3://NOME-DO-BUCKET` mostra `devlab-build.zip`, e `unzip -l devlab-build.zip` mostra `buildspec.yml` na raiz.',
+        },
+        {
+          order: 2,
+          title: 'Criar o projeto no CodeBuild',
+          instructions:
+            'No Console do CodeBuild, clique em "Create project". Nome: `devlab-build`. Em "Source", escolha **Amazon S3**, o bucket criado e a chave `devlab-build.zip`. Em "Environment", use uma imagem gerenciada Amazon Linux (a padrão sugerida pelo Console) com a menor capacidade de computação, e deixe o Console criar uma nova service role. Em "Buildspec", mantenha "Use a buildspec file". Crie o projeto.',
+          validation: 'O projeto `devlab-build` aparece na lista de projetos de build.',
+        },
+        {
+          order: 3,
+          title: 'Rodar o build',
+          instructions:
+            'Clique em "Start build" e acompanhe as fases em "Phase details" e o log em "Build logs".',
+          validation:
+            'O build termina como **Succeeded**; o log mostra `2 passed` do pytest, e as fases aparecem na ordem `INSTALL` → `PRE_BUILD` → `BUILD` → `POST_BUILD`.',
+        },
+        {
+          order: 4,
+          title: 'Ver o relatório de testes',
+          instructions: 'Abra a aba "Reports" do build (ou "Report groups" no menu do CodeBuild).',
+          validation:
+            'O report group `devlab-build-testes-unitarios` mostra um relatório com 2 testes, ambos com status "Succeeded".',
+        },
+        {
+          order: 5,
+          title: 'Quebrar um teste e ver o build falhar',
+          instructions:
+            'No CloudShell, altere o teste para esperar um valor errado e envie o zip de novo:\n\n```bash\ncd devlab-build\nsed -i "s/== 180/== 170/" tests/test_calculadora.py\nzip -r ../devlab-build.zip . && cd ..\naws s3 cp devlab-build.zip s3://NOME-DO-BUCKET/devlab-build.zip\n```\n\nRode um novo build no Console.',
+          validation:
+            'O build termina como **Failed** na fase `BUILD`, o log mostra `1 failed, 1 passed`, e o relatório aponta qual teste falhou — num pipeline, o deploy nem começaria.',
+        },
+      ],
+    },
+    {
+      title: 'Ambiente de teste efêmero com CloudFormation',
+      data: {
+        level: 2,
+        order: 2,
+        estimatedMinutes: 25,
+        objective:
+          'Ao final deste laboratório você terá criado um ambiente de teste a partir de um template com parâmetros e conditions, testado o ambiente usando os outputs da stack, previsto com um change set o que mudaria em produção, e destruído o ambiente.',
+        prerequisites:
+          'Conta AWS com acesso ao AWS CloudShell. Ter lido a lição "Ambientes de teste com infraestrutura como código" ajuda.',
+        context:
+          'Os testes de integração de um time rodam num ambiente de teste compartilhado que ninguém sabe como foi criado, e que vive quebrado por testes anteriores. A proposta é criar um ambiente novo a partir do template a cada execução, testar e destruir.',
+        troubleshooting:
+          '"Template format error": a indentação do YAML precisa ser exatamente a do exemplo (espaços, sem tabs); rode o `validate-template` de novo depois de corrigir. \n\n"No changes to deploy" no passo 4: o change set só é criado se algo mudar — confira se passou `Ambiente=prod`. \n\n`receive-message` não retorna nada: a mensagem pode levar um instante para aparecer — rode o comando de novo. \n\nA exclusão da stack falha com "Export ... cannot be deleted as it is in use": alguma outra stack importa o output — exclua a stack importadora primeiro.',
+        cleanup:
+          'O passo 5 já exclui a stack (e, com ela, a fila e o change set não executado). Confira com `aws cloudformation list-stacks --stack-status-filter DELETE_COMPLETE --query "StackSummaries[?StackName==\'devlab-teste\']"`.',
+        costWarning:
+          'O ambiente de teste tem só uma fila SQS, e as poucas requisições ficam dentro do Free Tier. O alarme de produção nunca é criado neste laboratório, porque o change set não é executado.',
+      },
+      steps: [
+        {
+          order: 1,
+          title: 'Escrever e validar o template',
+          instructions: ephemeralTemplateInstructions,
+          validation:
+            'O `validate-template` responde com a lista de `Parameters` (incluindo `Ambiente`) e a `Description` — o template está sintaticamente correto.',
+        },
+        {
+          order: 2,
+          title: 'Criar o ambiente de teste',
+          instructions:
+            'Rode:\n\n```bash\naws cloudformation deploy --template-file ambiente.yaml --stack-name devlab-teste --parameter-overrides Ambiente=teste\naws cloudformation describe-stack-resources --stack-name devlab-teste --query "StackResources[].LogicalResourceId"\n```',
+          validation:
+            'A stack é criada com um único recurso, `Fila`: como `Ambiente=teste`, a condition `EhProd` é falsa e o alarme não existe neste ambiente.',
+        },
+        {
+          order: 3,
+          title: 'Testar usando os outputs da stack',
+          instructions: ephemeralTestInstructions,
+          validation:
+            'O último comando imprime `pedido-123` — o teste descobriu a fila pelo output da stack, sem nenhum nome fixo no código do teste.',
+        },
+        {
+          order: 4,
+          title: 'Prever a mudança para prod com um change set',
+          instructions:
+            'Crie um change set sem executá-lo:\n\n```bash\naws cloudformation deploy --template-file ambiente.yaml --stack-name devlab-teste --parameter-overrides Ambiente=prod --no-execute-changeset\n```\n\nNo Console do CloudFormation, abra a stack `devlab-teste`, aba "Change sets", e abra o change set criado.',
+          validation:
+            'O change set lista `AlarmeFilaParada` com ação **Add** e `Fila` com ação **Modify** (a retenção muda de 1 hora para 14 dias) — tudo visível antes de qualquer mudança real.',
+        },
+        {
+          order: 5,
+          title: 'Destruir o ambiente',
+          instructions:
+            'Rode `aws cloudformation delete-stack --stack-name devlab-teste` e depois `aws cloudformation wait stack-delete-complete --stack-name devlab-teste`.',
+          validation:
+            'O comando `wait` termina sem erro e a fila deixa de existir no Console do SQS — o ambiente efêmero sumiu por completo, e a próxima execução começa do zero.',
+        },
+      ],
+    },
+  ];
+
+  await seedLabs(testAutomationTopic.id, testAutomationLabs);
+
+  const testAutomationQuestionsToSeed: QuestionSeed[] = [
+    {
+      prompt: 'Em que ordem o AWS CodeBuild executa as fases de um buildspec?',
+      type: 'KNOWLEDGE',
+      difficulty: 'EASY',
+      explanation: 'As fases são executadas na ordem install, pre_build, build e post_build.',
+      officialReferences: 'https://docs.aws.amazon.com/codebuild/latest/userguide/build-spec-ref.html',
+      options: [
+        { text: 'install → pre_build → build → post_build', isCorrect: true, explanation: 'Correto.' },
+        { text: 'pre_build → install → build → post_build', isCorrect: false, explanation: 'install vem primeiro.' },
+        { text: 'build → test → deploy', isCorrect: false, explanation: 'Esses não são nomes de fases do buildspec.' },
+        { text: 'A ordem é definida pela posição das fases no arquivo.', isCorrect: false, explanation: 'A ordem das fases é fixa.' },
+      ],
+    },
+    {
+      prompt: 'Por padrão, onde o AWS CodeBuild procura as instruções de build de um projeto?',
+      type: 'KNOWLEDGE',
+      difficulty: 'EASY',
+      explanation:
+        'Por padrão, o CodeBuild procura um arquivo buildspec.yml na raiz do código-fonte. É possível informar outro nome/caminho ou um buildspec inline no projeto.',
+      options: [
+        { text: 'Num arquivo buildspec.yml na raiz do código-fonte.', isCorrect: true, explanation: 'Correto.' },
+        { text: 'Num arquivo appspec.yml na raiz do código-fonte.', isCorrect: false, explanation: 'O appspec é do CodeDeploy.' },
+        { text: 'Numa pasta .codebuild/ obrigatória.', isCorrect: false, explanation: 'Não existe essa convenção.' },
+        { text: 'Sempre num buildspec definido no Console, nunca no repositório.', isCorrect: false, explanation: 'O padrão é o arquivo no repositório.' },
+      ],
+    },
+    {
+      prompt:
+        'Um time quer acompanhar, build a build, quantos testes passaram e falharam no AWS CodeBuild. O que deve ser configurado?',
+      type: 'KNOWLEDGE',
+      difficulty: 'MEDIUM',
+      explanation:
+        'A seção reports do buildspec publica arquivos de resultado (ex.: JUnit XML) num report group, que mostra os resultados e o histórico dos testes.',
+      options: [
+        {
+          text: 'A seção reports do buildspec apontando para os arquivos de resultado (ex.: JUnit XML).',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'A seção artifacts com os arquivos de teste.', isCorrect: false, explanation: 'artifacts leva arquivos para os próximos stages, sem interpretar resultados.' },
+        { text: 'A seção cache com a pasta de relatórios.', isCorrect: false, explanation: 'cache acelera builds, não exibe resultados.' },
+        { text: 'Um alarme do CloudWatch no projeto.', isCorrect: false, explanation: 'Não mostra o resultado de cada teste.' },
+      ],
+    },
+    {
+      prompt:
+        'Os testes de integração rodados no CodeBuild precisam da senha de um banco de testes, guardada no Secrets Manager. Como disponibilizá-la ao build sem escrevê-la no repositório?',
+      type: 'APPLICATION',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Na seção env do buildspec, secrets-manager (ou parameter-store) mapeia uma variável de ambiente para o segredo; a service role do projeto precisa de permissão para lê-lo.',
+      options: [
+        {
+          text: 'Mapear a variável na seção env/secrets-manager do buildspec e dar permissão à service role do projeto.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'Colocar a senha em env/variables no buildspec.', isCorrect: false, explanation: 'O valor ficaria em texto claro no repositório.' },
+        { text: 'Colocar a senha no nome do projeto.', isCorrect: false, explanation: 'Não faz sentido e exporia o valor.' },
+        { text: 'Passar a senha como argumento de linha de comando fixo no buildspec.', isCorrect: false, explanation: 'Também fica no repositório e nos logs.' },
+      ],
+    },
+    {
+      prompt:
+        'Cada build de um projeto Node.js no CodeBuild passa minutos baixando as mesmas dependências. Qual configuração reduz esse tempo?',
+      type: 'APPLICATION',
+      difficulty: 'MEDIUM',
+      explanation: 'A seção cache (com cache no S3 ou local) guarda caminhos como node_modules ou o cache do npm entre builds.',
+      options: [
+        { text: 'Configurar cache dos caminhos de dependências (S3 ou local).', isCorrect: true, explanation: 'Correto.' },
+        { text: 'Aumentar o timeout do build.', isCorrect: false, explanation: 'Só permite builds mais longos.' },
+        { text: 'Mover a instalação para post_build.', isCorrect: false, explanation: 'A instalação continuaria acontecendo a cada build.' },
+        { text: 'Habilitar o modo privilegiado.', isCorrect: false, explanation: 'Serve para rodar Docker dentro do build.' },
+      ],
+    },
+    {
+      prompt:
+        'Um pipeline deve garantir que só chegue à produção uma versão que passou em testes de integração num ambiente real, com aprovação de uma pessoa. Qual sequência de stages atende?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Build com testes unitários → deploy num ambiente de teste → ação de teste (CodeBuild) com testes de integração → aprovação manual → deploy em produção, sempre com o mesmo artefato.',
+      options: [
+        {
+          text: 'Build (unitários) → deploy em teste → testes de integração → aprovação manual → deploy em produção.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        {
+          text: 'Deploy em produção → testes de integração → aprovação manual.',
+          isCorrect: false,
+          explanation: 'Testa depois de expor a mudança aos clientes.',
+        },
+        {
+          text: 'Build → aprovação manual → deploy em produção, sem ambiente de teste.',
+          isCorrect: false,
+          explanation: 'Não há testes de integração num ambiente real.',
+        },
+        {
+          text: 'Build separado para teste e para produção, cada um com seu artefato.',
+          isCorrect: false,
+          explanation: 'O artefato testado deve ser o mesmo que vai para produção.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Os testes de integração de um time falham de forma intermitente porque vários pull requests compartilham o mesmo ambiente de teste. Qual abordagem resolve o problema?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Criar um ambiente efêmero a partir do template para cada pull request (uma stack por branch), rodar os testes contra ele e excluí-lo em seguida elimina a interferência entre execuções.',
+      options: [
+        {
+          text: 'Criar uma stack efêmera por pull request a partir do template, testar e excluir.',
+          isCorrect: true,
+          explanation: 'Correto: cada execução tem seu próprio ambiente limpo.',
+        },
+        { text: 'Rodar os testes de integração só uma vez por semana.', isCorrect: false, explanation: 'Adia os problemas em vez de resolvê-los.' },
+        { text: 'Aumentar os timeouts dos testes.', isCorrect: false, explanation: 'Não resolve a interferência entre execuções.' },
+        { text: 'Rodar os testes de integração contra produção.', isCorrect: false, explanation: 'Coloca produção em risco.' },
+      ],
+    },
+    {
+      prompt:
+        'Antes de atualizar uma stack de produção, um desenvolvedor quer ver exatamente quais recursos serão adicionados, modificados ou substituídos. Qual recurso do CloudFormation atende?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Um change set mostra as mudanças previstas — incluindo se um recurso será substituído — antes de ser executado.',
+      options: [
+        { text: 'Change set', isCorrect: true, explanation: 'Correto.' },
+        { text: 'Drift detection', isCorrect: false, explanation: 'Compara a stack com o estado real, não prevê uma atualização.' },
+        { text: 'Stack policy', isCorrect: false, explanation: 'Impede atualizações em recursos, mas não mostra o que vai mudar.' },
+        { text: 'validate-template', isCorrect: false, explanation: 'Só verifica a sintaxe do template.' },
+      ],
+    },
+    {
+      prompt:
+        'Um mesmo template é usado para os ambientes teste e prod. Alarmes do CloudWatch e retenção longa de mensagens só devem existir em prod. Como implementar isso no template?',
+      type: 'SCENARIO',
+      difficulty: 'HARD',
+      explanation:
+        'Um parâmetro Ambiente e uma condition (ex.: EhProd: !Equals [!Ref Ambiente, prod]) permitem criar recursos só em prod (Condition: EhProd) e escolher valores com !If.',
+      options: [
+        {
+          text: 'Parâmetro Ambiente + Conditions (Condition nos alarmes e !If na retenção).',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'Manter dois templates, um por ambiente.', isCorrect: false, explanation: 'Os templates divergem com o tempo.' },
+        { text: 'Criar os alarmes manualmente depois do deploy de prod.', isCorrect: false, explanation: 'Fica fora do controle de versão e do template.' },
+        { text: 'Usar Outputs com Export para ligar e desligar recursos.', isCorrect: false, explanation: 'Outputs publicam valores; não controlam a criação de recursos.' },
+      ],
+    },
+    {
+      prompt:
+        'Uma stack de rede cria uma fila compartilhada, e várias stacks de aplicação precisam da URL dessa fila. Como compartilhar o valor entre stacks?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'A stack de rede declara um Output com Export, e as outras stacks o importam com Fn::ImportValue. A stack exportadora não pode ser excluída enquanto o valor estiver importado.',
+      options: [
+        {
+          text: 'Output com Export na stack de rede e Fn::ImportValue nas stacks de aplicação.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'Copiar a URL manualmente para cada template.', isCorrect: false, explanation: 'Quebra quando a fila muda.' },
+        { text: 'Usar Mappings com a URL.', isCorrect: false, explanation: 'Mappings são valores fixos escritos no próprio template.' },
+        { text: 'Usar Fn::GetAtt entre stacks.', isCorrect: false, explanation: 'GetAtt só referencia recursos da mesma stack.' },
+      ],
+    },
+    {
+      prompt:
+        'Uma atualização de stack deve ser desfeita automaticamente se o alarme de taxa de erros da aplicação disparar durante o deploy ou logo após. Qual recurso do CloudFormation atende?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'HARD',
+      explanation:
+        'Rollback triggers (rollback configuration) fazem o CloudFormation monitorar alarmes do CloudWatch durante a operação e por um período configurável depois, e reverter a stack se algum disparar.',
+      officialReferences:
+        'https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/using-cfn-rollback-triggers.html',
+      options: [
+        { text: 'Rollback triggers com o alarme de taxa de erros.', isCorrect: true, explanation: 'Correto.' },
+        { text: 'DeletionPolicy: Retain', isCorrect: false, explanation: 'Protege recursos na exclusão, não reverte atualizações.' },
+        { text: 'Drift detection agendada.', isCorrect: false, explanation: 'Detecta mudanças manuais; não reverte deploys.' },
+        { text: 'Termination protection', isCorrect: false, explanation: 'Impede a exclusão da stack.' },
+      ],
+    },
+    {
+      prompt:
+        'Um ambiente efêmero de teste inclui uma tabela DynamoDB com dados de referência caros de recriar. Ao excluir a stack, a tabela deve ser mantida. O que usar no template?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'MEDIUM',
+      explanation: 'DeletionPolicy: Retain faz o CloudFormation manter o recurso quando a stack é excluída.',
+      options: [
+        { text: 'DeletionPolicy: Retain na tabela.', isCorrect: true, explanation: 'Correto.' },
+        { text: 'DeletionPolicy: Snapshot na tabela.', isCorrect: false, explanation: 'Snapshot não é suportado para tabelas DynamoDB; vale para RDS, EBS e outros.' },
+        { text: 'Termination protection na stack.', isCorrect: false, explanation: 'Impede a exclusão de toda a stack, não só preserva a tabela.' },
+        { text: 'Um Output com Export do nome da tabela.', isCorrect: false, explanation: 'Não preserva o recurso.' },
+      ],
+    },
+    {
+      prompt:
+        'O ambiente de testes de integração de uma aplicação em containers às vezes testa uma imagem diferente da que vai para produção, porque os dois usam a tag latest. Como garantir que produção receba exatamente a imagem testada?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'HARD',
+      explanation:
+        'Referenciar a imagem por uma tag imutável e versionada (com tag immutability habilitada no ECR) ou pelo digest garante que o artefato aprovado nos testes seja o mesmo promovido para produção.',
+      options: [
+        {
+          text: 'Usar uma tag imutável e versionada (ou o digest) da imagem em todos os ambientes, com tag immutability no ECR.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'Reconstruir a imagem para produção a partir do mesmo commit.', isCorrect: false, explanation: 'Um novo build pode produzir uma imagem diferente da testada.' },
+        { text: 'Continuar com latest e rodar os testes mais rápido.', isCorrect: false, explanation: 'latest continua mudando entre o teste e a produção.' },
+        { text: 'Usar um repositório ECR por ambiente com a tag latest.', isCorrect: false, explanation: 'Não garante que a imagem promovida seja a testada.' },
+      ],
+    },
+    {
+      prompt:
+        'Um time de frontend quer que cada pull request ganhe automaticamente um ambiente com URL própria para revisão, antes do merge. Qual serviço oferece isso pronto?',
+      type: 'KNOWLEDGE',
+      difficulty: 'MEDIUM',
+      explanation:
+        'O AWS Amplify cria ambientes por branch conectada do Git e previews para pull requests, cada um com URL própria.',
+      options: [
+        { text: 'AWS Amplify (previews de pull request).', isCorrect: true, explanation: 'Correto.' },
+        { text: 'AWS CloudFormation StackSets.', isCorrect: false, explanation: 'StackSets implantam stacks em várias contas e regiões.' },
+        { text: 'Amazon API Gateway stages.', isCorrect: false, explanation: 'Stages são criados manualmente e não por pull request.' },
+        { text: 'AWS Elastic Beanstalk com .ebextensions.', isCorrect: false, explanation: 'Não cria ambientes por pull request automaticamente.' },
+      ],
+    },
+  ];
+
+  await seedQuestions(testAutomationTopic.id, testAutomationQuestionsToSeed);
+
+  const testAutomationFlashcardsToSeed: FlashcardSeed[] = [
+    {
+      conceptName: 'Fases do buildspec',
+      conceptDescription: 'Estrutura e ordem das fases de um buildspec do CodeBuild.',
+      serviceId: codeBuildService.id,
+      front: 'Quais são as fases de um buildspec e onde fica o arquivo por padrão?',
+      back: 'install → pre_build → build → post_build. O arquivo padrão é buildspec.yml na raiz do código-fonte. Um comando que falha na fase build faz o build falhar.',
+    },
+    {
+      conceptName: 'Seções env, reports, artifacts e cache',
+      conceptDescription: 'Seções de apoio do buildspec.',
+      serviceId: codeBuildService.id,
+      front: 'Para que servem as seções env, reports, artifacts e cache do buildspec?',
+      back: 'env: variáveis (inclusive de Parameter Store e Secrets Manager). reports: resultados de testes num report group. artifacts: saídas para os próximos stages. cache: caminhos guardados entre builds.',
+    },
+    {
+      conceptName: 'Modo privilegiado do CodeBuild',
+      conceptDescription: 'Configuração necessária para rodar Docker dentro de um build.',
+      serviceId: codeBuildService.id,
+      front: 'O que é preciso para construir imagens Docker dentro do CodeBuild?',
+      back: 'Habilitar o modo privilegiado (privileged mode) no ambiente do projeto.',
+    },
+    {
+      conceptName: 'Testes num pipeline',
+      conceptDescription: 'Posição de cada tipo de teste num pipeline de entrega contínua.',
+      serviceId: codePipelineService.id,
+      front: 'Qual a sequência típica de testes num pipeline até produção?',
+      back: 'Build com testes unitários → deploy em teste → testes de integração (ação do CodeBuild) → aprovação manual → deploy em produção, sempre com o mesmo artefato.',
+    },
+    {
+      conceptName: 'Parameters e Conditions',
+      conceptDescription: 'Um template para vários ambientes no CloudFormation.',
+      serviceId: cloudFormationService.id,
+      front: 'Como criar um recurso só em produção usando o mesmo template?',
+      back: 'Parâmetro Ambiente + condition (EhProd: !Equals [!Ref Ambiente, prod]); o recurso recebe Condition: EhProd, e valores variam com !If.',
+    },
+    {
+      conceptName: 'Change sets',
+      conceptDescription: 'Prévia das mudanças de uma atualização de stack.',
+      serviceId: cloudFormationService.id,
+      front: 'Como ver o que uma atualização de stack vai mudar antes de aplicá-la?',
+      back: 'Com um change set: lista recursos adicionados, modificados e substituídos (Replacement), e só muda algo quando executado.',
+    },
+    {
+      conceptName: 'Exports e ImportValue',
+      conceptDescription: 'Compartilhamento de valores entre stacks.',
+      serviceId: cloudFormationService.id,
+      front: 'Como uma stack usa um valor criado por outra stack?',
+      back: 'A stack de origem declara um Output com Export; a outra usa Fn::ImportValue. A stack exportadora não pode ser excluída enquanto o valor estiver importado.',
+    },
+    {
+      conceptName: 'DeletionPolicy',
+      conceptDescription: 'Proteção de recursos com dados na exclusão ou substituição.',
+      serviceId: cloudFormationService.id,
+      front: 'Como impedir que o CloudFormation apague dados ao excluir uma stack?',
+      back: 'DeletionPolicy: Retain (mantém o recurso) ou Snapshot (RDS, EBS etc.); UpdateReplacePolicy faz o mesmo quando uma atualização substitui o recurso.',
+    },
+    {
+      conceptName: 'Rollback triggers',
+      conceptDescription: 'Rollback automático de stacks com base em alarmes.',
+      serviceId: cloudFormationService.id,
+      front: 'Como reverter automaticamente uma atualização de stack que aumentou os erros?',
+      back: 'Com rollback triggers: o CloudFormation monitora alarmes do CloudWatch durante a operação e por um período depois, e faz rollback se algum disparar.',
+    },
+    {
+      conceptName: 'Ambientes por branch no Amplify',
+      conceptDescription: 'Ambientes automáticos por branch e pull request no AWS Amplify.',
+      serviceId: amplifyService.id,
+      front: 'Como ter um ambiente com URL própria para cada pull request de um frontend?',
+      back: 'Com o AWS Amplify: ambientes por branch conectada e previews de pull request, criados automaticamente.',
+    },
+  ];
+
+  await seedFlashcards(testAutomationTopic.id, testAutomationFlashcardsToSeed);
+
   const domainCount = await prisma.domain.count({ where: { examVersionId: examVersion.id } });
   const topicCount = await prisma.topic.count({ where: { domain: { examVersionId: examVersion.id } } });
 
