@@ -7737,6 +7737,595 @@ fields @timestamp, level, message, requestId
 
   await seedFlashcards(observabilityTopic.id, observabilityFlashcardsToSeed);
 
+  // ---------------------------------------------------------------------
+  // Content-authoring push, topic 12 of 12: Domain 4 "Otimização de
+  // aplicações", to the exam-readiness bar. Last of the skeleton topics.
+  // ---------------------------------------------------------------------
+
+  const optimizationTopic = await prisma.topic.findFirstOrThrow({
+    where: { domainId: troubleshootingDomain.id, name: 'Otimização de aplicações' },
+  });
+
+  const cloudFrontServiceData = {
+    shortName: 'CloudFront',
+    category: 'Networking & Content Delivery',
+    description: 'CDN que entrega conteúdo a partir de pontos de presença próximos aos usuários, com cache configurável por políticas.',
+  };
+  const cloudFrontService = await prisma.aWSService.upsert({
+    where: { name: 'Amazon CloudFront' },
+    update: cloudFrontServiceData,
+    create: { name: 'Amazon CloudFront', ...cloudFrontServiceData },
+  });
+
+  const lambdaPerformanceLessonContent = `## Objetivo
+
+Ao final desta lição você vai conseguir ajustar memória e concorrência de funções Lambda, reduzir cold starts e escolher entre reserved concurrency, provisioned concurrency e SnapStart.
+
+## Memória é CPU
+
+No Lambda, a memória (128 MB a 10.240 MB) também define a CPU. Para código limitado por CPU, dobrar a memória pode quase reduzir a duração pela metade — e, como o custo é **GB × segundo**, a função fica mais rápida praticamente pelo mesmo preço, até o ponto em que mais CPU deixa de ajudar (por exemplo, código de uma thread só depois de ~1.769 MB, ou código que passa o tempo esperando rede). Para achar esse ponto com dados, o **AWS Lambda Power Tuning** (uma máquina de estados do Step Functions de código aberto) executa a função em várias memórias e mostra duração e custo de cada uma; o **AWS Compute Optimizer** também recomenda memória a partir do uso real. A arquitetura **arm64 (Graviton)** costuma dar melhor preço-desempenho para código compatível.
+
+## Cold starts
+
+Um cold start acontece quando o Lambda precisa criar um ambiente de execução novo: baixar o código, iniciar o runtime e rodar o código de inicialização (fora do handler). Para reduzi-lo:
+
+- Pacote pequeno e só as dependências necessárias.
+- Criar clientes do SDK e conexões **fora do handler**, para serem reutilizados nas invocações seguintes do mesmo ambiente (warm starts).
+- **Provisioned concurrency**: mantém um número de ambientes já inicializados para uma **versão ou alias** (não para \`$LATEST\`), eliminando cold starts nesse volume — com custo enquanto estiver configurada, e com escalonamento automático via Application Auto Scaling.
+- **SnapStart**: tira um snapshot do ambiente já inicializado ao publicar uma versão e restaura a partir dele — disponível para Java, Python e .NET em versões recentes dos runtimes, sem o custo fixo da provisioned concurrency. Código de inicialização precisa lidar com unicidade (ex.: não gerar IDs ou conexões que serão "clonados" entre ambientes).
+
+## Concorrência
+
+Cada região tem uma cota de execuções concorrentes por conta (1.000 por padrão, ajustável). Acima dela, invocações síncronas recebem **429 (\`TooManyRequestsException\`)**; invocações assíncronas são repetidas pelo próprio Lambda por até 6 horas.
+
+- **Reserved concurrency** garante uma parte da cota para uma função **e** limita a função a ela — protege tanto a função (sempre tem capacidade) quanto um recurso a jusante (ex.: um banco que não aguenta mais conexões). Com valor **0**, a função é totalmente bloqueada — um "desligador" de emergência.
+- Em **event source mappings do SQS**, a **maximum concurrency** limita quantas funções consomem a fila ao mesmo tempo, sem precisar de reserved concurrency.
+- **Batch size** e **batching window** controlam quantos registros cada invocação recebe; mais registros por invocação reduzem custo e overhead. Com **\`ReportBatchItemFailures\`**, a função informa só os itens que falharam, e apenas eles voltam para a fila — em vez de reprocessar o lote inteiro.
+- O **visibility timeout** da fila deve ser maior que o timeout da função (a recomendação é pelo menos 6 vezes), para uma mensagem em processamento não ser entregue de novo.
+
+## Relação com a prova DVA-C02
+
+Espere cenários sobre memória/CPU e Power Tuning, clientes fora do handler, provisioned concurrency vs. SnapStart, reserved concurrency (inclusive 0), 429 por limite de concorrência, maximum concurrency no SQS e \`ReportBatchItemFailures\`.`;
+
+  const cacheMessagingLessonContent = `## Objetivo
+
+Ao final desta lição você vai conseguir escolher a camada de cache certa (CloudFront, API Gateway, ElastiCache/DAX), configurar a chave de cache para ter mais acertos, e usar SQS e SNS para reduzir custo e proteger o backend.
+
+## Camadas de cache
+
+- **CloudFront**: cache nas bordas, perto do usuário, para conteúdo estático e respostas de API cacheáveis. O que entra na **chave de cache** é definido por uma **cache policy** (quais headers, cookies e query strings) — cada item incluído multiplica as variações e **reduz a taxa de acertos**. O que o backend precisa receber, mas não deve variar o cache, vai numa **origin request policy**. Prefira nomes de arquivo versionados (\`app.3f2a.js\`) a invalidações, que têm custo e demoram a propagar.
+- **Cache do API Gateway** (APIs REST): cache por stage, com TTL padrão de 300 segundos (até 3.600), cobrado por hora conforme o tamanho; parâmetros de requisição podem entrar na chave de cache. Clientes podem pedir para ignorar o cache com \`Cache-Control: max-age=0\` — o que deve ser restrito por permissão.
+- **ElastiCache e DAX**: cache perto dos dados, com as estratégias de lazy loading e write-through (tópico de armazenamento).
+- **No próprio Lambda**: variáveis globais e \`/tmp\` sobrevivem entre invocações do mesmo ambiente — bons para configurações e dados de referência.
+
+## Mensageria para performance e custo
+
+- **Filas como amortecedor**: uma fila SQS entre a API e um banco absorve picos, e o consumidor processa no ritmo que o banco aguenta.
+- **Long polling**: \`ReceiveMessage\` com \`WaitTimeSeconds\` de até **20 segundos** (ou o atributo \`ReceiveMessageWaitTimeSeconds\` da fila) espera mensagens chegarem em vez de voltar vazio na hora — menos requisições vazias, menos custo e menos latência para ver mensagens novas. **Short polling** (0 s) responde imediatamente e pode voltar vazio mesmo com mensagens na fila.
+- **Lotes**: \`SendMessageBatch\`, \`DeleteMessageBatch\` e \`ReceiveMessage\` com até 10 mensagens por chamada reduzem o número de requisições cobradas.
+- **Mensagens grandes**: o SQS tem um tamanho máximo de mensagem (o limite era de 256 KB por muito tempo e foi ampliado para 1 MiB em 2025); para payloads maiores, guarde o conteúdo no S3 e envie só a referência (o padrão do Extended Client Library).
+- **Filter policies do SNS**: uma assinatura pode receber só as mensagens que casam com uma política de filtro, sobre **message attributes** ou sobre o **corpo** da mensagem (\`FilterPolicyScope\`). Cada fila deixa de receber (e de pagar para processar) mensagens irrelevantes. Regras do EventBridge cumprem o mesmo papel para eventos.
+
+## Relação com a prova DVA-C02
+
+Espere cenários sobre a chave de cache do CloudFront (poucos headers → mais acertos), cache do API Gateway por stage e TTL, long polling de até 20 s, operações em lote, payloads grandes via S3, e filter policies do SNS para entregar só o que cada assinante precisa.`;
+
+  const optimizationLessons: LessonSeed[] = [
+    {
+      order: 1,
+      estimatedMinutes: 12,
+      title: 'Performance do Lambda: memória, concorrência e cold starts',
+      content: lambdaPerformanceLessonContent,
+      resources: [
+        {
+          title: 'Concorrência do Lambda — documentação oficial',
+          url: 'https://docs.aws.amazon.com/lambda/latest/dg/lambda-concurrency.html',
+        },
+        {
+          title: 'Lambda SnapStart — documentação oficial',
+          url: 'https://docs.aws.amazon.com/lambda/latest/dg/snapstart.html',
+        },
+      ],
+    },
+    {
+      order: 2,
+      estimatedMinutes: 11,
+      title: 'Cache e mensageria para performance e custo',
+      content: cacheMessagingLessonContent,
+      resources: [
+        {
+          title: 'Chave de cache do CloudFront — documentação oficial',
+          url: 'https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/understanding-the-cache-key.html',
+        },
+        {
+          title: 'Filter policies do SNS — documentação oficial',
+          url: 'https://docs.aws.amazon.com/sns/latest/dg/sns-message-filtering.html',
+        },
+      ],
+    },
+  ];
+
+  await seedLessons(optimizationTopic.id, optimizationLessons);
+
+  const cpuFunctionInstructions = `No Console do Lambda, crie a função \`devlab-cpu\` com Python 3.13. Em "Configuration" > "General configuration", ajuste o **timeout para 30 segundos** (mantenha 128 MB de memória). Substitua o código por este, que faz um trabalho só de CPU, e clique em "Deploy":
+
+\`\`\`python
+import hashlib
+import time
+
+
+def lambda_handler(event, context):
+    inicio = time.time()
+    dado = b"devlab"
+    for _ in range(300000):
+        dado = hashlib.sha256(dado).digest()
+    return {"segundos": round(time.time() - inicio, 3), "memoria_mb": int(context.memory_limit_in_mb)}
+\`\`\``;
+
+  const memoryMeasureInstructions = `No AWS CloudShell, meça a linha \`REPORT\` com 128 MB, depois com 512 MB e com 1769 MB (invoque duas vezes em cada memória e use a segunda, sem cold start):
+
+\`\`\`bash
+medir() {
+  aws lambda invoke --function-name devlab-cpu --log-type Tail saida.json --query LogResult --output text | base64 -d | grep REPORT
+}
+medir; medir
+for mem in 512 1769; do
+  aws lambda update-function-configuration --function-name devlab-cpu --memory-size $mem > /dev/null
+  aws lambda wait function-updated --function-name devlab-cpu
+  echo "== $mem MB"; medir; medir
+done
+\`\`\`
+
+Para cada memória, calcule o custo relativo: \`memória em GB × duração em segundos\` (ex.: 0,125 GB × 4 s = 0,5 GB-s).`;
+
+  const snsFilterSetupInstructions = `No AWS CloudShell, crie o tópico e as duas filas:
+
+\`\`\`bash
+aws sns create-topic --name devlab-eventos
+aws sqs create-queue --queue-name devlab-pagamentos
+aws sqs create-queue --queue-name devlab-todos
+\`\`\`
+
+Depois, no Console do SQS, abra cada fila e use "Subscribe to Amazon SNS topic" escolhendo \`devlab-eventos\` (esse caminho já ajusta a access policy da fila para o SNS poder entregar).`;
+
+  const snsPublishInstructions = `Publique três eventos com o atributo \`tipo\` (troque \`ARN-DO-TOPICO\` pelo ARN de \`devlab-eventos\`):
+
+\`\`\`bash
+for tipo in pagamento cadastro pagamento; do
+  aws sns publish --topic-arn ARN-DO-TOPICO --message "evento de $tipo" --message-attributes "{\\"tipo\\": {\\"DataType\\": \\"String\\", \\"StringValue\\": \\"$tipo\\"}}"
+done
+\`\`\`
+
+Leia as duas filas com **long polling** e em **lote** (até 10 mensagens por chamada):
+
+\`\`\`bash
+for fila in devlab-pagamentos devlab-todos; do
+  URL=$(aws sqs get-queue-url --queue-name $fila --query QueueUrl --output text)
+  echo "== $fila"
+  aws sqs receive-message --queue-url $URL --max-number-of-messages 10 --wait-time-seconds 20 --query "length(Messages)"
+done
+\`\`\``;
+
+  const longPollingInstructions = `Compare uma leitura de uma fila vazia com short polling e com long polling configurado na própria fila:
+
+\`\`\`bash
+URL=$(aws sqs get-queue-url --queue-name devlab-pagamentos --query QueueUrl --output text)
+aws sqs purge-queue --queue-url $URL
+time aws sqs receive-message --queue-url $URL --wait-time-seconds 0
+aws sqs set-queue-attributes --queue-url $URL --attributes ReceiveMessageWaitTimeSeconds=20
+time aws sqs receive-message --queue-url $URL
+\`\`\``;
+
+  const optimizationLabs: LabSeed[] = [
+    {
+      title: 'Memória, duração e custo do Lambda, e reserved concurrency',
+      data: {
+        level: 2,
+        order: 1,
+        estimatedMinutes: 25,
+        objective:
+          'Ao final deste laboratório você terá medido como a memória de uma função Lambda muda a duração e o custo de um trabalho de CPU, e usado reserved concurrency igual a zero para bloquear a função numa emergência.',
+        prerequisites:
+          'Conta AWS com acesso ao Console e ao AWS CloudShell. Ter lido a lição "Performance do Lambda: memória, concorrência e cold starts" ajuda.',
+        context:
+          'Uma função de processamento está lenta e alguém propôs "aumentar a memória", enquanto outra pessoa diz que isso vai ficar caro. Você vai decidir com números. De quebra, o time quer saber como desligar a função rapidamente se ela começar a sobrecarregar um sistema a jusante.',
+        troubleshooting:
+          '"Task timed out" com 128 MB: confira se o timeout foi ajustado para 30 segundos. \n\n`ResourceConflictException` ao mudar a memória: a atualização anterior ainda estava em andamento — o `aws lambda wait function-updated` do script evita isso; rode de novo. \n\nO `put-function-concurrency` falha dizendo que a concorrência não reservada ficaria abaixo do mínimo: isso só acontece com valores maiores que 0; reservar 0 é sempre permitido.',
+        cleanup:
+          'Rode `aws lambda delete-function-concurrency --function-name devlab-cpu` (se ainda não tiver rodado no passo 4) e exclua a função `devlab-cpu` e o log group `/aws/lambda/devlab-cpu`.',
+        costWarning:
+          'Algumas invocações de poucos segundos ficam dentro do Free Tier do Lambda (medido em GB-segundos).',
+      },
+      steps: [
+        {
+          order: 1,
+          title: 'Criar a função de CPU',
+          instructions: cpuFunctionInstructions,
+          validation: 'Um teste no Console devolve `segundos` (alguns segundos com 128 MB) e `memoria_mb: 128`.',
+        },
+        {
+          order: 2,
+          title: 'Medir em três memórias',
+          instructions: memoryMeasureInstructions,
+          validation:
+            'A duração cai bastante de 128 MB para 512 MB e de novo para 1769 MB (quase proporcional à memória), enquanto o custo em GB-s fica parecido — a função ficou muito mais rápida praticamente pelo mesmo preço.',
+        },
+        {
+          order: 3,
+          title: 'Interpretar o resultado',
+          instructions:
+            'Compare as três linhas `REPORT`: `Duration`, `Billed Duration` e `Max Memory Used`. Responda: a função precisava de mais memória para guardar dados, ou de mais CPU?',
+          validation:
+            '`Max Memory Used` fica baixo nas três medições — a função não precisava de memória, e sim da CPU que vem junto com ela. Em produção, o AWS Lambda Power Tuning automatiza essa comparação em várias memórias.',
+        },
+        {
+          order: 4,
+          title: 'Bloquear a função com reserved concurrency 0',
+          instructions:
+            'Rode `aws lambda put-function-concurrency --function-name devlab-cpu --reserved-concurrent-executions 0` e invoque a função com `aws lambda invoke --function-name devlab-cpu saida.json`. Depois remova o bloqueio com `aws lambda delete-function-concurrency --function-name devlab-cpu` e invoque de novo.',
+          validation:
+            'Com 0, a invocação falha com `TooManyRequestsException` (Rate Exceeded) — a função não roda em nenhuma hipótese. Depois de remover a reserva, ela volta a responder normalmente.',
+        },
+      ],
+    },
+    {
+      title: 'Filter policies do SNS e long polling no SQS',
+      data: {
+        level: 2,
+        order: 2,
+        estimatedMinutes: 25,
+        objective:
+          'Ao final deste laboratório você terá usado uma filter policy do SNS para que uma fila receba só os eventos que lhe interessam, lido mensagens em lote com long polling, e comparado short e long polling numa fila vazia.',
+        prerequisites:
+          'Conta AWS com acesso ao Console e ao AWS CloudShell. Ter feito o laboratório de fanout do tópico "Padrões de arquitetura e tolerância a falhas" e lido a lição "Cache e mensageria para performance e custo" ajuda.',
+        context:
+          'Um tópico de eventos de uma loja entrega tudo para todas as filas, e o serviço de pagamentos gasta tempo e dinheiro descartando eventos de cadastro. Além disso, o consumidor faz milhares de leituras vazias por dia. Você vai resolver os dois desperdícios.',
+        troubleshooting:
+          'A fila `devlab-pagamentos` recebe os três eventos: a filter policy não foi salva, ou está no escopo errado — ela deve usar o escopo "Message attributes" e o JSON `{"tipo": ["pagamento"]}`. \n\nNenhuma fila recebe nada: confira se as duas assinaturas estão "Confirmed" e se foram criadas pela tela da fila (que ajusta a access policy). \n\n`length(Messages)` mostra `None` ou erro: a fila estava vazia no momento — rode o `receive-message` de novo. \n\nO `purge-queue` reclama de purge recente: só é permitido um purge por fila a cada 60 segundos — espere e rode de novo.',
+        cleanup:
+          'Exclua o tópico com `aws sns delete-topic --topic-arn ARN-DO-TOPICO` e as filas com `aws sqs delete-queue --queue-url` (use `aws sqs get-queue-url` para cada uma).',
+        costWarning:
+          'As poucas publicações no SNS e requisições ao SQS ficam dentro do Free Tier.',
+      },
+      steps: [
+        {
+          order: 1,
+          title: 'Criar o tópico, as filas e as assinaturas',
+          instructions: snsFilterSetupInstructions,
+          validation: 'O tópico `devlab-eventos` mostra duas assinaturas SQS com status "Confirmed".',
+        },
+        {
+          order: 2,
+          title: 'Aplicar a filter policy',
+          instructions:
+            'No Console do SNS, abra a assinatura da fila `devlab-pagamentos`, clique em "Edit", abra "Subscription filter policy", escolha o escopo **Message attributes** e cole `{"tipo": ["pagamento"]}`. Salve. Não altere a assinatura de `devlab-todos`.',
+          validation: 'A assinatura de `devlab-pagamentos` mostra a filter policy; a de `devlab-todos` continua sem filtro.',
+        },
+        {
+          order: 3,
+          title: 'Publicar eventos e ler em lote',
+          instructions: snsPublishInstructions,
+          validation:
+            '`devlab-pagamentos` recebe **2** mensagens (só os pagamentos) e `devlab-todos` recebe **3** — o evento de cadastro nunca chegou à fila de pagamentos, e cada fila foi lida com uma única chamada em lote.',
+        },
+        {
+          order: 4,
+          title: 'Comparar short e long polling',
+          instructions: longPollingInstructions,
+          validation:
+            'Com `--wait-time-seconds 0` (short polling), a chamada volta vazia na hora; com `ReceiveMessageWaitTimeSeconds=20` na fila, a mesma chamada espera cerca de 20 segundos antes de voltar vazia — num consumidor em laço, isso troca dezenas de requisições vazias cobradas por uma.',
+        },
+      ],
+    },
+  ];
+
+  await seedLabs(optimizationTopic.id, optimizationLabs);
+
+  const optimizationQuestionsToSeed: QuestionSeed[] = [
+    {
+      prompt: 'O que acontece com uma função Lambda configurada com reserved concurrency igual a 0?',
+      type: 'KNOWLEDGE',
+      difficulty: 'EASY',
+      explanation:
+        'Reserved concurrency define quantas execuções simultâneas a função pode ter. Com 0, todas as invocações são bloqueadas (throttled) — é um jeito de desligar a função numa emergência.',
+      options: [
+        { text: 'Todas as invocações são bloqueadas (throttled).', isCorrect: true, explanation: 'Correto.' },
+        { text: 'A função passa a usar concorrência ilimitada.', isCorrect: false, explanation: 'É o contrário.' },
+        { text: 'A função volta a usar a cota não reservada da conta.', isCorrect: false, explanation: 'Isso acontece ao remover a reserva, não ao defini-la como 0.' },
+        { text: 'A função só roda em cold start.', isCorrect: false, explanation: 'Não tem relação com cold start.' },
+      ],
+    },
+    {
+      prompt: 'Qual recurso do Lambda mantém ambientes de execução já inicializados para eliminar cold starts num volume previsto de tráfego?',
+      type: 'KNOWLEDGE',
+      difficulty: 'EASY',
+      explanation:
+        'Provisioned concurrency mantém um número de ambientes pré-inicializados para uma versão ou alias, com custo enquanto estiver configurada.',
+      options: [
+        { text: 'Provisioned concurrency', isCorrect: true, explanation: 'Correto.' },
+        { text: 'Reserved concurrency', isCorrect: false, explanation: 'Garante e limita capacidade, mas não pré-inicializa ambientes.' },
+        { text: 'Aumentar o timeout', isCorrect: false, explanation: 'Não afeta cold starts.' },
+        { text: 'Dead-letter queue', isCorrect: false, explanation: 'Trata falhas, não inicialização.' },
+      ],
+    },
+    {
+      prompt: 'Qual é o tempo máximo de espera de uma chamada ReceiveMessage com long polling no Amazon SQS?',
+      type: 'KNOWLEDGE',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Long polling espera até 20 segundos por mensagens (WaitTimeSeconds ou ReceiveMessageWaitTimeSeconds), reduzindo respostas vazias e custo.',
+      options: [
+        { text: '20 segundos', isCorrect: true, explanation: 'Correto.' },
+        { text: '60 segundos', isCorrect: false, explanation: 'O máximo é 20 segundos.' },
+        { text: '12 horas', isCorrect: false, explanation: 'É o limite de visibility timeout.' },
+        { text: '0 segundos', isCorrect: false, explanation: 'É short polling.' },
+      ],
+    },
+    {
+      prompt:
+        'Uma função Lambda que processa imagens (uso intenso de CPU) está lenta com 256 MB de memória e usa só 90 MB. Qual é a primeira otimização a testar?',
+      type: 'APPLICATION',
+      difficulty: 'MEDIUM',
+      explanation:
+        'No Lambda, a CPU é proporcional à memória. Aumentar a memória dá mais CPU e costuma reduzir a duração quase proporcionalmente, com custo parecido; o AWS Lambda Power Tuning ajuda a achar a melhor configuração.',
+      options: [
+        {
+          text: 'Aumentar a memória para obter mais CPU, medindo duração e custo (ex.: com o Lambda Power Tuning).',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'Reduzir a memória para 128 MB, já que usa só 90 MB.', isCorrect: false, explanation: 'Reduziria também a CPU, deixando a função mais lenta.' },
+        { text: 'Aumentar o timeout.', isCorrect: false, explanation: 'Evita timeouts, mas não acelera a função.' },
+        { text: 'Configurar reserved concurrency.', isCorrect: false, explanation: 'Não muda a velocidade de cada execução.' },
+      ],
+    },
+    {
+      prompt:
+        'Uma função Lambda abre uma conexão com o banco de dados dentro do handler a cada invocação, e a latência e o número de conexões são altos. Qual é a otimização recomendada?',
+      type: 'APPLICATION',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Clientes e conexões criados fora do handler, no código de inicialização, são reutilizados pelas invocações seguintes do mesmo ambiente de execução.',
+      options: [
+        {
+          text: 'Criar a conexão fora do handler, para ser reutilizada entre invocações do mesmo ambiente.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'Abrir duas conexões por invocação.', isCorrect: false, explanation: 'Piora o problema.' },
+        { text: 'Aumentar o timeout da função.', isCorrect: false, explanation: 'Não reduz o custo de abrir conexões.' },
+        { text: 'Usar invocação assíncrona.', isCorrect: false, explanation: 'Não muda onde a conexão é criada.' },
+      ],
+    },
+    {
+      prompt:
+        'Um tópico SNS publica eventos de vários tipos, mas a fila do serviço de pagamentos só precisa dos eventos com o atributo tipo = pagamento. Qual é a solução mais eficiente?',
+      type: 'APPLICATION',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Uma subscription filter policy faz o SNS entregar à assinatura só as mensagens que casam com o filtro, sem que o consumidor precise receber e descartar as demais.',
+      officialReferences: 'https://docs.aws.amazon.com/sns/latest/dg/sns-message-filtering.html',
+      options: [
+        { text: 'Uma filter policy na assinatura da fila de pagamentos.', isCorrect: true, explanation: 'Correto.' },
+        { text: 'Filtrar no código do consumidor e descartar o resto.', isCorrect: false, explanation: 'Funciona, mas paga para receber e processar mensagens inúteis.' },
+        { text: 'Criar um tópico por consumidor e publicar em todos.', isCorrect: false, explanation: 'Joga a responsabilidade de filtrar para o produtor.' },
+        { text: 'Usar uma fila FIFO.', isCorrect: false, explanation: 'FIFO ordena mensagens, não filtra.' },
+      ],
+    },
+    {
+      prompt:
+        'Uma função Lambda consome uma fila SQS e grava num banco que só aguenta 10 conexões simultâneas. Nos picos, a função escala e o banco cai. Qual é a forma mais direta de limitar os consumidores?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'A configuração maximum concurrency do event source mapping do SQS limita quantas invocações simultâneas a fila dispara; as mensagens excedentes esperam na fila.',
+      options: [
+        {
+          text: 'Configurar maximum concurrency no event source mapping do SQS.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'Aumentar a memória da função.', isCorrect: false, explanation: 'Não limita a concorrência.' },
+        { text: 'Reduzir o período de retenção da fila.', isCorrect: false, explanation: 'Faria mensagens expirarem sem processamento.' },
+        { text: 'Trocar a fila por um tópico SNS.', isCorrect: false, explanation: 'Perde o amortecimento que a fila oferece.' },
+      ],
+    },
+    {
+      prompt:
+        'A taxa de acertos de cache de uma distribuição do CloudFront está muito baixa, e a cache policy inclui todos os headers, cookies e query strings na chave de cache. Qual é a correção?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Cada header, cookie ou query string na chave de cache multiplica as variações. Incluir só o que realmente muda a resposta aumenta os acertos; o que o backend precisa receber sem variar o cache vai numa origin request policy.',
+      officialReferences:
+        'https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/understanding-the-cache-key.html',
+      options: [
+        {
+          text: 'Incluir na chave de cache só os valores que mudam a resposta e usar uma origin request policy para o resto.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'Invalidar o cache a cada minuto.', isCorrect: false, explanation: 'Reduz ainda mais os acertos e tem custo.' },
+        { text: 'Reduzir o TTL para 0.', isCorrect: false, explanation: 'Desliga o cache.' },
+        { text: 'Adicionar mais origens à distribuição.', isCorrect: false, explanation: 'Não muda a chave de cache.' },
+      ],
+    },
+    {
+      prompt:
+        'Uma API REST recebe milhares de requisições GET idênticas por minuto para um relatório que muda uma vez por hora, e o backend está sobrecarregado. Qual é a solução mais simples no próprio API Gateway?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Habilitar o cache do stage do API Gateway com um TTL adequado (até 3.600 segundos) faz as respostas repetidas saírem do cache, sem chegar ao backend.',
+      options: [
+        { text: 'Habilitar o cache do stage com um TTL adequado.', isCorrect: true, explanation: 'Correto.' },
+        { text: 'Aumentar o throttling do stage.', isCorrect: false, explanation: 'Rejeitaria requisições em vez de respondê-las.' },
+        { text: 'Criar mais stages.', isCorrect: false, explanation: 'Não reduz as chamadas ao backend.' },
+        { text: 'Trocar a integração por uma integração mock.', isCorrect: false, explanation: 'Deixaria de devolver o relatório real.' },
+      ],
+    },
+    {
+      prompt:
+        'Uma função Lambda em Java tem cold starts de vários segundos, causados por uma inicialização pesada de frameworks. O time quer reduzi-los sem o custo fixo de manter ambientes sempre provisionados. Qual recurso atende?',
+      type: 'SCENARIO',
+      difficulty: 'HARD',
+      explanation:
+        'O Lambda SnapStart tira um snapshot do ambiente já inicializado ao publicar uma versão e restaura a partir dele nos cold starts, sem o custo fixo da provisioned concurrency.',
+      officialReferences: 'https://docs.aws.amazon.com/lambda/latest/dg/snapstart.html',
+      options: [
+        { text: 'Lambda SnapStart.', isCorrect: true, explanation: 'Correto.' },
+        { text: 'Provisioned concurrency.', isCorrect: false, explanation: 'Elimina cold starts, mas com o custo fixo que o time quer evitar.' },
+        { text: 'Reserved concurrency.', isCorrect: false, explanation: 'Não reduz o tempo de inicialização.' },
+        { text: 'Aumentar o timeout.', isCorrect: false, explanation: 'Não reduz o cold start.' },
+      ],
+    },
+    {
+      prompt:
+        'Um desenvolvedor tenta configurar provisioned concurrency na versão $LATEST de uma função e recebe um erro. Como resolver?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'HARD',
+      explanation:
+        'Provisioned concurrency só pode ser configurada numa versão publicada ou num alias que aponta para uma versão, nunca em $LATEST.',
+      options: [
+        {
+          text: 'Publicar uma versão e configurar a provisioned concurrency nela ou num alias que aponte para ela.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'Aumentar a cota de concorrência da conta.', isCorrect: false, explanation: 'O erro não é de cota.' },
+        { text: 'Usar reserved concurrency em $LATEST antes.', isCorrect: false, explanation: 'Não habilita provisioned concurrency em $LATEST.' },
+        { text: 'Trocar o runtime para Java.', isCorrect: false, explanation: 'A regra vale para qualquer runtime.' },
+      ],
+    },
+    {
+      prompt:
+        'Nos picos de tráfego, chamadas síncronas a várias funções Lambda da mesma conta começam a receber TooManyRequestsException (429). Qual é a causa mais provável?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'MEDIUM',
+      explanation:
+        'A cota de execuções concorrentes da conta na região foi atingida. Soluções incluem pedir aumento de cota, reservar concorrência para funções críticas e reduzir a duração das funções.',
+      options: [
+        {
+          text: 'A cota de execuções concorrentes da conta na região foi atingida.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'As funções estão sem memória.', isCorrect: false, explanation: 'Geraria erros de execução, não 429.' },
+        { text: 'O timeout das funções é curto demais.', isCorrect: false, explanation: 'Geraria erros de timeout.' },
+        { text: 'As funções não têm permissão para ser invocadas.', isCorrect: false, explanation: 'Geraria erro de permissão (403).' },
+      ],
+    },
+    {
+      prompt:
+        'Uma função Lambda processa lotes de 10 mensagens de uma fila SQS. Quando uma mensagem falha, o lote inteiro volta para a fila e as 9 mensagens boas são reprocessadas. Como evitar isso?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'HARD',
+      explanation:
+        'Habilitando ReportBatchItemFailures no event source mapping, a função devolve os IDs das mensagens que falharam, e só elas voltam para a fila.',
+      options: [
+        {
+          text: 'Habilitar ReportBatchItemFailures e devolver só os IDs das mensagens que falharam.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'Reduzir o batch size para 1.', isCorrect: false, explanation: 'Resolve, mas aumenta muito o número de invocações e o custo.' },
+        { text: 'Aumentar o visibility timeout.', isCorrect: false, explanation: 'Não evita o reprocessamento do lote inteiro.' },
+        { text: 'Trocar a fila Standard por FIFO.', isCorrect: false, explanation: 'Não muda o tratamento de falhas parciais.' },
+      ],
+    },
+    {
+      prompt:
+        'Um time quer reduzir o custo de funções Lambda escritas em Python puro, sem mudar o código. Qual opção costuma dar melhor preço-desempenho?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'MEDIUM',
+      explanation:
+        'A arquitetura arm64 (processadores Graviton) costuma oferecer melhor preço-desempenho para código compatível, como Python puro.',
+      options: [
+        { text: 'Trocar a arquitetura da função para arm64 (Graviton).', isCorrect: true, explanation: 'Correto.' },
+        { text: 'Aumentar o timeout.', isCorrect: false, explanation: 'Não reduz custo.' },
+        { text: 'Configurar provisioned concurrency.', isCorrect: false, explanation: 'Adiciona custo fixo.' },
+        { text: 'Mover as funções para o Elastic Beanstalk.', isCorrect: false, explanation: 'Muda toda a arquitetura, não é uma otimização sem código.' },
+      ],
+    },
+  ];
+
+  await seedQuestions(optimizationTopic.id, optimizationQuestionsToSeed);
+
+  const optimizationFlashcardsToSeed: FlashcardSeed[] = [
+    {
+      conceptName: 'Memória, CPU e Power Tuning',
+      conceptDescription: 'Ajuste de memória de funções Lambda com base em medições.',
+      serviceId: lambdaService.id,
+      front: 'Como achar a memória ideal de uma função Lambda?',
+      back: 'Medindo duração e custo (GB × s) em várias memórias — o AWS Lambda Power Tuning automatiza isso. Código de CPU costuma ficar bem mais rápido com mais memória por um custo parecido.',
+    },
+    {
+      conceptName: 'Cold start e código de inicialização',
+      conceptDescription: 'Redução de cold starts e reutilização de recursos entre invocações.',
+      serviceId: lambdaService.id,
+      front: 'Como reduzir cold starts e o custo de cada invocação no Lambda?',
+      back: 'Pacote pequeno e clientes/conexões criados fora do handler (reutilizados em warm starts); para eliminar cold starts: provisioned concurrency ou SnapStart.',
+    },
+    {
+      conceptName: 'Provisioned concurrency vs. SnapStart',
+      conceptDescription: 'As duas formas de combater cold starts no Lambda.',
+      serviceId: lambdaService.id,
+      front: 'Qual a diferença entre provisioned concurrency e SnapStart?',
+      back: 'Provisioned: ambientes sempre inicializados numa versão/alias (não em $LATEST), com custo fixo. SnapStart: restaura um snapshot do ambiente inicializado (Java, Python, .NET), sem custo fixo.',
+    },
+    {
+      conceptName: 'Reserved concurrency',
+      conceptDescription: 'Reserva e limite de concorrência por função.',
+      serviceId: lambdaService.id,
+      front: 'O que a reserved concurrency faz e o que acontece com o valor 0?',
+      back: 'Garante e limita a concorrência da função (protege a função e recursos a jusante). Com 0, todas as invocações são bloqueadas — um desligador de emergência.',
+    },
+    {
+      conceptName: 'Event source mapping do SQS',
+      conceptDescription: 'Ajustes de consumo de filas SQS pelo Lambda.',
+      serviceId: sqsService.id,
+      front: 'Quais ajustes otimizam uma função Lambda que consome SQS?',
+      back: 'Maximum concurrency (limita consumidores), batch size e batching window, ReportBatchItemFailures (só as falhas voltam) e visibility timeout de pelo menos 6x o timeout da função.',
+    },
+    {
+      conceptName: 'Long polling e lotes no SQS',
+      conceptDescription: 'Redução de requisições e custo no SQS.',
+      serviceId: sqsService.id,
+      front: 'Como reduzir o custo de requisições ao SQS?',
+      back: 'Long polling (WaitTimeSeconds até 20 s) evita respostas vazias; operações em lote (até 10 mensagens por chamada) reduzem o número de requisições.',
+    },
+    {
+      conceptName: 'Filter policies do SNS',
+      conceptDescription: 'Entrega seletiva de mensagens por assinatura.',
+      serviceId: snsService.id,
+      front: 'Como fazer um assinante do SNS receber só parte das mensagens?',
+      back: 'Com uma subscription filter policy, sobre message attributes ou sobre o corpo da mensagem (FilterPolicyScope).',
+    },
+    {
+      conceptName: 'Chave de cache do CloudFront',
+      conceptDescription: 'Cache policies e origin request policies no CloudFront.',
+      serviceId: cloudFrontService.id,
+      front: 'Como aumentar a taxa de acertos de cache do CloudFront?',
+      back: 'Incluir na cache policy só os headers, cookies e query strings que mudam a resposta; o que o backend precisa receber vai numa origin request policy. Prefira arquivos versionados a invalidações.',
+    },
+    {
+      conceptName: 'Cache do API Gateway',
+      conceptDescription: 'Cache por stage de APIs REST.',
+      serviceId: apiGatewayService.id,
+      front: 'Como funciona o cache do API Gateway?',
+      back: 'É habilitado por stage (APIs REST), com TTL padrão de 300 s (até 3.600 s), cobrado por hora conforme o tamanho; parâmetros podem entrar na chave de cache.',
+    },
+    {
+      conceptName: 'Throttling por concorrência',
+      conceptDescription: 'Comportamento do Lambda ao atingir a cota de concorrência.',
+      serviceId: lambdaService.id,
+      front: 'O que acontece quando a cota de concorrência do Lambda é atingida?',
+      back: 'Invocações síncronas recebem 429 (TooManyRequestsException); assíncronas são repetidas pelo Lambda por até 6 horas. Cota padrão: 1.000 por conta e região (ajustável).',
+    },
+  ];
+
+  await seedFlashcards(optimizationTopic.id, optimizationFlashcardsToSeed);
+
   const domainCount = await prisma.domain.count({ where: { examVersionId: examVersion.id } });
   const topicCount = await prisma.topic.count({ where: { domain: { examVersionId: examVersion.id } } });
 

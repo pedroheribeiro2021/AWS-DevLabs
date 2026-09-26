@@ -608,3 +608,23 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 **Decisions:** none architectural.
 
 **Next steps:** the last topic, "Otimização de aplicações"; then reinforce Lambda/Cognito/Architecture; then Phase 8 (Analytics).
+
+---
+
+## 2026-09-26 — Session 30: content topic 12 of 12 (application optimization) — content push complete
+
+**Goal:** Pedro merged #39 and asked to continue with the last skeleton topic, "Otimização de aplicações".
+
+**Changes:**
+
+- `packages/database/prisma/seed.ts`, to the exam-readiness bar:
+  - **Lesson 1** "Performance do Lambda: memória, concorrência e cold starts" (12 min) and **Lesson 2** "Cache e mensageria para performance e custo" (11 min). The SQS message-size limit is described as "256 KB for a long time, raised to 1 MiB in 2025", since study material and exam questions may still use the old number.
+  - **Lab 1** "Memória, duração e custo do Lambda, e reserved concurrency" (Level 2, 4 steps): a CPU-only SHA-256 loop measured from `--log-type Tail` `REPORT` lines at 128/512/1769 MB (with `aws lambda wait function-updated` between config changes), GB-s cost computed by hand, `Max Memory Used` showing it was CPU not memory; then reserved concurrency 0 → `TooManyRequestsException`, and removal.
+  - **Lab 2** "Filter policies do SNS e long polling no SQS" (Level 2, 4 steps): a `{"tipo": ["pagamento"]}` message-attribute filter so one queue gets 2 of 3 events while the unfiltered one gets all 3, batch reads with `--wait-time-seconds 20`, then short vs. queue-level long polling timed with `time` on an empty queue.
+  - **14 questions**, **10 flashcards**; new `AWSService` row Amazon CloudFront.
+- Docs: checklist rewritten from "volume to close" to "current volume" (13/13 topics; 23 lessons, 23 labs, 154 questions, 113 flashcards) with the reinforcement list as the next step; Pendências: closed "simulation content is thin", rewrote the content item as the 3-topic reinforcement (noting it will hit the nested-relation reseed gap if existing questions/labs are edited), marked domain-level badges as unblocked.
+- Verified: typecheck clean; seed twice with no duplicates (2 lessons, 2 labs/8 steps, 14 questions, 10 flashcards; no topic without lessons); escaped `--message-attributes` JSON checked in the seeded row; unit 28/28, e2e 39/39. The first combined run hit the 10-minute tool timeout during e2e (it finished green in the background); a standalone rerun took the usual ~30 s — most likely a slow moment on the shared Neon dev database.
+
+**Decisions:** none architectural.
+
+**Next steps (agreed with Pedro in Session 29):** reinforce Lambda/Cognito/Architecture to ~10-14 questions each; then Phase 8 (Analytics — weak spots per domain/topic, history, study recommendations).

@@ -81,21 +81,22 @@ lifecycle no S3), 14 questões e 9 flashcards.
 |---|--------|--------|------|-----|----------|------------|
 | 1 | Análise de causa raiz | ✅ Feito (Sessão 28) | 2 | 2 | 14 | 10 |
 | 2 | Instrumentação de código para observabilidade | ✅ Feito (Sessão 29) | 2 | 2 | 14 | 10 |
-| 3 | Otimização de aplicações | ⬜ Pendente | — | — | — | — |
+| 3 | Otimização de aplicações | ✅ Feito (Sessão 30) | 2 | 2 | 14 | 10 |
 
-## Volume total pra fechar a trilha
+## Volume atual
 
-Hoje: **140 questões** e **103 flashcards** no banco.
+**Todos os 13 tópicos têm conteúdo** (Sessão 30): **23 aulas**, **23 labs**,
+**154 questões** e **113 flashcards** no banco. Com os 4 domínios populados, um
+simulado de 65 questões já sai nos pesos reais da prova (21/17/15/12 questões,
+ver o fix da Sessão 28).
 
-- **1 tópico** ainda vazio (de 13)
-- **~2 aulas** e **~2 labs** novos (conforme a amplitude de cada tópico)
-- **~14 questões** novas → banco total sobe para **~154 questões**
-- **~10 flashcards** novos
+O que falta para fechar a meta de prontidão são os reforços abaixo (~15-20
+questões a mais, levando o banco a ~170).
 
 ## Reforços pendentes
 
-Tópicos feitos antes do critério de prontidão, a completar até ~10-12 questões
-cada depois que os tópicos vazios estiverem cobertos:
+Tópicos feitos antes do critério de prontidão, a completar até ~10-14 questões
+cada (próximo passo, agora que nenhum tópico está vazio):
 
 - Fundamentos do AWS Lambda (6 questões)
 - Autenticação e autorização de aplicações (5 questões)
@@ -109,7 +110,8 @@ numérica que o schema usa hoje:
 1. ~~Domain 1 restante~~ — concluído (Sessões 20-21)
 2. ~~Domain 2 restante~~ — concluído (Sessões 22-23)
 3. ~~Domain 3~~ — concluído (Sessões 24-27)
-4. Domain 4 (3 tópicos — 2 concluídos nas Sessões 28-29; falta Otimização de aplicações)
+4. ~~Domain 4~~ — concluído (Sessões 28-30)
+5. Reforços dos 3 tópicos antigos (abaixo)
 
 ## Ritmo
 
