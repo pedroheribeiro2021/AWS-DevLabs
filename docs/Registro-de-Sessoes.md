@@ -566,3 +566,25 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 **Decisions:** the Render free-plan cold start is accepted as is (Pedro's call); no external keep-alive.
 
 **Next steps:** Domain 4 — "Análise de causa raiz", "Instrumentação de código para observabilidade", "Otimização de aplicações".
+
+---
+
+## 2026-09-26 — Session 28: content topic 10 of 12 (root cause analysis) + simulation question-count bug
+
+**Goal:** Pedro merged #37, deleted the `aws-devlab-api` Vercel project himself, and asked to continue; next is Domain 4's "Análise de causa raiz".
+
+**Bug found and fixed (`apps/api/src/simulations/question-selection.ts`):** seeding this topic gave Domain 4 its first questions, and the simulations e2e test immediately failed (asked for 3 questions, got 4; the other 7 failures cascaded from that). `selectSimulationQuestionIds` rounded each domain's proportional share independently with `Math.round` and only redistributed a *shortfall* — an *excess* from rounding up was never trimmed. With all four domains populated, 3 questions at 32/26/24/18% became 1+1+1+1 = 4, and the real 65-question exam would have become 21+17+16+12 = **66**. Replaced with the largest-remainder method (floor each share, give the leftover seats to the largest fractional parts), so quotas always sum to the target; the existing cap-to-availability and shortfall-redistribution logic is unchanged. Two new unit tests pin both cases (65 → 21/17/15/12). It had never surfaced before because until now at least one domain was always empty.
+
+**Content (`packages/database/prisma/seed.ts`), to the exam-readiness bar:**
+
+- **Lesson 1** "Investigando falhas com logs, métricas e códigos de erro" (12 min) and **Lesson 2** "Rastreando requisições com X-Ray e diagnosticando deploys" (11 min).
+- **Lab 1** "Investigar falhas de uma função com CloudWatch Logs Insights" (Level 2, 5 steps): a function that raises on ~20% of calls and sleeps past its 3 s timeout on ~10%, logging JSON; 30 invocations from CloudShell; three Logs Insights queries (errors by field, timeout count, REPORT stats); ends with a written diagnosis separating the two causes.
+- **Lab 2** "Rastrear requisições com X-Ray pelo API Gateway" (Level 2, 5 steps): reuses the Lab 1 function behind a REST API with tracing on both; the first calls all return 502 because the function's return value isn't a proxy response — the lab has you diagnose and fix that — then `fault = true` / `responsetime > 2` filter expressions find the exception and timeout traces.
+- **14 questions**, **10 flashcards**; new `AWSService` rows AWS X-Ray and AWS CloudTrail.
+- Docs: checklist (126 questions, 93 flashcards; 2 topics left), Pendências (Vercel item removed — Pedro deleted the project).
+
+**Verified:** typecheck clean; seed twice with no duplicates (2 lessons, 2 labs/10 steps, 14 questions, 10 flashcards); the escaped `\"` and `\n` in the lab's bash commands landed correctly in the seeded rows; unit tests 28/28 (26 + 2 new), API lint clean, API build OK, e2e 39/39 after the fix. `tsc --noEmit` on the API's full tsconfig reports 7 pre-existing errors (`supertest/types` in the e2e specs) — identical on `main`, not introduced here.
+
+**Decisions:** none architectural.
+
+**Next steps:** Domain 4 — "Instrumentação de código para observabilidade", then "Otimização de aplicações" (the last topic).

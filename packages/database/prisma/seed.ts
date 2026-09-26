@@ -6430,6 +6430,665 @@ aws s3 cp devlab-site.zip s3://ORIGEM/devlab-site.zip
 
   await seedFlashcards(cicdTopic.id, cicdFlashcardsToSeed);
 
+  // ---------------------------------------------------------------------
+  // Content-authoring push, topic 10 of 12: Domain 4 "Análise de causa
+  // raiz", to the exam-readiness bar.
+  // ---------------------------------------------------------------------
+
+  const troubleshootingDomain = await prisma.domain.findUniqueOrThrow({
+    where: { examVersionId_code: { examVersionId: examVersion.id, code: 'domain-4' } },
+  });
+  const rootCauseTopic = await prisma.topic.findFirstOrThrow({
+    where: { domainId: troubleshootingDomain.id, name: 'Análise de causa raiz' },
+  });
+
+  const xrayServiceData = {
+    shortName: 'X-Ray',
+    category: 'Developer Tools',
+    description:
+      'Rastreia requisições de ponta a ponta entre serviços, mostrando latência, erros e dependências num mapa de serviços.',
+  };
+  const xrayService = await prisma.aWSService.upsert({
+    where: { name: 'AWS X-Ray' },
+    update: xrayServiceData,
+    create: { name: 'AWS X-Ray', ...xrayServiceData },
+  });
+
+  const cloudTrailServiceData = {
+    shortName: 'CloudTrail',
+    category: 'Management & Governance',
+    description: 'Registra as chamadas de API feitas na conta — quem fez o quê, quando e de onde — para auditoria e investigação.',
+  };
+  const cloudTrailService = await prisma.aWSService.upsert({
+    where: { name: 'AWS CloudTrail' },
+    update: cloudTrailServiceData,
+    create: { name: 'AWS CloudTrail', ...cloudTrailServiceData },
+  });
+
+  const logsMetricsLessonContent = `## Objetivo
+
+Ao final desta lição você vai conseguir investigar uma falha usando CloudWatch Logs Insights, as métricas certas do Lambda e do API Gateway, e interpretar os códigos HTTP e as exceções de SDK que a prova DVA-C02 cobra.
+
+## Logs no CloudWatch
+
+Os logs ficam em **log groups** (um por aplicação ou função — no Lambda, \`/aws/lambda/nome-da-funcao\`), divididos em **log streams** (no Lambda, um por ambiente de execução). A retenção padrão é "nunca expirar"; defina uma retenção para controlar custo. Cada invocação do Lambda termina com uma linha \`REPORT\` com \`Duration\`, \`Billed Duration\`, \`Memory Size\`, \`Max Memory Used\` e, em cold starts, \`Init Duration\`.
+
+Mensagens clássicas do Lambda:
+
+- \`Task timed out after 3.00 seconds\` — a função passou do timeout configurado (padrão de 3 s, máximo de 15 min).
+- \`Runtime.ImportModuleError\` — handler ou dependência não encontrados no pacote.
+- \`Max Memory Used\` igual ao \`Memory Size\`, seguido de erro do runtime — falta de memória.
+
+## CloudWatch Logs Insights
+
+Logs Insights consulta um ou mais log groups com uma linguagem de pipes, e descobre automaticamente os campos de logs em JSON:
+
+\`\`\`
+fields @timestamp, @message
+| filter nivel = "ERROR"
+| sort @timestamp desc
+| limit 20
+\`\`\`
+
+Os comandos mais usados: \`fields\` (escolhe campos), \`filter\` (condições, inclusive \`like /regex/\`), \`stats\` (agregações como \`count(*)\`, \`avg()\`, \`max()\`, \`pct()\`, agrupadas com \`by\` ou \`bin(5m)\`), \`sort\`, \`limit\` e \`parse\` (extrai campos de texto). Para as linhas \`REPORT\` do Lambda, existem campos prontos: \`filter @type = "REPORT" | stats avg(@duration), max(@maxMemoryUsed)\`. Logging estruturado em JSON é o que torna esse tipo de consulta simples.
+
+**Metric filters** transformam padrões de log em métricas do CloudWatch (ex.: contar linhas com \`"estoque indisponivel"\`), que podem ter alarmes.
+
+## Métricas que apontam a causa
+
+- **Lambda**: \`Invocations\`, \`Errors\` (exceções e timeouts), \`Throttles\` (limite de concorrência atingido), \`Duration\`, \`ConcurrentExecutions\`, \`IteratorAge\` (atraso ao consumir streams do Kinesis/DynamoDB) e \`DeadLetterErrors\`.
+- **API Gateway**: \`4XXError\`, \`5XXError\`, \`Count\`, \`Latency\` (tempo total) e \`IntegrationLatency\` (só o backend) — se \`Latency\` é alta mas \`IntegrationLatency\` é baixa, o tempo está no próprio API Gateway (autorizador, transformações); se as duas são altas, o problema está no backend.
+
+## Códigos HTTP
+
+- **400** requisição inválida; **401** sem autenticação; **403** autenticado sem permissão (ou chave de API/WAF barrando); **404** recurso ou rota inexistente; **429** throttling — repetir com backoff exponencial.
+- **500** erro interno; **502** bad gateway — no API Gateway com integração Lambda proxy, costuma ser resposta mal formada da função (sem \`statusCode\`, ou \`body\` que não é string) ou uma exceção na função; **503** serviço indisponível; **504** timeout da integração (o API Gateway espera até 29 s por padrão).
+
+## Exceções de SDK
+
+- \`ThrottlingException\`, \`ProvisionedThroughputExceededException\`, \`TooManyRequestsException\` — repetíveis com backoff.
+- \`AccessDeniedException\` / \`UnauthorizedOperation\` — falta permissão na role ou numa resource policy.
+- \`ResourceNotFoundException\` — nome errado ou região errada.
+- \`ValidationException\` — parâmetros inválidos; não adianta repetir.
+- \`ConditionalCheckFailedException\` — condição de escrita não atendida (esperado em optimistic locking).
+- \`ExpiredTokenException\` — credenciais temporárias expiradas.
+
+## Relação com a prova DVA-C02
+
+Espere consultas de Logs Insights, a métrica certa para cada sintoma (\`Throttles\`, \`IteratorAge\`, \`IntegrationLatency\`), o significado de 403/429/502/504 no API Gateway, e a ação certa para cada exceção de SDK.`;
+
+  const tracingLessonContent = `## Objetivo
+
+Ao final desta lição você vai conseguir usar o AWS X-Ray para encontrar qual serviço causa erros ou lentidão numa requisição distribuída, e diagnosticar falhas de deploy com os eventos e logs de cada serviço.
+
+## X-Ray: traces, segmentos e mapa
+
+Um **trace** acompanha uma requisição de ponta a ponta. Cada serviço que ela atravessa grava um **segment**, e chamadas dentro dele (ao DynamoDB, a uma API HTTP, a um trecho de código) viram **subsegments**. Com isso, o X-Ray monta o **trace map** (mapa de serviços): cada nó mostra latência média e porcentagens de **errors** (respostas 4xx), **faults** (5xx) e **throttles** (429).
+
+- **Annotations** são pares chave-valor **indexados**: dá para filtrar traces por eles (ex.: \`annotation.cliente = "123"\`). **Metadata** guarda qualquer dado extra, mas **não** é indexado nem filtrável.
+- **Filter expressions** buscam traces: \`responsetime > 2\`, \`fault = true\`, \`http.status = 502\`, \`service("minha-funcao")\`.
+- **Sampling**: por padrão, o X-Ray grava a primeira requisição de cada segundo e 5% das demais; **sampling rules** ajustam isso por serviço, rota ou método.
+
+## Habilitando o X-Ray
+
+- **Lambda**: ativar o **active tracing** na função (a role precisa de \`xray:PutTraceSegments\` e \`xray:PutTelemetryRecords\`). Para ver as chamadas que a função faz a outros serviços como subsegments, o código precisa ser instrumentado (X-Ray SDK ou AWS Distro for OpenTelemetry).
+- **API Gateway** (APIs REST): habilitar o X-Ray tracing no stage.
+- **EC2 e ECS**: rodar o **X-Ray daemon** (ou o CloudWatch agent / ADOT collector), que recebe os segments via **UDP na porta 2000** e os envia à AWS; a instance role ou task role precisa das permissões de escrita no X-Ray. Sem daemon ou sem permissão, a aplicação roda normalmente, mas nenhum trace aparece.
+
+## Diagnosticando falhas de deploy
+
+- **CloudFormation**: na aba "Events", a causa real é o **primeiro** evento \`CREATE_FAILED\`/\`UPDATE_FAILED\` — os que vêm depois costumam ser consequência do rollback. Uma stack em \`UPDATE_ROLLBACK_FAILED\` precisa que a causa seja corrigida e depois um **continue update rollback** (podendo pular recursos).
+- **CodeDeploy**: cada lifecycle event mostra o resultado dos scripts; nas instâncias EC2, os logs do agente e dos scripts ficam em \`/opt/codedeploy-agent/deployment-root/\`.
+- **CodeBuild**: o log do build (no Console e no CloudWatch Logs) mostra em que fase e comando falhou.
+- **CloudTrail**: registra as chamadas de API da conta — quem mudou uma configuração, de onde, e quais chamadas receberam \`AccessDenied\` — essencial quando algo "parou de funcionar sozinho".
+
+## Relação com a prova DVA-C02
+
+Espere cenários pedindo o X-Ray para achar o serviço lento ou com falhas, annotations vs. metadata, sampling, o daemon na porta UDP 2000 com as permissões da role, o primeiro evento de falha do CloudFormation e o CloudTrail para descobrir quem mudou o quê.`;
+
+  const rootCauseLessons: LessonSeed[] = [
+    {
+      order: 1,
+      estimatedMinutes: 12,
+      title: 'Investigando falhas com logs, métricas e códigos de erro',
+      content: logsMetricsLessonContent,
+      resources: [
+        {
+          title: 'Sintaxe de consultas do CloudWatch Logs Insights — documentação oficial',
+          url: 'https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/CWL_QuerySyntax.html',
+        },
+        {
+          title: 'Métricas de funções Lambda — documentação oficial',
+          url: 'https://docs.aws.amazon.com/lambda/latest/dg/monitoring-metrics.html',
+        },
+      ],
+    },
+    {
+      order: 2,
+      estimatedMinutes: 11,
+      title: 'Rastreando requisições com X-Ray e diagnosticando deploys',
+      content: tracingLessonContent,
+      resources: [
+        {
+          title: 'Conceitos do AWS X-Ray — documentação oficial',
+          url: 'https://docs.aws.amazon.com/xray/latest/devguide/xray-concepts.html',
+        },
+        {
+          title: 'Solução de problemas do CloudFormation — documentação oficial',
+          url: 'https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/troubleshooting.html',
+        },
+      ],
+    },
+  ];
+
+  await seedLessons(rootCauseTopic.id, rootCauseLessons);
+
+  const failingFunctionInstructions = `No Console do Lambda, crie a função \`devlab-falhas\` com Python 3.13 (mantenha o timeout padrão de 3 segundos). Substitua o código por este, que falha em ~20% das chamadas e passa do timeout em ~10%, sempre com logs em JSON, e clique em "Deploy":
+
+\`\`\`python
+import json
+import random
+import time
+
+
+def lambda_handler(event, context):
+    pedido = event.get("pedido", 0)
+    sorteio = random.random()
+    if sorteio < 0.2:
+        print(json.dumps({"nivel": "ERROR", "pedido": pedido, "erro": "estoque indisponivel"}))
+        raise RuntimeError("estoque indisponivel")
+    if sorteio < 0.3:
+        time.sleep(5)  # passa do timeout padrão de 3 s
+    print(json.dumps({"nivel": "INFO", "pedido": pedido, "status": "processado"}))
+    return {"pedido": pedido, "status": "processado"}
+\`\`\``;
+
+  const failingInvokeInstructions = `No AWS CloudShell, gere tráfego com 30 invocações:
+
+\`\`\`bash
+for i in $(seq 1 30); do
+  aws lambda invoke --function-name devlab-falhas --cli-binary-format raw-in-base64-out --payload "{\\"pedido\\": $i}" saida.json > /dev/null
+done
+echo concluido
+\`\`\``;
+
+  const insightsQueriesInstructions = `No Console do CloudWatch, abra "Logs Insights", selecione o log group \`/aws/lambda/devlab-falhas\` e o intervalo das últimas horas. Rode, uma de cada vez:
+
+\`\`\`
+fields @timestamp, pedido, erro
+| filter nivel = "ERROR"
+| sort @timestamp desc
+\`\`\`
+
+\`\`\`
+filter @message like /timed out|timeout/
+| stats count(*) as timeouts
+\`\`\`
+
+\`\`\`
+filter @type = "REPORT"
+| stats count(*) as invocacoes, avg(@duration) as media_ms, max(@duration) as max_ms
+\`\`\``;
+
+  const proxyCodeInstructions = `A resposta 502 vem de a função devolver um objeto qualquer, e não o formato que a integração **Lambda proxy** exige. Corrija o código da função \`devlab-falhas\` para ler o pedido da query string e devolver \`statusCode\` e \`body\` (string), e clique em "Deploy":
+
+\`\`\`python
+import json
+import random
+import time
+
+
+def lambda_handler(event, context):
+    params = event.get("queryStringParameters") or {}
+    pedido = params.get("pedido", "0")
+    sorteio = random.random()
+    if sorteio < 0.2:
+        print(json.dumps({"nivel": "ERROR", "pedido": pedido, "erro": "estoque indisponivel"}))
+        raise RuntimeError("estoque indisponivel")
+    if sorteio < 0.3:
+        time.sleep(5)
+    return {"statusCode": 200, "body": json.dumps({"pedido": pedido, "status": "processado"})}
+\`\`\`
+
+Depois repita o laço de \`curl\` do passo anterior.`;
+
+  const curlLoopInstructions = `Copie a Invoke URL do stage \`teste\` e, no CloudShell, faça 20 chamadas contando os códigos HTTP (troque \`URL-DO-STAGE\`):
+
+\`\`\`bash
+for i in $(seq 1 20); do
+  curl -s -o /dev/null -w "%{http_code}\\n" "URL-DO-STAGE/pedido?pedido=$i"
+done | sort | uniq -c
+\`\`\``;
+
+  const rootCauseLabs: LabSeed[] = [
+    {
+      title: 'Investigar falhas de uma função com CloudWatch Logs Insights',
+      data: {
+        level: 2,
+        order: 1,
+        estimatedMinutes: 25,
+        objective:
+          'Ao final deste laboratório você terá gerado tráfego numa função que falha de forma intermitente e usado o CloudWatch Logs Insights e as métricas do Lambda para quantificar erros, timeouts e duração.',
+        prerequisites:
+          'Conta AWS com acesso ao Console e ao AWS CloudShell. Ter lido a lição "Investigando falhas com logs, métricas e códigos de erro" ajuda.',
+        context:
+          'Clientes reclamam que "às vezes o pedido não é processado". Ninguém sabe se é um erro de código, lentidão ou as duas coisas, nem com que frequência acontece. Você vai responder com dados dos logs.',
+        troubleshooting:
+          'Logs Insights não mostra o campo `nivel`: ele só é descoberto em linhas que são JSON válido — confira se o código usa `json.dumps` e amplie o intervalo de tempo da consulta. \n\nA consulta de timeouts retorna 0: com ~10% de chance por chamada, pode não ter ocorrido nenhum em 30 invocações — rode o laço de novo. \n\n"Invalid base64" no `invoke`: faltou `--cli-binary-format raw-in-base64-out` no comando.',
+        cleanup:
+          'Se não for fazer o próximo laboratório (que reaproveita esta função), exclua a função `devlab-falhas` e o log group `/aws/lambda/devlab-falhas`.',
+        costWarning:
+          'As invocações ficam dentro do Free Tier do Lambda. O Logs Insights cobra por GB analisado, e os poucos KB deste laboratório custam praticamente nada.',
+      },
+      steps: [
+        {
+          order: 1,
+          title: 'Criar a função instável',
+          instructions: failingFunctionInstructions,
+          validation: 'Um teste com o evento `{"pedido": 1}` no Console às vezes sucede, às vezes falha ou estoura o tempo.',
+        },
+        {
+          order: 2,
+          title: 'Gerar tráfego',
+          instructions: failingInvokeInstructions,
+          validation: 'O laço termina com `concluido`; algumas chamadas demoram mais (as que estouram o timeout de 3 s).',
+        },
+        {
+          order: 3,
+          title: 'Consultar com Logs Insights',
+          instructions: insightsQueriesInstructions,
+          validation:
+            'A primeira consulta lista os pedidos com erro (cerca de 20% das 30 chamadas), a segunda conta os timeouts e a terceira mostra 30 invocações com `max_ms` perto de 3000 — o teto de timeout.',
+        },
+        {
+          order: 4,
+          title: 'Conferir as métricas do Lambda',
+          instructions:
+            'Na página da função, abra a aba "Monitor" e observe os gráficos de "Invocations", "Error count and success rate" e "Duration".',
+          validation:
+            'A contagem de erros inclui tanto as exceções quanto os timeouts (as duas coisas contam na métrica `Errors`), e o gráfico de duração mostra picos em ~3 s.',
+        },
+        {
+          order: 5,
+          title: 'Escrever o diagnóstico',
+          instructions:
+            'Com os números das consultas, responda: qual porcentagem das chamadas falha por erro de negócio, qual porcentagem por timeout, e qual seria a primeira ação para cada caso?',
+          validation:
+            'O diagnóstico separa duas causas diferentes: ~20% de exceções "estoque indisponivel" (tratar o erro e devolver uma resposta adequada) e ~10% de timeouts (investigar a lentidão ou ajustar o timeout) — em vez de um genérico "às vezes falha".',
+        },
+      ],
+    },
+    {
+      title: 'Rastrear requisições com X-Ray pelo API Gateway',
+      data: {
+        level: 2,
+        order: 2,
+        estimatedMinutes: 30,
+        objective:
+          'Ao final deste laboratório você terá exposto uma função por uma API REST com X-Ray habilitado, diagnosticado um erro 502 real, e usado o trace map e filter expressions do X-Ray para achar requisições com falha e lentas.',
+        prerequisites:
+          'A função `devlab-falhas` do laboratório anterior e acesso ao AWS CloudShell. Ter lido a lição "Rastreando requisições com X-Ray e diagnosticando deploys" ajuda.',
+        context:
+          'A função instável agora vai ser chamada por uma API. O time quer enxergar cada requisição de ponta a ponta — da API até a função — e saber onde o tempo e os erros acontecem.',
+        troubleshooting:
+          'Todas as chamadas voltam 502 mesmo depois do passo 4: confira se clicou em "Deploy" na função e se o código devolve `statusCode` e `body` como string. \n\n`{"message":"Missing Authentication Token"}`: a URL está sem o caminho `/pedido` ou com o stage errado. \n\nO trace map não aparece: o X-Ray leva até um minuto para processar os traces — confira se o tracing está ativo no stage `teste` e na função, e gere tráfego de novo. \n\n"The role defined for the function cannot be assumed" ou falta de permissão ao ativar o tracing: aceite a permissão que o Console oferece adicionar à role de execução.',
+        cleanup:
+          'Exclua a API `devlab-rastreio` no API Gateway, a função `devlab-falhas` e o log group `/aws/lambda/devlab-falhas`.',
+        costWarning:
+          'O X-Ray tem uma cota gratuita mensal de traces gravados e consultados, e as poucas chamadas à API e à função deste laboratório custam frações de centavo.',
+      },
+      steps: [
+        {
+          order: 1,
+          title: 'Ativar o tracing na função',
+          instructions:
+            'Na função `devlab-falhas`, vá em "Configuration" > "Monitoring and operations tools", clique em "Edit" e ative **Active tracing** do X-Ray. Salve (aceitando a permissão de escrita no X-Ray que o Console adiciona à role).',
+          validation: 'A configuração mostra "Active tracing: Enabled".',
+        },
+        {
+          order: 2,
+          title: 'Criar a API com tracing',
+          instructions:
+            'No API Gateway, crie uma **REST API** `devlab-rastreio`, um recurso `/pedido` e um método `GET` com integração **Lambda proxy** apontando para `devlab-falhas`. Faça "Deploy API" num novo stage `teste` e, nas configurações de logs e rastreamento do stage, habilite o **X-Ray tracing**.',
+          validation: 'O stage `teste` aparece com X-Ray tracing habilitado e uma Invoke URL.',
+        },
+        {
+          order: 3,
+          title: 'Chamar a API e ver o 502',
+          instructions: curlLoopInstructions,
+          validation:
+            'Todas as 20 chamadas voltam **502**: a função atual devolve um objeto sem `statusCode`/`body`, que a integração proxy não aceita — é o erro "Malformed Lambda proxy response".',
+        },
+        {
+          order: 4,
+          title: 'Corrigir a resposta da função',
+          instructions: proxyCodeInstructions,
+          validation:
+            'Agora a maioria das chamadas volta **200**, e cerca de 30% voltam **502** — as exceções e os timeouts da função, que a API repassa como bad gateway.',
+        },
+        {
+          order: 5,
+          title: 'Investigar no X-Ray',
+          instructions:
+            'No Console do CloudWatch, abra "X-Ray traces" > "Trace map" e depois "Traces". Filtre com `fault = true` e, em seguida, com `responsetime > 2`. Abra um trace de cada filtro.',
+          validation:
+            'O trace map mostra cliente → `devlab-rastreio/teste` → `devlab-falhas` com porcentagem de faults. O trace com falha mostra a exceção `RuntimeError: estoque indisponivel` no segmento da função, e o trace lento mostra a função ocupando ~3 s da linha do tempo — a causa de cada 502 identificada por requisição.',
+        },
+      ],
+    },
+  ];
+
+  await seedLabs(rootCauseTopic.id, rootCauseLabs);
+
+  const rootCauseQuestionsToSeed: QuestionSeed[] = [
+    {
+      prompt: 'Qual código HTTP indica que o cliente está sendo limitado por excesso de requisições (throttling)?',
+      type: 'KNOWLEDGE',
+      difficulty: 'EASY',
+      explanation: '429 Too Many Requests indica throttling; o cliente deve repetir com backoff exponencial e jitter.',
+      options: [
+        { text: '429', isCorrect: true, explanation: 'Correto.' },
+        { text: '403', isCorrect: false, explanation: 'Indica falta de permissão.' },
+        { text: '404', isCorrect: false, explanation: 'Indica recurso inexistente.' },
+        { text: '503', isCorrect: false, explanation: 'Indica serviço indisponível, não throttling do cliente.' },
+      ],
+    },
+    {
+      prompt: 'No AWS X-Ray, qual é a diferença entre annotations e metadata?',
+      type: 'KNOWLEDGE',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Annotations são pares chave-valor indexados, usados em filter expressions para buscar traces. Metadata guarda dados extras de qualquer tipo, mas não é indexado.',
+      officialReferences: 'https://docs.aws.amazon.com/xray/latest/devguide/xray-concepts.html',
+      options: [
+        {
+          text: 'Annotations são indexadas e filtráveis; metadata não é indexada.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'Metadata é indexada; annotations não.', isCorrect: false, explanation: 'É o contrário.' },
+        { text: 'As duas são indexadas; a diferença é só o tamanho.', isCorrect: false, explanation: 'Só annotations são indexadas.' },
+        { text: 'Annotations só existem em funções Lambda.', isCorrect: false, explanation: 'Podem ser usadas em qualquer código instrumentado.' },
+      ],
+    },
+    {
+      prompt:
+        'Uma API no API Gateway com integração HTTP retorna 504 para requisições cujo backend demora cerca de 40 segundos. Qual é a causa?',
+      type: 'KNOWLEDGE',
+      difficulty: 'MEDIUM',
+      explanation:
+        'O API Gateway espera por padrão até 29 segundos pela integração; acima disso, devolve 504 Gateway Timeout.',
+      options: [
+        {
+          text: 'O timeout da integração do API Gateway (29 s por padrão) foi excedido.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'O backend devolveu uma resposta mal formada.', isCorrect: false, explanation: 'Isso geraria 502.' },
+        { text: 'O cliente não tem permissão.', isCorrect: false, explanation: 'Isso geraria 401 ou 403.' },
+        { text: 'A API está sofrendo throttling.', isCorrect: false, explanation: 'Isso geraria 429.' },
+      ],
+    },
+    {
+      prompt: 'Qual consulta do CloudWatch Logs Insights calcula a duração média das invocações de uma função Lambda?',
+      type: 'APPLICATION',
+      difficulty: 'MEDIUM',
+      explanation:
+        'As linhas REPORT do Lambda expõem o campo @duration; filtrando por @type = "REPORT", stats avg(@duration) dá a média.',
+      officialReferences: 'https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/CWL_QuerySyntax.html',
+      options: [
+        { text: 'filter @type = "REPORT" | stats avg(@duration)', isCorrect: true, explanation: 'Correto.' },
+        { text: 'SELECT AVG(duration) FROM lambda', isCorrect: false, explanation: 'Logs Insights não usa SQL desse jeito.' },
+        { text: 'fields @duration | sort @duration desc | limit 1', isCorrect: false, explanation: 'Mostra só a maior duração, não a média.' },
+        { text: 'filter @message like /START/ | stats count(*)', isCorrect: false, explanation: 'Conta invocações, não calcula duração.' },
+      ],
+    },
+    {
+      prompt:
+        'Uma API REST com integração Lambda proxy retorna 502 em todas as chamadas, e os logs mostram que a função termina sem erro. Qual é a causa mais provável?',
+      type: 'APPLICATION',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Com integração proxy, a função precisa devolver um objeto com statusCode e body (string). Qualquer outro formato gera "Malformed Lambda proxy response" e 502.',
+      options: [
+        {
+          text: 'A função devolve uma resposta fora do formato proxy (sem statusCode ou com body que não é string).',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'O timeout do API Gateway é curto demais.', isCorrect: false, explanation: 'Timeout gera 504.' },
+        { text: 'Falta uma chave de API.', isCorrect: false, explanation: 'Geraria 403.' },
+        { text: 'A função está sem memória.', isCorrect: false, explanation: 'Os logs mostram que ela termina sem erro.' },
+      ],
+    },
+    {
+      prompt:
+        'Os logs de uma função Lambda mostram "Task timed out after 3.00 seconds" em chamadas a uma API externa que às vezes demora 8 segundos. Qual é a ação mais adequada?',
+      type: 'APPLICATION',
+      difficulty: 'EASY',
+      explanation:
+        'A função atingiu o timeout configurado (padrão de 3 s). Ajustar o timeout para cobrir a latência real da dependência (e investigar a lentidão dela) resolve.',
+      options: [
+        {
+          text: 'Aumentar o timeout da função para cobrir a latência da API externa e investigar a lentidão dela.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'Aumentar a concorrência reservada.', isCorrect: false, explanation: 'Não muda o tempo máximo de cada execução.' },
+        { text: 'Trocar o runtime da função.', isCorrect: false, explanation: 'O limite é de tempo, não de runtime.' },
+        { text: 'Habilitar o X-Ray para evitar o timeout.', isCorrect: false, explanation: 'O X-Ray ajuda a enxergar, mas não evita o timeout.' },
+      ],
+    },
+    {
+      prompt:
+        'Uma função Lambda passou a falhar com AccessDeniedException ao gravar numa tabela DynamoDB, depois de funcionar por meses. Qual é a melhor forma de descobrir o que mudou?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'AccessDeniedException indica falta de permissão. O CloudTrail registra quem alterou a role de execução ou suas policies, e quando.',
+      options: [
+        {
+          text: 'Verificar a role de execução e usar o CloudTrail para ver quem alterou suas policies e quando.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'Aumentar a capacidade da tabela.', isCorrect: false, explanation: 'Capacidade gera throttling, não AccessDenied.' },
+        { text: 'Repetir a gravação com backoff exponencial.', isCorrect: false, explanation: 'Erros de permissão não se resolvem repetindo.' },
+        { text: 'Aumentar o timeout da função.', isCorrect: false, explanation: 'Não tem relação com permissão.' },
+      ],
+    },
+    {
+      prompt:
+        'A linha REPORT de uma função Lambda que falha mostra "Memory Size: 128 MB Max Memory Used: 128 MB". Qual é a causa provável e a correção?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'A função atingiu o limite de memória e foi encerrada. Aumentar a memória configurada resolve (e também aumenta a CPU disponível).',
+      options: [
+        { text: 'Falta de memória; aumentar a memória da função.', isCorrect: true, explanation: 'Correto.' },
+        { text: 'Timeout; aumentar o timeout.', isCorrect: false, explanation: 'A linha REPORT mostra a memória no limite.' },
+        { text: 'Throttling; aumentar a concorrência.', isCorrect: false, explanation: 'Throttling impede a execução, não esgota memória.' },
+        { text: 'Falta de permissão; ajustar a role.', isCorrect: false, explanation: 'Não tem relação com a memória usada.' },
+      ],
+    },
+    {
+      prompt:
+        'Uma requisição passa por API Gateway, três funções Lambda e uma tabela DynamoDB, e está lenta. Qual ferramenta mostra quanto tempo cada serviço consome naquela requisição?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation: 'O AWS X-Ray grava um trace por requisição, com segments e subsegments de cada serviço e um trace map com latências.',
+      options: [
+        { text: 'AWS X-Ray', isCorrect: true, explanation: 'Correto.' },
+        { text: 'AWS CloudTrail', isCorrect: false, explanation: 'Registra chamadas de API da conta, não a latência de requisições da aplicação.' },
+        { text: 'Métricas de Invocations do Lambda', isCorrect: false, explanation: 'Contam invocações, sem relacionar os serviços de uma requisição.' },
+        { text: 'AWS Config', isCorrect: false, explanation: 'Registra configurações de recursos.' },
+      ],
+    },
+    {
+      prompt:
+        'Uma stack do CloudFormation ficou em UPDATE_ROLLBACK_FAILED porque um recurso foi apagado manualmente fora da stack. Como seguir em frente?',
+      type: 'SCENARIO',
+      difficulty: 'HARD',
+      explanation:
+        'Depois de corrigir a causa (ou decidir pular o recurso problemático), usa-se Continue update rollback, que pode pular recursos que não conseguem voltar ao estado anterior.',
+      options: [
+        {
+          text: 'Corrigir a causa e usar Continue update rollback, pulando o recurso se necessário.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'Fazer um novo update da stack imediatamente.', isCorrect: false, explanation: 'Não é possível atualizar uma stack em UPDATE_ROLLBACK_FAILED.' },
+        { text: 'Habilitar termination protection.', isCorrect: false, explanation: 'Só impede a exclusão da stack.' },
+        { text: 'Rodar drift detection e esperar.', isCorrect: false, explanation: 'Detecta a diferença, mas não tira a stack do estado de falha.' },
+      ],
+    },
+    {
+      prompt:
+        'Um time quer ser alertado sempre que a mensagem "falha no pagamento" aparecer nos logs de uma aplicação no CloudWatch Logs. Qual é a solução?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'HARD',
+      explanation:
+        'Um metric filter no log group transforma ocorrências do padrão numa métrica do CloudWatch, e um alarme nessa métrica notifica (ex.: via SNS).',
+      options: [
+        {
+          text: 'Criar um metric filter no log group para o padrão e um alarme na métrica gerada.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'Rodar uma consulta do Logs Insights manualmente todo dia.', isCorrect: false, explanation: 'Não alerta em tempo real.' },
+        { text: 'Habilitar o X-Ray na aplicação.', isCorrect: false, explanation: 'O X-Ray não observa o texto dos logs.' },
+        { text: 'Consultar o CloudTrail.', isCorrect: false, explanation: 'O CloudTrail registra chamadas de API, não logs da aplicação.' },
+      ],
+    },
+    {
+      prompt:
+        'Uma aplicação em EC2, instrumentada com o X-Ray SDK, não gera nenhum trace no Console, embora funcione normalmente. Quais são as causas mais prováveis?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'HARD',
+      explanation:
+        'O SDK envia segments por UDP (porta 2000) ao X-Ray daemon, que os publica na AWS. Sem o daemon rodando, ou sem permissão de xray:PutTraceSegments na instance role, nada chega ao X-Ray.',
+      options: [
+        {
+          text: 'O X-Ray daemon não está rodando ou a instance role não tem permissão de xray:PutTraceSegments.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'O security group bloqueia a porta 443 de entrada.', isCorrect: false, explanation: 'O daemon faz conexões de saída; a entrada 443 não é o problema.' },
+        { text: 'O X-Ray só funciona com funções Lambda.', isCorrect: false, explanation: 'Funciona em EC2, ECS e outros.' },
+        { text: 'A aplicação precisa estar atrás de um API Gateway.', isCorrect: false, explanation: 'Não é um requisito.' },
+      ],
+    },
+    {
+      prompt:
+        'A criação de uma stack do CloudFormation falhou e a aba Events mostra dezenas de eventos de falha e de rollback. Onde está a causa raiz?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'MEDIUM',
+      explanation:
+        'A causa raiz está no primeiro evento CREATE_FAILED (o mais antigo); os eventos seguintes costumam ser consequência do rollback.',
+      options: [
+        { text: 'No primeiro evento CREATE_FAILED, o mais antigo.', isCorrect: true, explanation: 'Correto.' },
+        { text: 'No último evento da lista, o mais recente.', isCorrect: false, explanation: 'Costuma ser o fim do rollback.' },
+        { text: 'No evento ROLLBACK_COMPLETE.', isCorrect: false, explanation: 'Indica só que o rollback terminou.' },
+        { text: 'Nos Outputs da stack.', isCorrect: false, explanation: 'Outputs não registram falhas.' },
+      ],
+    },
+    {
+      prompt:
+        'No API Gateway, a métrica Latency de uma API está alta, mas IntegrationLatency está baixa. Onde provavelmente está o tempo extra?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'HARD',
+      explanation:
+        'Latency mede o tempo total no API Gateway; IntegrationLatency mede só o backend. Se só a primeira está alta, o tempo está no próprio API Gateway (ex.: autorizador Lambda, transformações).',
+      options: [
+        {
+          text: 'No próprio API Gateway, como um autorizador Lambda lento ou transformações.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'No backend da integração.', isCorrect: false, explanation: 'Nesse caso IntegrationLatency também estaria alta.' },
+        { text: 'Na rede do cliente, antes de chegar à AWS.', isCorrect: false, explanation: 'Latency não mede a rede do cliente.' },
+        { text: 'No banco de dados usado pelo backend.', isCorrect: false, explanation: 'Esse tempo entraria em IntegrationLatency.' },
+      ],
+    },
+  ];
+
+  await seedQuestions(rootCauseTopic.id, rootCauseQuestionsToSeed);
+
+  const rootCauseFlashcardsToSeed: FlashcardSeed[] = [
+    {
+      conceptName: 'CloudWatch Logs Insights',
+      conceptDescription: 'Linguagem de consulta de logs do CloudWatch.',
+      serviceId: cloudWatchService.id,
+      front: 'Quais comandos principais do CloudWatch Logs Insights?',
+      back: 'fields, filter (inclusive like /regex/), stats (count, avg, max, pct, by bin()), sort, limit e parse. Para o Lambda: filter @type = "REPORT" | stats avg(@duration).',
+    },
+    {
+      conceptName: 'Metric filters',
+      conceptDescription: 'Métricas derivadas de padrões de log.',
+      serviceId: cloudWatchService.id,
+      front: 'Como gerar um alarme a partir de um texto que aparece nos logs?',
+      back: 'Metric filter no log group (transforma ocorrências do padrão em métrica) + alarme do CloudWatch nessa métrica.',
+    },
+    {
+      conceptName: 'Linha REPORT do Lambda',
+      conceptDescription: 'Informações de cada invocação registradas pelo Lambda.',
+      serviceId: lambdaService.id,
+      front: 'O que a linha REPORT do Lambda mostra e como ela ajuda no diagnóstico?',
+      back: 'Duration, Billed Duration, Memory Size, Max Memory Used e Init Duration (cold start). Max Memory Used = Memory Size indica falta de memória.',
+    },
+    {
+      conceptName: 'Métricas de diagnóstico do Lambda',
+      conceptDescription: 'Métricas do Lambda e o sintoma que cada uma revela.',
+      serviceId: lambdaService.id,
+      front: 'O que indicam as métricas Errors, Throttles e IteratorAge do Lambda?',
+      back: 'Errors: exceções e timeouts. Throttles: limite de concorrência atingido. IteratorAge: atraso ao consumir streams (Kinesis/DynamoDB).',
+    },
+    {
+      conceptName: 'Códigos 5xx no API Gateway',
+      conceptDescription: 'Causas comuns de 502 e 504 no API Gateway.',
+      serviceId: apiGatewayService.id,
+      front: 'O que costuma causar 502 e 504 no API Gateway?',
+      back: '502: resposta mal formada da integração Lambda proxy (sem statusCode ou body não string) ou exceção no backend. 504: integração passou do timeout (29 s por padrão).',
+    },
+    {
+      conceptName: 'Latency vs. IntegrationLatency',
+      conceptDescription: 'Métricas de latência do API Gateway.',
+      serviceId: apiGatewayService.id,
+      front: 'Qual a diferença entre Latency e IntegrationLatency no API Gateway?',
+      back: 'Latency: tempo total no API Gateway. IntegrationLatency: só o backend. Latency alta com IntegrationLatency baixa → tempo gasto no próprio API Gateway (ex.: autorizador).',
+    },
+    {
+      conceptName: 'Exceções de SDK',
+      conceptDescription: 'Exceções comuns dos SDKs da AWS e a ação para cada uma.',
+      serviceId: lambdaService.id,
+      front: 'Quais exceções de SDK devem ser repetidas e quais não?',
+      back: 'Repetir com backoff: ThrottlingException, ProvisionedThroughputExceededException, TooManyRequests. Não repetir: AccessDenied (permissão), ValidationException (parâmetros), ResourceNotFound (nome/região).',
+    },
+    {
+      conceptName: 'Annotations e metadata no X-Ray',
+      conceptDescription: 'Dados adicionados a segments do X-Ray.',
+      serviceId: xrayService.id,
+      front: 'Qual a diferença entre annotations e metadata no X-Ray?',
+      back: 'Annotations: chave-valor indexados, usados em filter expressions. Metadata: qualquer dado extra, não indexado.',
+    },
+    {
+      conceptName: 'X-Ray daemon e sampling',
+      conceptDescription: 'Como traces chegam ao X-Ray e quantos são gravados.',
+      serviceId: xrayService.id,
+      front: 'Como o X-Ray recebe traces de EC2/ECS e quantas requisições grava por padrão?',
+      back: 'Via X-Ray daemon (UDP 2000), com permissão xray:PutTraceSegments na role. Sampling padrão: a primeira requisição de cada segundo + 5% das demais.',
+    },
+    {
+      conceptName: 'Diagnóstico de falhas de deploy',
+      conceptDescription: 'Onde procurar a causa de falhas em CloudFormation e mudanças na conta.',
+      serviceId: cloudTrailService.id,
+      front: 'Onde procurar a causa de uma stack que falhou e de algo que "parou de funcionar sozinho"?',
+      back: 'Stack: o primeiro evento CREATE_FAILED/UPDATE_FAILED (UPDATE_ROLLBACK_FAILED → continue update rollback). Mudança misteriosa: o CloudTrail, que registra quem chamou qual API e quando.',
+    },
+  ];
+
+  await seedFlashcards(rootCauseTopic.id, rootCauseFlashcardsToSeed);
+
   const domainCount = await prisma.domain.count({ where: { examVersionId: examVersion.id } });
   const topicCount = await prisma.topic.count({ where: { domain: { examVersionId: examVersion.id } } });
 
