@@ -524,3 +524,24 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 **Decisions:** none architectural.
 
 **Next steps:** Domain 3 topic 3, "Automação de testes de deploy"; decide on the keep-alive fallback if GitHub's schedule still hasn't fired.
+
+---
+
+## 2026-09-26 — Session 26: content topic 8 of 12 (deployment test automation) + keep-alive finding
+
+**Goal:** Pedro merged #35 and asked to continue; next is Domain 3's "Automação de testes de deploy".
+
+**Changes:**
+
+- `packages/database/prisma/seed.ts`, to the exam-readiness bar:
+  - **Lesson 1** "Testes automatizados no pipeline: CodeBuild e buildspec" (12 min) and **Lesson 2** "Ambientes de teste com infraestrutura como código" (11 min).
+  - **Lab 1** "Testes unitários no CodeBuild com relatório" (Level 2, 5 steps): the source is a zip in S3 built in CloudShell (GitHub would need an OAuth connection Pedro would have to authorize, and CodeCommit isn't open to new customers), with a `buildspec.yml` running pytest into a JUnit report group; then a deliberately broken assertion fails the `BUILD` phase.
+  - **Lab 2** "Ambiente de teste efêmero com CloudFormation" (Level 2, 5 steps): `Ambiente` parameter + `EhProd` condition (alarm only in prod, `!If` on retention), an exported output read by a CLI "integration test", a `--no-execute-changeset` change set previewing prod (Add alarm, Modify queue), then delete. The alarm is never actually created, so the lab stays free.
+  - **14 questions**, **10 flashcards**; new `AWSService` rows AWS CodeBuild, AWS CodePipeline, AWS Amplify.
+- Docs: checklist (98 questions, 73 flashcards; 4 topics left) and Pendências.
+- Verified: typecheck clean; seed twice with no duplicates (2 lessons, 2 labs/10 steps, 14 questions, 10 flashcards); the literal `${AWS::StackName}` inside the lab's template survived the TS template literal (checked in the seeded row); API suite (26 unit + 39 e2e) green.
+- **Keep-alive finding:** by 16:44 Brasília, GitHub had run `keep-api-warm.yml` on schedule exactly once (15:38) in ~4.5 hours instead of every 10 min. The scheduler is too sparse to keep Render's free instance warm. Rewrote the Pendências item: switch to an external free monitor (needs Pedro to create the account).
+
+**Decisions:** none yet — the keep-alive replacement waits on Pedro choosing/creating the external monitor account.
+
+**Next steps:** Domain 3's last topic, "Deploy de código com serviços de CI/CD da AWS"; external keep-alive once Pedro has the account.
