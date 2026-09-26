@@ -5780,6 +5780,656 @@ aws sqs receive-message --queue-url "$FILA" --query "Messages[0].Body" --output 
 
   await seedFlashcards(testAutomationTopic.id, testAutomationFlashcardsToSeed);
 
+  // ---------------------------------------------------------------------
+  // Content-authoring push, topic 9 of 12: Domain 3 "Deploy de código com
+  // serviços de CI/CD da AWS", to the exam-readiness bar.
+  // ---------------------------------------------------------------------
+
+  const cicdTopic = await prisma.topic.findFirstOrThrow({
+    where: { domainId: deploymentDomain.id, name: 'Deploy de código com serviços de CI/CD da AWS' },
+  });
+
+  const codeDeployServiceData = {
+    shortName: 'CodeDeploy',
+    category: 'Developer Tools',
+    description:
+      'Automatiza deploys em EC2/on-premises, Lambda e ECS, com estratégias in-place, blue/green, canary e linear e rollback automático.',
+  };
+  const codeDeployService = await prisma.aWSService.upsert({
+    where: { name: 'AWS CodeDeploy' },
+    update: codeDeployServiceData,
+    create: { name: 'AWS CodeDeploy', ...codeDeployServiceData },
+  });
+
+  const cdkServiceData = {
+    shortName: 'CDK',
+    category: 'Developer Tools',
+    description:
+      'Define infraestrutura em linguagens de programação (TypeScript, Python, Java...) e a sintetiza em templates do CloudFormation.',
+  };
+  const cdkService = await prisma.aWSService.upsert({
+    where: { name: 'AWS Cloud Development Kit' },
+    update: cdkServiceData,
+    create: { name: 'AWS Cloud Development Kit', ...cdkServiceData },
+  });
+
+  const codeDeployLessonContent = `## Objetivo
+
+Ao final desta lição você vai conseguir montar um pipeline no AWS CodePipeline, configurar deploys no AWS CodeDeploy para EC2, Lambda e ECS, e escolher a estratégia de deploy e de rollback certa para cada cenário.
+
+## CodePipeline
+
+Um pipeline é uma sequência de **stages** (source, build, teste, aprovação, deploy), cada um com uma ou mais **actions**. Os artefatos passam de um stage para o outro através de um bucket S3 do pipeline. Pontos cobrados na prova:
+
+- **Source**: GitHub, GitLab e Bitbucket via **AWS CodeConnections** (antigo CodeStar Connections) — a conexão nasce com status *Pending* e precisa ser autorizada no Console antes de funcionar; também há S3 e ECR como fontes.
+- **Build/teste**: ações do CodeBuild. **Deploy**: CodeDeploy, CloudFormation, Elastic Beanstalk, ECS, S3, entre outros.
+- **Aprovação manual**: pausa o pipeline até alguém aprovar (pode notificar por SNS).
+- Se uma action falha, o pipeline para naquele stage. Mudanças de estado do pipeline viram eventos no EventBridge, que podem disparar notificações ou automações.
+
+## CodeDeploy: conceitos
+
+O CodeDeploy organiza deploys em **applications** e **deployment groups** (o conjunto de destinos: instâncias por tag ou Auto Scaling group, uma função Lambda, um serviço ECS), com uma **deployment configuration** (a velocidade) e um arquivo **\`appspec.yml\`** (o que fazer).
+
+**EC2/on-premises**: exige o **agente do CodeDeploy** rodando nas instâncias e um instance profile com acesso ao S3 onde está a revisão. O \`appspec.yml\` fica na raiz da revisão e define \`files\` (o que copiar para onde) e \`hooks\` (scripts por evento do ciclo de vida). A ordem dos hooks principais: \`ApplicationStop\` → (DownloadBundle) → \`BeforeInstall\` → (Install) → \`AfterInstall\` → \`ApplicationStart\` → \`ValidateService\`. Os deploys podem ser **in-place** (atualiza as instâncias existentes, em lotes: \`AllAtOnce\`, \`HalfAtATime\`, \`OneAtATime\`) ou **blue/green** (sobe instâncias novas, troca o tráfego no load balancer e depois encerra as antigas).
+
+**Lambda**: o deploy troca o peso de um **alias** entre a versão atual e a nova. Configurações: \`Canary10Percent5Minutes\` (10% por 5 minutos, depois 100%), \`Linear10PercentEvery1Minute\` (+10% a cada minuto) e \`AllAtOnce\`. Hooks: \`BeforeAllowTraffic\` e \`AfterAllowTraffic\`, funções Lambda que validam a versão nova antes e depois da troca.
+
+**ECS**: deploy blue/green com um load balancer (ALB ou NLB) e **dois target groups**; o tráfego passa do conjunto de tasks original para o novo (de uma vez, canary ou linear), com hooks como \`BeforeAllowTraffic\` e \`AfterAllowTestTraffic\`, e um listener de teste opcional.
+
+## Rollback
+
+Um deployment group pode fazer **rollback automático** quando o deploy falha ou quando um **alarme do CloudWatch** associado dispara — o CodeDeploy volta para a última revisão boa (no Lambda, devolve 100% do tráfego à versão anterior). Em deploys blue/green, o ambiente antigo pode ser mantido por um tempo para um rollback instantâneo.
+
+## Relação com a prova DVA-C02
+
+Espere cenários sobre a ordem dos hooks do \`appspec.yml\`, o agente do CodeDeploy e o instance profile, canary vs. linear vs. all-at-once no Lambda, blue/green no ECS com dois target groups, rollback por alarme, aprovação manual e conexões pendentes do CodeConnections.`;
+
+  const deployToolsLessonContent = `## Objetivo
+
+Ao final desta lição você vai conseguir fazer deploys seguros com o AWS SAM, entender o ciclo do AWS CDK, escolher a política de deploy do Elastic Beanstalk e usar o Amplify Hosting para frontends.
+
+## Deploys seguros com o SAM
+
+O SAM integra o CodeDeploy direto no template de uma função:
+
+- \`AutoPublishAlias: live\` publica uma nova versão a cada mudança de código e aponta o alias \`live\` para ela.
+- \`DeploymentPreference\` com \`Type\` (ex.: \`Canary10Percent5Minutes\`, \`Linear10PercentEvery1Minute\`, \`AllAtOnce\`) faz a troca do alias ser gradual, via CodeDeploy — o SAM cria a application e o deployment group sozinho.
+- \`Alarms\` lista alarmes do CloudWatch que disparam rollback automático, e \`Hooks\` (\`PreTraffic\`/\`PostTraffic\`) aponta funções de validação.
+
+No primeiro deploy não há troca gradual — só existe uma versão. A partir do segundo, cada mudança de código vira um deploy canary ou linear.
+
+## CDK
+
+O AWS CDK descreve a infraestrutura em linguagens de programação, com **constructs** em três níveis: L1 (\`Cfn*\`, um para um com o CloudFormation), L2 (recursos com padrões sensatos, como \`lambda.Function\`) e L3 (patterns que combinam vários recursos). O ciclo:
+
+- \`cdk bootstrap\` — uma vez por **conta e região**: cria a stack \`CDKToolkit\` com o bucket S3, o repositório ECR e as roles que o CDK usa para publicar artefatos. Sem ele, o primeiro deploy falha.
+- \`cdk synth\` — sintetiza o template do CloudFormation (em \`cdk.out\`).
+- \`cdk diff\` — compara com o que está implantado.
+- \`cdk deploy\` — publica os artefatos e faz o deploy via CloudFormation.
+
+**CDK Pipelines** criam um pipeline do CodePipeline que se atualiza sozinho a partir do próprio código do CDK.
+
+## Políticas de deploy do Elastic Beanstalk
+
+- **All at once**: atualiza todas as instâncias juntas — o mais rápido, com indisponibilidade; bom para desenvolvimento.
+- **Rolling**: em lotes, com capacidade reduzida durante o deploy.
+- **Rolling with additional batch**: sobe um lote extra antes, mantendo a capacidade total (com custo extra durante o deploy).
+- **Immutable**: sobe um Auto Scaling group temporário com instâncias novas; se algo falhar, basta descartá-lo — o rollback mais seguro, sem reduzir capacidade.
+- **Traffic splitting**: canary — manda uma porcentagem do tráfego para instâncias novas por um período de avaliação.
+- **Blue/green** (fora das políticas): cria um segundo ambiente e troca as URLs (**swap environment URLs**, uma troca de CNAME) quando o novo estiver validado.
+
+## Amplify Hosting
+
+Para frontends (SPA, SSR), o Amplify Hosting conecta um repositório Git e faz build e deploy a cada push, por branch, com o build definido em \`amplify.yml\`, previews de pull request e rollback para qualquer deploy anterior.
+
+## Relação com a prova DVA-C02
+
+Espere cenários com \`AutoPublishAlias\` + \`DeploymentPreference\` + alarmes no SAM, \`cdk bootstrap\`/\`synth\`/\`deploy\`, a política certa do Elastic Beanstalk para cada exigência (velocidade, capacidade, rollback) e blue/green por troca de URL.`;
+
+  const cicdLessons: LessonSeed[] = [
+    {
+      order: 1,
+      estimatedMinutes: 13,
+      title: 'CodePipeline, CodeDeploy e estratégias de deploy',
+      content: codeDeployLessonContent,
+      resources: [
+        {
+          title: 'Configurações de deploy do CodeDeploy — documentação oficial',
+          url: 'https://docs.aws.amazon.com/codedeploy/latest/userguide/deployment-configurations.html',
+        },
+        {
+          title: 'Hooks do AppSpec — documentação oficial',
+          url: 'https://docs.aws.amazon.com/codedeploy/latest/userguide/reference-appspec-file-structure-hooks.html',
+        },
+      ],
+    },
+    {
+      order: 2,
+      estimatedMinutes: 11,
+      title: 'Deploy com SAM, CDK, Elastic Beanstalk e Amplify',
+      content: deployToolsLessonContent,
+      resources: [
+        {
+          title: 'Deploys graduais com o SAM — documentação oficial',
+          url: 'https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/automating-updates-to-serverless-apps.html',
+        },
+        {
+          title: 'Políticas de deploy do Elastic Beanstalk — documentação oficial',
+          url: 'https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/using-features.rolling-version-deploy.html',
+        },
+      ],
+    },
+  ];
+
+  await seedLessons(cicdTopic.id, cicdLessons);
+
+  const canaryProjectInstructions = `No AWS CloudShell, crie um bucket para artefatos (troque \`NOME-DO-BUCKET\` por um nome único) e um projeto SAM com deploy canary:
+
+\`\`\`bash
+aws s3 mb s3://NOME-DO-BUCKET
+mkdir -p devlab-canary/src && cd devlab-canary
+cat > src/app.py <<'FIM'
+def handler(event, context):
+    return {"versao": "v1"}
+FIM
+cat > template.yaml <<'FIM'
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Resources:
+  Funcao:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: devlab-canary
+      Runtime: python3.13
+      Handler: app.handler
+      CodeUri: src/
+      AutoPublishAlias: live
+      DeploymentPreference:
+        Type: Canary10Percent5Minutes
+FIM
+aws cloudformation package --template-file template.yaml --s3-bucket NOME-DO-BUCKET --output-template-file packaged.yaml
+aws cloudformation deploy --template-file packaged.yaml --stack-name devlab-canary --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND
+\`\`\``;
+
+  const canaryWatchInstructions = `Enquanto o deploy do passo anterior roda, abra uma **segunda aba** do CloudShell (botão "+" no topo do terminal) e invoque o alias \`live\` 20 vezes:
+
+\`\`\`bash
+for i in $(seq 1 20); do
+  aws lambda invoke --function-name devlab-canary --qualifier live saida.json > /dev/null
+  cat saida.json; echo
+done | sort | uniq -c
+\`\`\``;
+
+  const pipelineSourceInstructions = `No AWS CloudShell, crie o bucket de origem (com versionamento, exigido pelo CodePipeline para fontes S3), o bucket de destino do "site" e o pacote da aplicação. Troque \`ORIGEM\` e \`DESTINO\` por nomes únicos:
+
+\`\`\`bash
+aws s3 mb s3://ORIGEM
+aws s3api put-bucket-versioning --bucket ORIGEM --versioning-configuration Status=Enabled
+aws s3 mb s3://DESTINO
+mkdir -p devlab-site/tests && cd devlab-site
+echo '<h1>DevLab v1</h1>' > index.html
+cat > tests/test_site.py <<'FIM'
+def test_titulo():
+    assert "<h1>" in open("index.html").read()
+FIM
+cat > buildspec.yml <<'FIM'
+version: 0.2
+phases:
+  install:
+    runtime-versions:
+      python: 3.12
+    commands:
+      - pip install pytest
+  build:
+    commands:
+      - python -m pytest
+artifacts:
+  files:
+    - index.html
+FIM
+zip -r ../devlab-site.zip . && cd ..
+aws s3 cp devlab-site.zip s3://ORIGEM/devlab-site.zip
+\`\`\``;
+
+  const cicdLabs: LabSeed[] = [
+    {
+      title: 'Deploy canary de uma função Lambda com SAM e CodeDeploy',
+      data: {
+        level: 2,
+        order: 1,
+        estimatedMinutes: 30,
+        objective:
+          'Ao final deste laboratório você terá publicado uma função com `AutoPublishAlias` e `DeploymentPreference` no SAM, e acompanhado o CodeDeploy mandar 10% do tráfego para a versão nova por 5 minutos antes de completar a troca.',
+        prerequisites:
+          'Conta AWS com acesso ao Console e ao AWS CloudShell. Ter lido a lição "Deploy com SAM, CDK, Elastic Beanstalk e Amplify" e feito o laboratório de aliases do tópico anterior ajuda.',
+        context:
+          'Uma função crítica já quebrou produção num deploy que trocou 100% do tráfego de uma vez. O time quer que toda versão nova receba primeiro uma fração do tráfego, sem ninguém mexer em pesos de alias manualmente.',
+        troubleshooting:
+          '"Requires capabilities": o deploy precisa de `--capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND` — o SAM cria roles para a função e para o CodeDeploy. \n\nO segundo deploy terminou na hora, sem canary: confira se o código mudou de fato (sem mudança, nenhuma versão nova é publicada) e se rodou o `package` de novo antes do `deploy`. \n\nNenhuma resposta `v2` no passo 4: o canary dura 5 minutos a partir do início do deploy — rode o laço logo depois de iniciar o deploy, ou repita-o enquanto o deployment aparecer como "In progress" no CodeDeploy.',
+        cleanup:
+          'No CloudShell, rode `aws cloudformation delete-stack --stack-name devlab-canary` (remove a função, o alias e a application do CodeDeploy) e `aws s3 rb s3://NOME-DO-BUCKET --force`.',
+        costWarning:
+          'O CodeDeploy não cobra por deploys em Lambda; as invocações e os poucos KB no S3 ficam dentro do Free Tier.',
+      },
+      steps: [
+        {
+          order: 1,
+          title: 'Criar e publicar a v1',
+          instructions: canaryProjectInstructions,
+          validation:
+            'O deploy termina com sucesso. No Console do Lambda, a função `devlab-canary` tem a versão 1 e o alias `live` apontando para ela; no Console do CodeDeploy, existe uma application criada pelo SAM.',
+        },
+        {
+          order: 2,
+          title: 'Mudar o código para v2 e iniciar o deploy',
+          instructions:
+            'Ainda em `devlab-canary`, troque `"v1"` por `"v2"` em `src/app.py` (ex.: `sed -i "s/v1/v2/" src/app.py`) e rode de novo os comandos `aws cloudformation package` e `aws cloudformation deploy` do passo 1. Deixe o deploy rodando.',
+          validation:
+            'O deploy não termina logo: a stack fica em `UPDATE_IN_PROGRESS` enquanto o CodeDeploy faz a troca gradual.',
+        },
+        {
+          order: 3,
+          title: 'Acompanhar o deployment no CodeDeploy',
+          instructions:
+            'No Console do CodeDeploy, abra "Deployments" e o deployment em andamento.',
+          validation:
+            'O deployment mostra a configuração `Canary10Percent5Minutes`, com 10% do tráfego na versão 2 (original: versão 1) e o tempo restante até a troca completa.',
+        },
+        {
+          order: 4,
+          title: 'Invocar durante o canary',
+          instructions: canaryWatchInstructions,
+          validation:
+            'A contagem mostra a maioria das respostas `v1` e algumas `v2` (em torno de 2 em 20): o alias `live` está com 10% na versão nova.',
+        },
+        {
+          order: 5,
+          title: 'Ver a troca completa',
+          instructions:
+            'Espere o deploy da primeira aba terminar (cerca de 5 minutos) e rode o laço de invocações de novo.',
+          validation:
+            'As 20 respostas são `v2`, o deployment aparece como "Succeeded" no CodeDeploy e o alias `live` aponta só para a versão 2 — sem ninguém ter mexido em pesos manualmente.',
+        },
+      ],
+    },
+    {
+      title: 'Pipeline no CodePipeline com teste, aprovação manual e deploy',
+      data: {
+        level: 3,
+        order: 2,
+        estimatedMinutes: 40,
+        objective:
+          'Ao final deste laboratório você terá um pipeline no AWS CodePipeline que pega o código de um bucket S3, roda testes no CodeBuild, pausa para aprovação manual e publica o resultado noutro bucket — e verá um teste quebrado impedir o deploy.',
+        prerequisites:
+          'Conta AWS com acesso ao Console e ao AWS CloudShell. Ter feito o laboratório de CodeBuild do tópico "Automação de testes de deploy" ajuda.',
+        context:
+          'O time já roda testes no CodeBuild, mas o deploy ainda é manual e às vezes publica código que não passou nos testes. Você vai ligar tudo num pipeline: nada chega ao destino sem passar pelos testes e por uma aprovação.',
+        troubleshooting:
+          'O stage Source falha com erro de versionamento: o bucket de origem precisa ter versionamento habilitado antes de criar o pipeline. \n\nO stage Build falha com "Unknown runtime version": ajuste `python: 3.12` no `buildspec.yml` para uma versão disponível na imagem escolhida. \n\nO stage Deploy falha com AccessDenied: a service role do pipeline precisa de permissão no bucket de destino — o assistente do Console cria essa role; confira se o bucket escolhido é o `DESTINO`. \n\nO pipeline não rodou depois do novo upload: clique em "Release change" para iniciar uma execução manualmente.',
+        cleanup:
+          'Exclua o pipeline `devlab-pipeline` e o projeto do CodeBuild criado pelo assistente. No CloudShell, esvazie e exclua os buckets: `aws s3 rb s3://ORIGEM --force`, `aws s3 rb s3://DESTINO --force` e o bucket de artefatos criado pelo pipeline (começa com `codepipeline-`). Com versionamento, se o `rb --force` falhar no bucket de origem, esvazie-o pelo botão "Empty" do Console antes.',
+        costWarning:
+          'Pipelines do tipo V2 cobram por minuto de execução de action, com uma cota gratuita mensal, e o CodeBuild cobra por minuto de build; as poucas execuções deste laboratório custam centavos. Exclua o pipeline ao final.',
+      },
+      steps: [
+        {
+          order: 1,
+          title: 'Preparar os buckets e o código',
+          instructions: pipelineSourceInstructions,
+          validation: '`aws s3 ls s3://ORIGEM` mostra `devlab-site.zip`, e o bucket de origem tem versionamento habilitado.',
+        },
+        {
+          order: 2,
+          title: 'Criar o pipeline',
+          instructions:
+            'No Console do CodePipeline, crie um pipeline personalizado chamado `devlab-pipeline` (tipo V2, nova service role). **Source**: Amazon S3, bucket `ORIGEM`, chave `devlab-site.zip`. **Build**: AWS CodeBuild, criando um projeto novo pelo próprio assistente (imagem gerenciada Amazon Linux, buildspec do código-fonte). **Deploy**: Amazon S3, bucket `DESTINO`, marcando "Extract file before deploy". Crie o pipeline.',
+          validation:
+            'O pipeline começa a rodar sozinho e os três stages terminam como "Succeeded". `aws s3 ls s3://DESTINO` mostra `index.html`.',
+        },
+        {
+          order: 3,
+          title: 'Adicionar uma aprovação manual',
+          instructions:
+            'Edite o pipeline e adicione um stage `Aprovacao` entre Build e Deploy, com uma action do tipo "Manual approval". Salve.',
+          validation: 'O pipeline passa a ter quatro stages: Source, Build, Aprovacao e Deploy.',
+        },
+        {
+          order: 4,
+          title: 'Publicar uma v2 passando pela aprovação',
+          instructions:
+            'No CloudShell, altere o site e envie o novo pacote:\n\n```bash\ncd devlab-site && echo \'<h1>DevLab v2</h1>\' > index.html\nzip -r ../devlab-site.zip . && cd ..\naws s3 cp devlab-site.zip s3://ORIGEM/devlab-site.zip\n```\n\nNo Console, clique em "Release change" (se o pipeline não iniciar sozinho). Quando o stage `Aprovacao` ficar aguardando, clique em "Review" e aprove.',
+          validation:
+            'O pipeline para em `Aprovacao` até a aprovação; depois disso, o Deploy roda e `aws s3 cp s3://DESTINO/index.html -` imprime `<h1>DevLab v2</h1>`.',
+        },
+        {
+          order: 5,
+          title: 'Quebrar o teste e ver o deploy ser bloqueado',
+          instructions:
+            'Envie uma versão sem `<h1>`:\n\n```bash\ncd devlab-site && echo \'<p>sem titulo</p>\' > index.html\nzip -r ../devlab-site.zip . && cd ..\naws s3 cp devlab-site.zip s3://ORIGEM/devlab-site.zip\n```\n\nInicie o pipeline de novo, se preciso, com "Release change".',
+          validation:
+            'O stage Build falha no teste, e os stages Aprovacao e Deploy nem são executados — `index.html` no bucket `DESTINO` continua com a v2.',
+        },
+      ],
+    },
+  ];
+
+  await seedLabs(cicdTopic.id, cicdLabs);
+
+  const cicdQuestionsToSeed: QuestionSeed[] = [
+    {
+      prompt: 'Qual arquivo o AWS CodeDeploy usa para saber o que instalar e quais scripts executar em cada etapa do deploy?',
+      type: 'KNOWLEDGE',
+      difficulty: 'EASY',
+      explanation: 'O appspec.yml (ou appspec.json para Lambda/ECS) define arquivos e hooks do deploy. O buildspec.yml é do CodeBuild.',
+      options: [
+        { text: 'appspec.yml', isCorrect: true, explanation: 'Correto.' },
+        { text: 'buildspec.yml', isCorrect: false, explanation: 'É o arquivo do CodeBuild.' },
+        { text: 'template.yaml', isCorrect: false, explanation: 'É o template do SAM/CloudFormation.' },
+        { text: 'amplify.yml', isCorrect: false, explanation: 'É o build do Amplify Hosting.' },
+      ],
+    },
+    {
+      prompt: 'Num deploy do CodeDeploy em instâncias EC2, qual é a ordem dos hooks principais do appspec.yml?',
+      type: 'KNOWLEDGE',
+      difficulty: 'MEDIUM',
+      explanation:
+        'A ordem é ApplicationStop → BeforeInstall → AfterInstall → ApplicationStart → ValidateService (com DownloadBundle e Install executados pelo agente entre eles).',
+      officialReferences:
+        'https://docs.aws.amazon.com/codedeploy/latest/userguide/reference-appspec-file-structure-hooks.html',
+      options: [
+        {
+          text: 'ApplicationStop → BeforeInstall → AfterInstall → ApplicationStart → ValidateService',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        {
+          text: 'BeforeInstall → ApplicationStop → ApplicationStart → AfterInstall → ValidateService',
+          isCorrect: false,
+          explanation: 'A aplicação é parada antes de tudo, e AfterInstall vem antes de ApplicationStart.',
+        },
+        {
+          text: 'ValidateService → ApplicationStop → BeforeInstall → AfterInstall → ApplicationStart',
+          isCorrect: false,
+          explanation: 'ValidateService é o último hook.',
+        },
+        {
+          text: 'BeforeAllowTraffic → AfterAllowTraffic',
+          isCorrect: false,
+          explanation: 'Esses são os hooks de deploys em Lambda.',
+        },
+      ],
+    },
+    {
+      prompt: 'O que a configuração de deploy Canary10Percent5Minutes faz num deploy de Lambda pelo CodeDeploy?',
+      type: 'KNOWLEDGE',
+      difficulty: 'MEDIUM',
+      explanation: 'Manda 10% do tráfego para a versão nova por 5 minutos e, se nada der errado, troca os 90% restantes de uma vez.',
+      options: [
+        {
+          text: 'Manda 10% do tráfego para a versão nova por 5 minutos e depois os 90% restantes de uma vez.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        {
+          text: 'Aumenta o tráfego da versão nova em 10% a cada 5 minutos.',
+          isCorrect: false,
+          explanation: 'Esse comportamento é de uma configuração linear.',
+        },
+        { text: 'Troca 100% do tráfego e faz rollback depois de 5 minutos.', isCorrect: false, explanation: 'Não é o que canary significa.' },
+        { text: 'Faz o deploy em 10% das instâncias EC2 a cada 5 minutos.', isCorrect: false, explanation: 'Em Lambda, o que se divide é o tráfego do alias.' },
+      ],
+    },
+    {
+      prompt:
+        'Num template SAM, como fazer cada mudança de código de uma função ser liberada gradualmente, com rollback automático se um alarme de erros disparar?',
+      type: 'APPLICATION',
+      difficulty: 'MEDIUM',
+      explanation:
+        'AutoPublishAlias publica uma versão nova a cada mudança, e DeploymentPreference (Type, Alarms, Hooks) faz o SAM usar o CodeDeploy para trocar o alias gradualmente, com rollback pelos alarmes.',
+      officialReferences:
+        'https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/automating-updates-to-serverless-apps.html',
+      options: [
+        {
+          text: 'AutoPublishAlias + DeploymentPreference com Type (ex.: Canary10Percent5Minutes) e Alarms.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'Aumentar a concorrência reservada da função.', isCorrect: false, explanation: 'Não controla a liberação de versões.' },
+        { text: 'Usar AllAtOnce com um alarme no CloudWatch sem DeploymentPreference.', isCorrect: false, explanation: 'Sem DeploymentPreference não há troca gradual nem rollback automático.' },
+        { text: 'Criar dois templates, um para cada versão.', isCorrect: false, explanation: 'Não é como o SAM faz deploys graduais.' },
+      ],
+    },
+    {
+      prompt:
+        'O primeiro cdk deploy numa conta e região novas falha dizendo que o ambiente não está preparado para o CDK. O que falta?',
+      type: 'APPLICATION',
+      difficulty: 'MEDIUM',
+      explanation:
+        'É preciso rodar cdk bootstrap uma vez por conta e região. Ele cria a stack CDKToolkit, com o bucket S3, o repositório ECR e as roles que o CDK usa para publicar artefatos.',
+      options: [
+        { text: 'Rodar cdk bootstrap na conta e região.', isCorrect: true, explanation: 'Correto.' },
+        { text: 'Rodar cdk synth antes de cada deploy.', isCorrect: false, explanation: 'O deploy já sintetiza; o problema é a falta de bootstrap.' },
+        { text: 'Converter o código do CDK para um template SAM.', isCorrect: false, explanation: 'Não é necessário.' },
+        { text: 'Criar manualmente uma stack chamada cdk.out.', isCorrect: false, explanation: 'cdk.out é a pasta local de saída do synth.' },
+      ],
+    },
+    {
+      prompt:
+        'Uma aplicação no Elastic Beanstalk precisa de deploys sem nenhuma redução de capacidade e com o rollback mais seguro possível, mesmo que o deploy demore mais. Qual política atende?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Immutable sobe instâncias novas num Auto Scaling group temporário; se algo falhar, basta descartá-lo, sem tocar nas instâncias atuais e sem reduzir capacidade.',
+      options: [
+        { text: 'Immutable', isCorrect: true, explanation: 'Correto.' },
+        { text: 'All at once', isCorrect: false, explanation: 'Causa indisponibilidade durante o deploy.' },
+        { text: 'Rolling', isCorrect: false, explanation: 'Reduz a capacidade enquanto cada lote é atualizado.' },
+        { text: 'Rolling with additional batch', isCorrect: false, explanation: 'Mantém a capacidade, mas o rollback exige um novo deploy nas instâncias atualizadas.' },
+      ],
+    },
+    {
+      prompt:
+        'Num ambiente de desenvolvimento do Elastic Beanstalk, o time quer o deploy mais rápido e barato possível, e uma breve indisponibilidade é aceitável. Qual política usar?',
+      type: 'SCENARIO',
+      difficulty: 'EASY',
+      explanation: 'All at once atualiza todas as instâncias ao mesmo tempo: é o mais rápido e não cria instâncias extras, ao custo de indisponibilidade.',
+      options: [
+        { text: 'All at once', isCorrect: true, explanation: 'Correto.' },
+        { text: 'Immutable', isCorrect: false, explanation: 'Cria instâncias novas; é mais lento e mais caro durante o deploy.' },
+        { text: 'Traffic splitting', isCorrect: false, explanation: 'Adiciona um período de avaliação com instâncias extras.' },
+        { text: 'Blue/green com troca de URL', isCorrect: false, explanation: 'Exige um segundo ambiente inteiro.' },
+      ],
+    },
+    {
+      prompt:
+        'Um time quer fazer deploy blue/green de uma aplicação no Elastic Beanstalk, validando a nova versão num ambiente separado antes de mandar os usuários para ela. Como fazer a troca?',
+      type: 'SCENARIO',
+      difficulty: 'HARD',
+      explanation:
+        'Cria-se um segundo ambiente com a nova versão e, depois de validado, usa-se "Swap environment URLs" (troca de CNAME) para direcionar o tráfego a ele. O ambiente antigo fica disponível para uma volta rápida.',
+      options: [
+        {
+          text: 'Criar um segundo ambiente com a nova versão e usar Swap environment URLs (troca de CNAME).',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'Usar a política Rolling no ambiente atual.', isCorrect: false, explanation: 'Atualiza o próprio ambiente, sem um ambiente separado.' },
+        { text: 'Alterar o .ebextensions do ambiente atual.', isCorrect: false, explanation: 'Muda a configuração, não a troca de ambientes.' },
+        { text: 'Criar um stage novo no API Gateway.', isCorrect: false, explanation: 'Não tem relação com ambientes do Elastic Beanstalk.' },
+      ],
+    },
+    {
+      prompt:
+        'Um time quer que o CodeDeploy desfaça automaticamente um deploy se a taxa de erros da aplicação subir. O que configurar no deployment group?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Associar um alarme do CloudWatch (ex.: taxa de erros) ao deployment group e habilitar rollback automático quando o alarme disparar.',
+      options: [
+        {
+          text: 'Associar o alarme de erros ao deployment group e habilitar rollback automático por alarme.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'Usar a configuração AllAtOnce.', isCorrect: false, explanation: 'Não traz rollback automático.' },
+        { text: 'Criar uma aprovação manual depois do deploy.', isCorrect: false, explanation: 'Depende de uma pessoa e não reverte sozinha.' },
+        { text: 'Aumentar o timeout dos hooks.', isCorrect: false, explanation: 'Não monitora a taxa de erros.' },
+      ],
+    },
+    {
+      prompt:
+        'Num deploy de uma função Lambda pelo CodeDeploy, o time quer rodar testes automáticos na versão nova antes que ela receba qualquer tráfego de produção. Onde colocar esses testes?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'O hook BeforeAllowTraffic (PreTraffic no SAM) executa uma função de validação antes da troca de tráfego; se ela reportar falha, o deploy é interrompido e revertido.',
+      options: [
+        { text: 'Numa função no hook BeforeAllowTraffic (PreTraffic no SAM).', isCorrect: true, explanation: 'Correto.' },
+        { text: 'No hook AfterAllowTraffic.', isCorrect: false, explanation: 'Roda depois que o tráfego já foi trocado.' },
+        { text: 'No hook ApplicationStop.', isCorrect: false, explanation: 'É um hook de deploys em EC2.' },
+        { text: 'No post_build do buildspec.', isCorrect: false, explanation: 'Roda no build, antes do deploy, não contra a versão publicada.' },
+      ],
+    },
+    {
+      prompt:
+        'Um pipeline novo usa um repositório do GitHub como source, mas nunca é disparado; a conexão do CodeConnections aparece com status Pending. O que fazer?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'HARD',
+      explanation:
+        'Conexões criadas por CLI ou CloudFormation nascem como Pending e precisam ser autorizadas (handshake com o GitHub) no Console para ficarem Available.',
+      options: [
+        {
+          text: 'Concluir a conexão no Console (autorizar o app da AWS no GitHub) para ela ficar Available.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'Recriar o pipeline com o mesmo nome.', isCorrect: false, explanation: 'A conexão continuaria pendente.' },
+        { text: 'Adicionar uma aprovação manual no stage Source.', isCorrect: false, explanation: 'Não resolve a conexão.' },
+        { text: 'Trocar o CodeBuild por outro provedor de build.', isCorrect: false, explanation: 'O problema está na origem, não no build.' },
+      ],
+    },
+    {
+      prompt: 'O que é necessário para fazer deploy blue/green de um serviço ECS com o CodeDeploy?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'HARD',
+      explanation:
+        'O deploy blue/green do ECS com CodeDeploy exige um Application ou Network Load Balancer com dois target groups (um para as tasks originais e outro para as novas), entre os quais o tráfego é trocado.',
+      options: [
+        { text: 'Um ALB ou NLB com dois target groups.', isCorrect: true, explanation: 'Correto.' },
+        { text: 'O agente do CodeDeploy instalado em cada task.', isCorrect: false, explanation: 'O agente é para EC2/on-premises.' },
+        { text: 'Um alias de função Lambda.', isCorrect: false, explanation: 'Aliases são usados em deploys de Lambda.' },
+        { text: 'Um ambiente do Elastic Beanstalk.', isCorrect: false, explanation: 'Não é necessário para ECS.' },
+      ],
+    },
+    {
+      prompt:
+        'Um deploy do CodeDeploy em instâncias EC2 falha antes de executar qualquer hook, e o log mostra que as instâncias nunca obtiveram a revisão do S3. Quais são as causas mais prováveis?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Em EC2, o agente do CodeDeploy precisa estar instalado e rodando, e o instance profile precisa de permissão para ler a revisão no S3.',
+      options: [
+        {
+          text: 'O agente do CodeDeploy não está rodando nas instâncias ou o instance profile não tem acesso ao bucket da revisão.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        { text: 'O buildspec.yml está na pasta errada.', isCorrect: false, explanation: 'O buildspec é do CodeBuild.' },
+        { text: 'Falta um alias na função Lambda.', isCorrect: false, explanation: 'O deploy é em EC2.' },
+        { text: 'O pipeline não tem aprovação manual.', isCorrect: false, explanation: 'Não afeta o download da revisão.' },
+      ],
+    },
+    {
+      prompt: 'Qual comando do AWS CDK gera o template do CloudFormation a partir do código, sem fazer deploy?',
+      type: 'KNOWLEDGE',
+      difficulty: 'EASY',
+      explanation: 'cdk synth sintetiza o template (na pasta cdk.out). cdk deploy sintetiza e implanta; cdk diff compara com o que está implantado.',
+      options: [
+        { text: 'cdk synth', isCorrect: true, explanation: 'Correto.' },
+        { text: 'cdk bootstrap', isCorrect: false, explanation: 'Prepara a conta/região para o CDK.' },
+        { text: 'cdk deploy', isCorrect: false, explanation: 'Também faz o deploy.' },
+        { text: 'cdk init', isCorrect: false, explanation: 'Cria um projeto novo.' },
+      ],
+    },
+  ];
+
+  await seedQuestions(cicdTopic.id, cicdQuestionsToSeed);
+
+  const cicdFlashcardsToSeed: FlashcardSeed[] = [
+    {
+      conceptName: 'Estrutura do CodePipeline',
+      conceptDescription: 'Stages, actions, artefatos e fontes de um pipeline.',
+      serviceId: codePipelineService.id,
+      front: 'Como um pipeline do CodePipeline é organizado?',
+      back: 'Em stages (source, build, teste, aprovação, deploy) com actions; artefatos passam por um bucket S3. GitHub entra via CodeConnections, que precisa ser autorizado (status Pending → Available).',
+    },
+    {
+      conceptName: 'Hooks do appspec em EC2',
+      conceptDescription: 'Ordem dos eventos do ciclo de vida de um deploy do CodeDeploy em EC2.',
+      serviceId: codeDeployService.id,
+      front: 'Qual a ordem dos hooks do appspec.yml num deploy em EC2?',
+      back: 'ApplicationStop → BeforeInstall → AfterInstall → ApplicationStart → ValidateService. Exige o agente do CodeDeploy e um instance profile com acesso à revisão no S3.',
+    },
+    {
+      conceptName: 'Configurações de deploy para Lambda',
+      conceptDescription: 'Canary, linear e all-at-once no CodeDeploy para Lambda.',
+      serviceId: codeDeployService.id,
+      front: 'Qual a diferença entre Canary10Percent5Minutes e Linear10PercentEvery1Minute?',
+      back: 'Canary: 10% por 5 minutos, depois o resto de uma vez. Linear: +10% a cada minuto até 100%. Hooks: BeforeAllowTraffic e AfterAllowTraffic.',
+    },
+    {
+      conceptName: 'Blue/green no ECS',
+      conceptDescription: 'Requisitos de um deploy blue/green do ECS com CodeDeploy.',
+      serviceId: codeDeployService.id,
+      front: 'O que um deploy blue/green do ECS com CodeDeploy exige?',
+      back: 'Um ALB ou NLB com dois target groups (original e novo); o tráfego é trocado de uma vez, canary ou linear.',
+    },
+    {
+      conceptName: 'Rollback no CodeDeploy',
+      conceptDescription: 'Rollback automático por falha ou alarme.',
+      serviceId: codeDeployService.id,
+      front: 'Como o CodeDeploy desfaz um deploy ruim automaticamente?',
+      back: 'Com rollback automático no deployment group, por falha do deploy ou por um alarme do CloudWatch associado; volta para a última revisão boa.',
+    },
+    {
+      conceptName: 'Deploy seguro no SAM',
+      conceptDescription: 'AutoPublishAlias e DeploymentPreference no AWS SAM.',
+      serviceId: cloudFormationService.id,
+      front: 'Como liberar gradualmente cada versão de uma função no SAM?',
+      back: 'AutoPublishAlias (versão nova + alias a cada mudança) e DeploymentPreference com Type (canary/linear), Alarms (rollback) e Hooks (PreTraffic/PostTraffic).',
+    },
+    {
+      conceptName: 'Ciclo do CDK',
+      conceptDescription: 'Comandos principais do AWS CDK.',
+      serviceId: cdkService.id,
+      front: 'Para que servem cdk bootstrap, synth, diff e deploy?',
+      back: 'bootstrap: prepara conta/região (stack CDKToolkit), uma vez. synth: gera o template. diff: compara com o implantado. deploy: publica via CloudFormation.',
+    },
+    {
+      conceptName: 'Constructs do CDK',
+      conceptDescription: 'Níveis de abstração dos constructs do CDK.',
+      serviceId: cdkService.id,
+      front: 'O que são constructs L1, L2 e L3 no CDK?',
+      back: 'L1: Cfn*, um para um com o CloudFormation. L2: recursos com padrões sensatos (ex.: lambda.Function). L3: patterns que combinam vários recursos.',
+    },
+    {
+      conceptName: 'Políticas de deploy do Elastic Beanstalk',
+      conceptDescription: 'All at once, rolling, rolling with additional batch, immutable e traffic splitting.',
+      serviceId: beanstalkService.id,
+      front: 'Quando usar cada política de deploy do Elastic Beanstalk?',
+      back: 'All at once: rápido, com indisponibilidade. Rolling: capacidade reduzida. Rolling with additional batch: mantém capacidade. Immutable: instâncias novas, rollback mais seguro. Traffic splitting: canary.',
+    },
+    {
+      conceptName: 'Blue/green no Elastic Beanstalk',
+      conceptDescription: 'Troca de ambientes por CNAME no Elastic Beanstalk.',
+      serviceId: beanstalkService.id,
+      front: 'Como fazer blue/green no Elastic Beanstalk?',
+      back: 'Criar um segundo ambiente com a versão nova e, depois de validado, usar Swap environment URLs (troca de CNAME). O antigo fica para voltar rápido.',
+    },
+  ];
+
+  await seedFlashcards(cicdTopic.id, cicdFlashcardsToSeed);
+
   const domainCount = await prisma.domain.count({ where: { examVersionId: examVersion.id } });
   const topicCount = await prisma.topic.count({ where: { domain: { examVersionId: examVersion.id } } });
 

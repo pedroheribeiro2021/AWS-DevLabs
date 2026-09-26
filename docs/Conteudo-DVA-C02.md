@@ -73,7 +73,7 @@ lifecycle no S3), 14 questões e 9 flashcards.
 | 1 | Preparação de artefatos de deploy | ✅ Feito (Sessão 24) | 2 | 2 | 13 | 10 |
 | 2 | Testes de aplicações em ambientes de desenvolvimento | ✅ Feito (Sessão 25) | 2 | 2 | 13 | 10 |
 | 3 | Automação de testes de deploy | ✅ Feito (Sessão 26) | 2 | 2 | 14 | 10 |
-| 4 | Deploy de código com serviços de CI/CD da AWS | ⬜ Pendente | — | — | — | — |
+| 4 | Deploy de código com serviços de CI/CD da AWS | ✅ Feito (Sessão 27) | 2 | 2 | 14 | 10 |
 
 ### Domain 4 — Troubleshooting and Optimization (18%)
 
@@ -85,12 +85,12 @@ lifecycle no S3), 14 questões e 9 flashcards.
 
 ## Volume total pra fechar a trilha
 
-Hoje: **98 questões** e **73 flashcards** no banco.
+Hoje: **112 questões** e **83 flashcards** no banco.
 
-- **4 tópicos** ainda vazios (de 13)
-- **~4-8 aulas** e **~4-8 labs** novos (conforme a amplitude de cada tópico)
-- **~40-55 questões** novas → banco total sobe para **~140-155 questões**
-- **~25-40 flashcards** novos
+- **3 tópicos** ainda vazios (de 13)
+- **~3-6 aulas** e **~3-6 labs** novos (conforme a amplitude de cada tópico)
+- **~30-42 questões** novas → banco total sobe para **~140-155 questões**
+- **~20-30 flashcards** novos
 
 ## Reforços pendentes
 
@@ -108,7 +108,7 @@ numérica que o schema usa hoje:
 
 1. ~~Domain 1 restante~~ — concluído (Sessões 20-21)
 2. ~~Domain 2 restante~~ — concluído (Sessões 22-23)
-3. Domain 3 (4 tópicos — 3 concluídos nas Sessões 24-26; falta Deploy com CI/CD)
+3. ~~Domain 3~~ — concluído (Sessões 24-27)
 4. Domain 4 (3 tópicos)
 
 ## Ritmo
