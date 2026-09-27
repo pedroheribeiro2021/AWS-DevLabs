@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { AnalyticsModule } from './analytics/analytics.module.js';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { AuthModule } from './auth/auth.module.js';
@@ -30,6 +31,7 @@ import { UsersModule } from './users/users.module.js';
     QuestionsModule,
     FlashcardsModule,
     SimulationsModule,
+    AnalyticsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
