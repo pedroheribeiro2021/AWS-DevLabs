@@ -25,8 +25,7 @@ abaixo:
 
 Meta de banco total ao fim da trilha: **~150+ questões**, o que já permite vários
 simulados de 65 questões com pouca repetição. Os tópicos feitos antes desse
-critério (Lambda, Cognito, Arquitetura) ficam abaixo dele e estão listados em
-"Reforços pendentes" abaixo.
+critério (Lambda, Cognito, Arquitetura) foram reforçados na Sessão 31.
 
 ## Linha de base mínima (referência histórica)
 
@@ -50,8 +49,8 @@ pra sair do zero, não o teto.
 
 | # | Tópico | Status | Aula | Lab | Questões | Flashcards |
 |---|--------|--------|------|-----|----------|------------|
-| 1 | Fundamentos do AWS Lambda | ✅ Feito (Sessão 3–6) | 1 | 1 | 6 | 5 |
-| 2 | Padrões de arquitetura e tolerância a falhas | ✅ Feito (Sessão 20) | 1 | 1 | 7 | 5 |
+| 1 | Fundamentos do AWS Lambda | ✅ Feito (Sessão 3–6; reforço Sessão 31) | 1 | 1 | 13 | 10 |
+| 2 | Padrões de arquitetura e tolerância a falhas | ✅ Feito (Sessão 20; reforço Sessão 31) | 1 | 1 | 14 | 10 |
 | 3 | Armazenamento de dados em aplicações | ✅ Feito (Sessão 21) | 2 | 2 | 14 | 9 |
 
 O tópico 3 foi o primeiro feito com o critério de prontidão: 2 aulas (DynamoDB;
@@ -62,7 +61,7 @@ lifecycle no S3), 14 questões e 9 flashcards.
 
 | # | Tópico | Status | Aula | Lab | Questões | Flashcards |
 |---|--------|--------|------|-----|----------|------------|
-| 1 | Autenticação e autorização de aplicações | ✅ Feito (Sessão 19) | 1 | 1 | 5 | 5 |
+| 1 | Autenticação e autorização de aplicações | ✅ Feito (Sessão 19; reforço Sessão 31) | 1 | 1 | 14 | 10 |
 | 2 | Criptografia com serviços AWS | ✅ Feito (Sessão 22) | 2 | 2 | 13 | 9 |
 | 3 | Dados sensíveis no código da aplicação | ✅ Feito (Sessão 23) | 2 | 2 | 13 | 10 |
 
@@ -85,22 +84,30 @@ lifecycle no S3), 14 questões e 9 flashcards.
 
 ## Volume atual
 
-**Todos os 13 tópicos têm conteúdo** (Sessão 30): **23 aulas**, **23 labs**,
-**154 questões** e **113 flashcards** no banco. Com os 4 domínios populados, um
-simulado de 65 questões já sai nos pesos reais da prova (21/17/15/12 questões,
-ver o fix da Sessão 28).
+**Todos os 13 tópicos estão no critério de prontidão** (Sessão 31): **23 aulas**,
+**23 labs**, **177 questões** e **128 flashcards** no banco. Com os 4 domínios
+populados, um simulado de 65 questões já sai nos pesos reais da prova
+(21/17/15/12 questões, ver o fix da Sessão 28).
 
-O que falta para fechar a meta de prontidão são os reforços abaixo (~15-20
-questões a mais, levando o banco a ~170).
+## Reforços (concluídos na Sessão 31)
 
-## Reforços pendentes
+Os 3 tópicos feitos antes do critério de prontidão foram levados a 13-14 questões
+e 10 flashcards cada, só com assuntos que nenhum outro tópico já cobrava:
 
-Tópicos feitos antes do critério de prontidão, a completar até ~10-14 questões
-cada (próximo passo, agora que nenhum tópico está vazio):
+- **Fundamentos do AWS Lambda** (6 → 13): tipos de invocação, destinations vs.
+  DLQ, Lambda em VPC (NAT), `/tmp`, resource-based policy para o S3, erros em
+  event source mapping de stream (bisect/on-failure), function URLs.
+- **Autenticação e autorização** (5 → 14): ID vs. access token, Lambda triggers
+  (Post confirmation, Migrate user), identidades guest, authorization code +
+  PKCE, validação de JWT via JWKS, Lambda authorizer vs. Cognito vs. IAM,
+  AssumeRole entre contas, role por grupo no Identity Pool.
+- **Padrões de arquitetura** (7 → 14): FIFO (message group e deduplicação),
+  visibility timeout vs. timeout do Lambda, EventBridge vs. SNS, Step Functions
+  Standard vs. Express, Retry/Catch com `ResultPath`, Kinesis vs. SQS.
 
-- Fundamentos do AWS Lambda (6 questões)
-- Autenticação e autorização de aplicações (5 questões)
-- Padrões de arquitetura e tolerância a falhas (7 questões)
+Esses 3 tópicos continuam com 1 aula e 1 lab; as aulas não foram reescritas
+(os assuntos novos aparecem nas questões e flashcards, e vários já têm aula em
+tópicos posteriores).
 
 ## Ordem sugerida
 
@@ -111,7 +118,7 @@ numérica que o schema usa hoje:
 2. ~~Domain 2 restante~~ — concluído (Sessões 22-23)
 3. ~~Domain 3~~ — concluído (Sessões 24-27)
 4. ~~Domain 4~~ — concluído (Sessões 28-30)
-5. Reforços dos 3 tópicos antigos (abaixo)
+5. ~~Reforços dos 3 tópicos antigos~~ — concluído (Sessão 31)
 
 ## Ritmo
 
