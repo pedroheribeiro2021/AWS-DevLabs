@@ -4,6 +4,7 @@ New entries from Session 2 onward are in English (see `Registro-de-Sessoes.md`).
 
 ## Open
 
+- **Analytics phase 2 (the rest of Planejamento section 15)**: the Session 32 analytics cover accuracy by domain/topic, weak topics, weekly history and deterministic recommendations (ADR 0007). Still missing, each needing new data first: recurring *concepts* in errors (questions aren't linked to `Concept` rows), slow questions (no per-question answer time is recorded), and forgotten flashcards (flashcard progress keeps only the current state, no review history).
 - **Seed script still doesn't sync nested relations on reseed**: Session 18 generalized scalar-field syncing to every model (Certification, ExamVersion, Domain, AWSService, Topic, Lesson, Lab, Question, Concept, Flashcard), but content seeded via a nested `create` block — Lab steps, Question options, Lesson resources — still only ever gets created once. Editing an existing step's instructions or an option's text in `seed.ts` won't reach the database on reseed. Only worth fixing if it causes real pain during the content-authoring push (diffing/upserting child collections by stable identity is a bigger problem than the scalar-field fix was).
 - **Domain-level badges**: deferred in ADR 0006 until more than one domain had real content — all 4 domains have content as of Session 30, so this is now unblocked.
 - **Flashcards excluded from XP-awarding**: the spaced-repetition review flow is repeatable by design, which doesn't fit the "award once on first completion" gating used for lessons/labs/questions/simulations. Needs its own design pass (award per state transition? only on reaching MASTERED? every review, capped?).
@@ -13,6 +14,11 @@ New entries from Session 2 onward are in English (see `Registro-de-Sessoes.md`).
 - **Bilingual product support (PT-BR + English)**: product ships in Portuguese only for now (ADR 0003). Real bilingual support needs a UI i18n library (e.g. `next-intl`) and a schema decision for per-locale lesson/topic/resource content — deserves its own design pass, not a quick add.
 
 ## Done
+
+### Session 32 (2026-09-27) — Phase 8: analytics (performance, weak spots, recommendations, history)
+- New `GET /analytics/me`: overall and per-domain/per-topic accuracy (latest answer per question, practice + completed simulations), lesson/lab/flashcard completion, weak topics (≥3 answered, <70%), weekly answers for the last 8 weeks (Brasília-time weeks), completed simulations, and up to 5 deterministic recommendations. Logic in pure, unit-tested functions; decisions in ADR 0007.
+- `GET /questions` accepts `topicId`; the web questions page reads `?topicId=` and shows the filter.
+- Web: new "Desempenho" page (`/analytics`) with stat tiles, recommendations, weak topics, per-domain/per-topic accuracy bars marked at the passing score, and a weekly bar chart; the dashboard shows the top 3 recommendations.
 
 ### Session 31 (2026-09-27) — reinforced the 3 topics written before the exam-readiness bar
 - Lambda (6 → 13 questions, 5 → 10 flashcards), Authentication/authorization (5 → 14, 5 → 10) and Architecture patterns (7 → 14, 5 → 10), covering only subjects no other topic already tested (invocation types, destinations vs. DLQ, Lambda in a VPC, stream error handling, function URLs; token choice and JWKS validation, User Pool triggers, PKCE, authorizer choice, cross-account AssumeRole, group-based roles; FIFO, visibility timeout, EventBridge vs. SNS, Standard vs. Express, Retry/Catch, Kinesis vs. SQS). New `AWSService` rows: IAM, Kinesis Data Streams.

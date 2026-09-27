@@ -51,8 +51,9 @@ async function authorizedFetch<T>(path: string, init?: RequestInit): Promise<T> 
   });
 }
 
-export function getQuestions(): Promise<QuestionSummary[]> {
-  return authorizedFetch<QuestionSummary[]>('/questions');
+export function getQuestions(topicId?: string): Promise<QuestionSummary[]> {
+  const query = topicId ? `?topicId=${encodeURIComponent(topicId)}` : '';
+  return authorizedFetch<QuestionSummary[]>(`/questions${query}`);
 }
 
 export function getQuestion(questionId: string): Promise<QuestionDetail> {

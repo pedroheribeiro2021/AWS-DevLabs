@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from '@/lib/auth-cookies';
 
-const PROTECTED_PATHS = ['/dashboard', '/learn', '/labs', '/questions', '/flashcards', '/simulations'];
+const PROTECTED_PATHS = ['/dashboard', '/learn', '/labs', '/questions', '/flashcards', '/simulations', '/analytics'];
 
 export function proxy(request: NextRequest) {
   const isProtected = PROTECTED_PATHS.some((path) => request.nextUrl.pathname.startsWith(path));
@@ -30,5 +30,6 @@ export const config = {
     '/questions/:path*',
     '/flashcards/:path*',
     '/simulations/:path*',
+    '/analytics/:path*',
   ],
 };

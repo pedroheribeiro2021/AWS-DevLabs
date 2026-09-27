@@ -2,7 +2,9 @@ import { redirect } from 'next/navigation';
 import { AppNav } from '@/components/app-nav';
 import { BadgesSection } from '@/components/badges-section';
 import { GamificationHeader } from '@/components/gamification-header';
+import { RecommendationsSection } from '@/components/recommendations-section';
 import { SkillTree } from '@/components/skill-tree';
+import { getAnalytics } from '@/lib/analytics';
 import { getCurrentUser } from '@/lib/auth-server';
 import { getGamificationStats } from '@/lib/gamification';
 import { getTrack } from '@/lib/learning';
@@ -16,9 +18,10 @@ export default async function DashboardPage() {
     redirect('/login');
   }
 
-  const [track, gamificationStats] = await Promise.all([
+  const [track, gamificationStats, analytics] = await Promise.all([
     getTrack(DEFAULT_CERTIFICATION_SLUG),
     getGamificationStats(),
+    getAnalytics(),
   ]);
   const lessons = track.examVersions.flatMap((ev) => ev.domains).flatMap((d) => d.topics).flatMap((t) => t.lessons);
   const completedCount = lessons.filter((lesson) => lesson.status === 'COMPLETED').length;
@@ -28,6 +31,8 @@ export default async function DashboardPage() {
       <AppNav title={`Olá, ${user.name}`} />
 
       <GamificationHeader stats={gamificationStats} />
+
+      <RecommendationsSection recommendations={analytics.recommendations} limit={3} />
 
       <BadgesSection badges={gamificationStats.badges} />
 

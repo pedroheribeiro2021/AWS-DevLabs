@@ -649,3 +649,22 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 
 **Next steps:** Phase 8 (Analytics — weak spots per domain/topic, history, study recommendations); domain-level badges are unblocked.
 
+---
+
+## 2026-09-27 — Session 32: Phase 8 (Analytics)
+
+**Goal:** Pedro merged #41 and asked to continue with the agreed next step, Phase 8: performance, weak spots, recommendations and history (Planejamento sections 15, 16 and "Fase 8"), with deterministic recommendations.
+
+**Changes:**
+
+- `apps/api/src/analytics/`: `analytics.ts` (pure functions — latest answer per question, domain/topic stats, weak topics, recommendation rules, weekly buckets in Brasília time), `analytics.spec.ts` (8 tests), `AnalyticsService` (5 parallel queries on the current exam version, then the pure functions), `AnalyticsController` (`GET /analytics/me`, JWT-guarded), `AnalyticsModule` registered in `AppModule`.
+- `GET /questions` gained an optional `topicId` filter (DTO + service), used by the recommendation links.
+- `apps/api/test/analytics.e2e-spec.ts` (3 tests): 401 without a token; empty diagnosis for a new user with "continue lessons" first; one practice answer shows up in its topic, the overall count and the current week; the `topicId` filter only returns that topic's questions.
+- Web: `lib/analytics.ts`, `/analytics` page ("Desempenho", added to the nav and to the protected paths in `proxy.ts`), `RecommendationsSection` (also on the dashboard, top 3), `AccuracyBar` (tick at the passing score, number always printed), `WeeklyActivityChart` (single-series bars, CSS hover/focus tooltip; color orange-600, checked with the dataviz palette validator against the light surface), and the questions page reads `?topicId=`.
+- `docs/adr/0007-analytics-diagnosis-recommendations.md`; Pendências.
+- Verified: API typecheck and lint clean; unit 36/36 (8 new), e2e 42/42 (3 new); web typecheck, lint and production build clean. Ran the API and the built web app locally (port 3005 — 3000 was taken by another process, left alone) with a throwaway user who answered 24 questions: the page rendered the tiles, recommendations, weak topics, domain bars and the weekly chart correctly; one wording fix came out of it ("0 de 1 aulas" → "Aulas concluídas neste tópico: 0 de 1"). The throwaway user was deleted afterwards.
+
+**Decisions:** ADR 0007 — analytics computed on read (no new tables), accuracy from the latest answer per question, weak = ≥3 answered and <70%, fixed-priority recommendations (max 5, one per topic), Brasília-time weeks.
+
+**Next steps:** domain-level badges (unblocked since Session 30); analytics phase 2 needs new data (concept links on questions, answer timing, flashcard review history) — see Pendências; then Phase 9 (AI) or Phase 10 (Refinement), to be agreed with Pedro.
+

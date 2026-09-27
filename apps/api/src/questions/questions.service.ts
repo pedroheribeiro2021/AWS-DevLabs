@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 interface FindAllFilters {
   difficulty?: QuestionDifficulty;
   type?: QuestionType;
+  topicId?: string;
 }
 
 @Injectable()
@@ -21,6 +22,7 @@ export class QuestionsService {
       where: {
         difficulty: filters.difficulty,
         type: filters.type,
+        topicId: filters.topicId,
       },
       orderBy: [{ difficulty: 'asc' }, { order: 'asc' }],
       include: { topic: { select: { id: true, name: true } } },
