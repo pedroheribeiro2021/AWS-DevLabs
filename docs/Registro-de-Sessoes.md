@@ -668,3 +668,17 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 
 **Next steps:** domain-level badges (unblocked since Session 30); analytics phase 2 needs new data (concept links on questions, answer timing, flashcard review history) — see Pendências; then Phase 9 (AI) or Phase 10 (Refinement), to be agreed with Pedro.
 
+---
+
+## 2026-09-27 — Session 33: learning-loop plan (docs only)
+
+**Goal:** Pedro merged #42, said he'd rather focus on pending items/refinement and do manual testing today, and asked how far the lessons are from Duolingo's learning dynamics and what improving them would gain.
+
+**Changes:**
+
+- `docs/Pendencias.md`: new "Next round: learning loop" section at the top of Open (end-of-lesson checkpoint, redo-my-mistakes mode, flashcard spaced repetition, step-by-step lessons — in that order, with effort estimates and what's explicitly not planned); the rest of Open moved under "Backlog"; the flashcard-XP item now points at the spaced-repetition item.
+
+**Decisions:** prioritize the learning loop (active recall, spacing, error review) over more gamification; keep lessons as reference material rather than breaking them into bite-sized cards. Not an ADR yet — each item gets its design recorded when implemented.
+
+**Next steps:** Pedro's manual testing session; fix whatever it finds; then learning-loop items 1-3.
+
