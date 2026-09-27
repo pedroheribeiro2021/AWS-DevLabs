@@ -752,6 +752,245 @@ Fundamentos de Lambda aparecem em todo o domínio "Development with AWS Services
     }
   }
 
+  // Reinforcement (Session 31): this topic predates the exam-readiness bar
+  // (see docs/Conteudo-DVA-C02.md). New questions/flashcards only cover what
+  // later topics don't already test (layers, aliases, concurrency and cold
+  // starts live in the artifacts/deploy/optimization topics).
+  const lambdaReinforcementQuestions: QuestionSeed[] = [
+    {
+      prompt:
+        'Quais serviços invocam uma função Lambda de forma assíncrona, sem esperar a resposta da função?',
+      type: 'KNOWLEDGE',
+      difficulty: 'EASY',
+      explanation:
+        'S3, SNS e EventBridge invocam o Lambda de forma assíncrona: o evento vai para uma fila interna do Lambda e o serviço recebe só a confirmação. API Gateway e Application Load Balancer invocam de forma síncrona. SQS, Kinesis e DynamoDB Streams usam event source mapping: o próprio Lambda faz polling da fonte e invoca a função de forma síncrona com lotes.',
+      officialReferences: 'https://docs.aws.amazon.com/lambda/latest/dg/invocation-async.html',
+      options: [
+        { text: 'Amazon S3, Amazon SNS e Amazon EventBridge.', isCorrect: true, explanation: 'Correto.' },
+        {
+          text: 'Amazon API Gateway, Application Load Balancer e Amazon S3.',
+          isCorrect: false,
+          explanation: 'API Gateway e ALB invocam de forma síncrona e esperam a resposta para devolver ao cliente.',
+        },
+        {
+          text: 'Amazon SQS, Amazon Kinesis e DynamoDB Streams.',
+          isCorrect: false,
+          explanation: 'Essas fontes usam event source mapping: o Lambda faz polling e invoca a função de forma síncrona.',
+        },
+        {
+          text: 'Todos os serviços da AWS invocam o Lambda de forma assíncrona.',
+          isCorrect: false,
+          explanation: 'O tipo de invocação depende do serviço de origem.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Uma função Lambda acionada por um tópico SNS às vezes falha. O time quer receber, numa fila SQS, os eventos que falharam depois de esgotadas as tentativas, junto com a mensagem de erro e o stack trace, e também registrar as execuções bem-sucedidas num barramento do EventBridge. Qual configuração atende?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Destinations de invocação assíncrona aceitam um destino on-failure e um on-success, e enviam um registro de invocação com detalhes da requisição e da resposta (incluindo o erro). Uma DLQ só recebe falhas e só guarda o payload original do evento, sem os detalhes do erro.',
+      officialReferences: 'https://docs.aws.amazon.com/lambda/latest/dg/invocation-async-retain-records.html',
+      options: [
+        {
+          text: 'Configurar destinations: on-failure para a fila SQS e on-success para o EventBridge.',
+          isCorrect: true,
+          explanation: 'Correto: destinations cobrem os dois casos e incluem o contexto da invocação.',
+        },
+        {
+          text: 'Configurar uma dead-letter queue SQS na função.',
+          isCorrect: false,
+          explanation: 'A DLQ não registra sucessos e guarda só o evento original, sem o erro.',
+        },
+        {
+          text: 'Configurar uma redrive policy na fila SQS.',
+          isCorrect: false,
+          explanation: 'Redrive policy é de filas SQS consumidas; aqui a origem é SNS com invocação assíncrona.',
+        },
+        {
+          text: 'Envolver o handler em try/catch e publicar manualmente nos dois destinos.',
+          isCorrect: false,
+          explanation: 'Funciona, mas reimplementa o que destinations já fazem, e não cobre falhas como timeout.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Uma função Lambda foi conectada a sub-redes privadas de uma VPC para acessar um banco RDS. Desde então, as chamadas que ela faz a uma API pública na internet dão timeout. Qual é a correção?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Uma função conectada a uma VPC só sai para a internet pelo roteamento da VPC. As sub-redes privadas da função precisam de uma rota para um NAT Gateway numa sub-rede pública. Colocar a função numa sub-rede pública não resolve, porque a interface de rede do Lambda não recebe IP público.',
+      officialReferences: 'https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc-internet.html',
+      options: [
+        {
+          text: 'Adicionar um NAT Gateway numa sub-rede pública e rotear o tráfego de internet das sub-redes privadas por ele.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        {
+          text: 'Mover a função para uma sub-rede pública com Internet Gateway.',
+          isCorrect: false,
+          explanation: 'A ENI do Lambda não recebe IP público, então continua sem acesso à internet.',
+        },
+        {
+          text: 'Aumentar o timeout da função.',
+          isCorrect: false,
+          explanation: 'Não existe rota para a internet; esperar mais não muda isso.',
+        },
+        {
+          text: 'Adicionar a policy AWSLambdaVPCAccessExecutionRole à execution role.',
+          isCorrect: false,
+          explanation: 'Ela permite criar as interfaces de rede na VPC, mas não cria rota para a internet.',
+        },
+      ],
+    },
+    {
+      prompt: 'Qual é o tamanho padrão do armazenamento temporário /tmp de uma função Lambda, e até quanto ele pode ser configurado?',
+      type: 'KNOWLEDGE',
+      difficulty: 'EASY',
+      explanation:
+        'O /tmp (ephemeral storage) tem 512 MB por padrão e pode ser configurado até 10.240 MB (10 GB). O conteúdo é por ambiente de execução: pode sobreviver entre invocações "warm", mas não é compartilhado nem durável.',
+      officialReferences: 'https://docs.aws.amazon.com/lambda/latest/dg/configuration-ephemeral-storage.html',
+      options: [
+        { text: '512 MB por padrão, configurável até 10 GB.', isCorrect: true, explanation: 'Correto.' },
+        { text: '250 MB, fixo.', isCorrect: false, explanation: '250 MB é o limite do pacote .zip descompactado, não do /tmp.' },
+        { text: '10 GB por padrão, fixo.', isCorrect: false, explanation: '10 GB é o máximo configurável, não o padrão.' },
+        { text: 'Ilimitado, cobrado por GB usado.', isCorrect: false, explanation: 'O /tmp tem um teto de 10 GB.' },
+      ],
+    },
+    {
+      prompt:
+        'Um template do CloudFormation cria um bucket S3 com uma notificação de evento que aciona uma função Lambda. O deploy falha com "Unable to validate the following destination configurations". O que está faltando?',
+      type: 'APPLICATION',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Para o S3 invocar a função, a resource-based policy da função precisa permitir lambda:InvokeFunction ao principal s3.amazonaws.com (no CloudFormation, um recurso AWS::Lambda::Permission, idealmente com SourceArn do bucket). O Console adiciona essa permissão automaticamente ao criar o gatilho; via CLI ou IaC ela precisa ser declarada.',
+      officialReferences: 'https://docs.aws.amazon.com/lambda/latest/dg/access-control-resource-based.html',
+      options: [
+        {
+          text: 'Uma permissão na resource-based policy da função (AWS::Lambda::Permission) permitindo que o S3 a invoque.',
+          isCorrect: true,
+          explanation: 'Correto: o S3 valida o destino ao gravar a configuração de notificação.',
+        },
+        {
+          text: 'Permissão s3:GetObject na execution role da função.',
+          isCorrect: false,
+          explanation: 'A execution role define o que a função pode fazer, não quem pode invocá-la.',
+        },
+        {
+          text: 'Uma bucket policy permitindo lambda.amazonaws.com.',
+          isCorrect: false,
+          explanation: 'Quem precisa de permissão é o S3 para invocar a função, não o contrário.',
+        },
+        { text: 'Habilitar o versionamento do bucket.', isCorrect: false, explanation: 'Não é requisito para notificações de evento.' },
+      ],
+    },
+    {
+      prompt:
+        'Uma função Lambda consome um Kinesis Data Stream. Um registro malformado faz a função falhar sempre, e o processamento daquele shard fica parado enquanto os outros shards seguem normalmente. Qual configuração do event source mapping resolve com o menor impacto?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'HARD',
+      explanation:
+        'Em fontes de stream, o Lambda repete o lote com falha até o registro expirar (por padrão), bloqueando o shard para preservar a ordem. BisectBatchOnFunctionError divide o lote para isolar o registro ruim, MaximumRetryAttempts/MaximumRecordAgeInSeconds limitam as tentativas, e um on-failure destination (SQS, SNS ou S3) guarda os metadados do lote descartado para análise.',
+      officialReferences: 'https://docs.aws.amazon.com/lambda/latest/dg/with-kinesis.html',
+      options: [
+        {
+          text: 'Habilitar BisectBatchOnFunctionError, limitar MaximumRetryAttempts e configurar um on-failure destination.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        {
+          text: 'Configurar uma redrive policy com maxReceiveCount no stream.',
+          isCorrect: false,
+          explanation: 'Redrive policy e maxReceiveCount são do SQS; streams do Kinesis não têm isso.',
+        },
+        {
+          text: 'Aumentar o número de shards do stream.',
+          isCorrect: false,
+          explanation: 'O registro ruim continuaria bloqueando o shard onde está.',
+        },
+        {
+          text: 'Aumentar o timeout e a memória da função.',
+          isCorrect: false,
+          explanation: 'A falha vem do dado, não de falta de recurso.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Um desenvolvedor precisa expor uma função Lambda como um endpoint HTTPS público para receber webhooks de um parceiro, que assina cada requisição. Não há necessidade de throttling por cliente, API keys nem transformação de requisição. Qual é a opção mais simples?',
+      type: 'APPLICATION',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Uma Lambda function URL dá à função um endpoint HTTPS dedicado sem outro serviço no caminho. Com AuthType NONE o endpoint é público, e a função valida a assinatura do parceiro no código. Com AuthType AWS_IAM, os chamadores precisariam assinar com SigV4, o que um parceiro externo normalmente não faz. API Gateway continua sendo a escolha quando se precisa de usage plans, API keys, transformação ou authorizers.',
+      officialReferences: 'https://docs.aws.amazon.com/lambda/latest/dg/urls-configuration.html',
+      options: [
+        {
+          text: 'Uma Lambda function URL com AuthType NONE, validando a assinatura no código.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        {
+          text: 'Uma Lambda function URL com AuthType AWS_IAM.',
+          isCorrect: false,
+          explanation: 'Exigiria que o parceiro assinasse as requisições com credenciais da AWS (SigV4).',
+        },
+        {
+          text: 'Uma API REST no API Gateway com usage plan e API key.',
+          isCorrect: false,
+          explanation: 'Funciona, mas adiciona recursos que o enunciado diz não precisar.',
+        },
+        {
+          text: 'Um Application Load Balancer com a função como target.',
+          isCorrect: false,
+          explanation: 'Funciona, mas tem custo fixo por hora e mais configuração que uma function URL.',
+        },
+      ],
+    },
+  ];
+
+  await seedQuestions(topic.id, lambdaReinforcementQuestions);
+
+  const lambdaReinforcementFlashcards: Omit<FlashcardSeed, 'serviceId'>[] = [
+    {
+      conceptName: 'Tipos de invocação',
+      conceptDescription: 'As três formas como o Lambda é invocado: síncrona, assíncrona e por event source mapping.',
+      front: 'Quais são os três modelos de invocação do Lambda e um exemplo de cada?',
+      back: 'Síncrona (API Gateway, ALB), assíncrona (S3, SNS, EventBridge) e event source mapping, em que o Lambda faz polling da fonte (SQS, Kinesis, DynamoDB Streams).',
+    },
+    {
+      conceptName: 'Destinations vs. DLQ',
+      conceptDescription: 'Duas formas de guardar o resultado de invocações assíncronas: destinations (sucesso e falha, com contexto) e DLQ (só falha, só o evento).',
+      front: 'Qual a diferença entre destinations e uma DLQ em invocações assíncronas do Lambda?',
+      back: 'Destinations aceitam on-success e on-failure (SQS, SNS, Lambda, EventBridge; S3 só em on-failure) e enviam o registro da invocação com o erro. A DLQ (SQS ou SNS) só recebe falhas e só guarda o evento original.',
+    },
+    {
+      conceptName: 'Lambda em VPC',
+      conceptDescription: 'Função conectada a sub-redes de uma VPC, que passa a depender do roteamento da VPC para sair para a internet.',
+      front: 'Como uma função Lambda em sub-redes privadas de uma VPC acessa a internet?',
+      back: 'Por um NAT Gateway numa sub-rede pública (rota 0.0.0.0/0 nas sub-redes privadas). Para serviços da AWS, VPC endpoints evitam o NAT. A ENI do Lambda nunca recebe IP público.',
+    },
+    {
+      conceptName: 'Ephemeral storage (/tmp)',
+      conceptDescription: 'Espaço em disco temporário de cada ambiente de execução do Lambda.',
+      front: 'Quanto espaço o /tmp de uma função Lambda tem, e ele é durável?',
+      back: '512 MB por padrão, configurável até 10 GB. Não é durável nem compartilhado: pode sobreviver entre invocações no mesmo ambiente warm, mas some quando o ambiente é descartado.',
+    },
+    {
+      conceptName: 'Erros em event source mapping de stream',
+      conceptDescription: 'Configurações que evitam que um registro com falha bloqueie um shard do Kinesis ou do DynamoDB Streams.',
+      front: 'Como evitar que um registro ruim bloqueie um shard do Kinesis consumido pelo Lambda?',
+      back: 'No event source mapping: BisectBatchOnFunctionError (divide o lote), MaximumRetryAttempts / MaximumRecordAgeInSeconds (limita tentativas) e um on-failure destination para guardar o lote descartado.',
+    },
+  ];
+
+  await seedFlashcards(
+    topic.id,
+    lambdaReinforcementFlashcards.map((card) => ({ ...card, serviceId: lambdaService.id })),
+  );
+
   // Domain/topic skeleton for the exam guide's remaining scope. These topics
   // exist so the Learning track and the Simulations question-selection
   // algorithm have the full domain shape to work with; full lessons/labs/
@@ -1219,6 +1458,313 @@ Autenticação e autorização aparecem no domínio Security — espere questõe
     authFlashcardsToSeed.map((card) => ({ ...card, serviceId: cognitoService.id })),
   );
 
+  // Reinforcement (Session 31): brings this pre-readiness-bar topic up to
+  // the bar -- token choice and validation, User Pool Lambda triggers, OAuth
+  // flows, API Gateway authorizer choice and cross-account IAM roles.
+  const iamServiceData = {
+    shortName: 'IAM',
+    category: 'Security, Identity, & Compliance',
+    description:
+      'Controla quem pode fazer o quê na AWS: usuários, roles, policies baseadas em identidade e em recurso, e a assunção de roles via STS.',
+  };
+  const iamService = await prisma.aWSService.upsert({
+    where: { name: 'AWS Identity and Access Management' },
+    update: iamServiceData,
+    create: { name: 'AWS Identity and Access Management', ...iamServiceData },
+  });
+
+  const authReinforcementQuestions: QuestionSeed[] = [
+    {
+      prompt:
+        'Uma API protegida por um Cognito User Pool authorizer exige o escopo OAuth pedidos/leitura. Qual token o cliente deve enviar no header Authorization?',
+      type: 'KNOWLEDGE',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Escopos OAuth vêm no access token. Quando o método tem escopos configurados, o authorizer exige o access token; sem escopos, ele aceita o ID token. O ID token carrega claims de identidade (email, nome, cognito:groups) para uso da própria aplicação.',
+      officialReferences:
+        'https://docs.aws.amazon.com/cognito/latest/developerguide/amazon-cognito-user-pools-using-tokens-with-identity-providers.html',
+      options: [
+        { text: 'O access token.', isCorrect: true, explanation: 'Correto: é o token que carrega os escopos.' },
+        { text: 'O ID token.', isCorrect: false, explanation: 'O ID token não carrega escopos OAuth.' },
+        { text: 'O refresh token.', isCorrect: false, explanation: 'O refresh token só serve para obter novos tokens no Cognito.' },
+        {
+          text: 'Credenciais temporárias obtidas de um Identity Pool.',
+          isCorrect: false,
+          explanation: 'Essas credenciais são para assinar chamadas a serviços da AWS (SigV4), não para um Cognito authorizer.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Assim que um usuário confirma o cadastro num Cognito User Pool, a aplicação precisa criar o perfil dele numa tabela DynamoDB. Qual é a forma mais direta?',
+      type: 'APPLICATION',
+      difficulty: 'MEDIUM',
+      explanation:
+        'User Pools invocam funções Lambda em pontos do fluxo de autenticação. O gatilho Post confirmation roda depois que o usuário confirma a conta — o momento certo para criar o perfil. Pre sign-up roda antes do cadastro (validar ou auto-confirmar), e Pre token generation roda antes da emissão dos tokens (adicionar ou remover claims).',
+      officialReferences:
+        'https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-working-with-aws-lambda-triggers.html',
+      options: [
+        { text: 'Um Lambda trigger Post confirmation no User Pool.', isCorrect: true, explanation: 'Correto.' },
+        {
+          text: 'Um Lambda trigger Pre sign-up no User Pool.',
+          isCorrect: false,
+          explanation: 'Roda antes do cadastro, quando o usuário ainda não confirmou a conta.',
+        },
+        {
+          text: 'Um Lambda trigger Pre token generation.',
+          isCorrect: false,
+          explanation: 'Roda a cada emissão de tokens, não uma vez na confirmação.',
+        },
+        {
+          text: 'Uma regra do EventBridge que consulta o User Pool a cada minuto.',
+          isCorrect: false,
+          explanation: 'Polling adiciona atraso e complexidade para algo que um gatilho nativo resolve.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Uma empresa está migrando de um sistema de login próprio para um Cognito User Pool. Ela quer migrar cada usuário no primeiro login, sem obrigá-lo a redefinir a senha e sem exportar as senhas antigas. Qual recurso atende?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'HARD',
+      explanation:
+        'O Lambda trigger Migrate user é chamado quando o usuário não existe no User Pool: a função valida a senha no sistema antigo e, se ela estiver correta, devolve os atributos para o Cognito criar o usuário com a mesma senha. Uma importação em lote por CSV não carrega senhas, então todos teriam que redefini-las.',
+      officialReferences:
+        'https://docs.aws.amazon.com/cognito/latest/developerguide/user-pool-lambda-migrate-user.html',
+      options: [
+        { text: 'O Lambda trigger Migrate user do User Pool.', isCorrect: true, explanation: 'Correto.' },
+        {
+          text: 'Importação de usuários em lote por arquivo CSV.',
+          isCorrect: false,
+          explanation: 'Não importa senhas; os usuários teriam que redefini-las.',
+        },
+        {
+          text: 'Um Identity Pool federado com o sistema antigo.',
+          isCorrect: false,
+          explanation: 'Um Identity Pool entrega credenciais da AWS; não migra usuários para um User Pool.',
+        },
+        {
+          text: 'Um Lambda trigger Pre sign-up que auto-confirma os usuários.',
+          isCorrect: false,
+          explanation: 'Exigiria que os usuários se cadastrassem de novo.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Um app mobile quer permitir que visitantes sem login leiam um catálogo público num bucket S3 direto do app, com acesso só de leitura a esse prefixo. Qual configuração atende?',
+      type: 'APPLICATION',
+      difficulty: 'EASY',
+      explanation:
+        'Identity Pools suportam identidades não autenticadas (guest). O visitante recebe credenciais temporárias da role de não autenticados, que deve ter só s3:GetObject no prefixo do catálogo.',
+      options: [
+        {
+          text: 'Habilitar identidades não autenticadas no Identity Pool, com uma role que só permite leitura no prefixo.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        {
+          text: 'Embutir no app uma access key de um usuário IAM com leitura no bucket.',
+          isCorrect: false,
+          explanation: 'Credenciais de longo prazo no app podem ser extraídas e nunca expiram.',
+        },
+        {
+          text: 'Criar um usuário genérico no User Pool e deixar a senha no app.',
+          isCorrect: false,
+          explanation: 'Expõe uma credencial fixa e ainda não gera credenciais da AWS sem um Identity Pool.',
+        },
+        {
+          text: 'Tornar o bucket inteiro público.',
+          isCorrect: false,
+          explanation: 'Expõe mais do que o necessário e contraria o menor privilégio.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Uma single-page application (sem backend próprio) vai usar o login hospedado do Cognito. Qual fluxo OAuth 2.0 é o recomendado para ela obter os tokens?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Clientes públicos, que não conseguem guardar um client secret (SPAs e apps mobile), devem usar o authorization code grant com PKCE. O implicit grant devolve os tokens na URL e não é mais recomendado; client credentials é para comunicação máquina a máquina.',
+      officialReferences:
+        'https://docs.aws.amazon.com/cognito/latest/developerguide/authorization-endpoint.html',
+      options: [
+        { text: 'Authorization code grant com PKCE.', isCorrect: true, explanation: 'Correto.' },
+        { text: 'Implicit grant.', isCorrect: false, explanation: 'Expõe os tokens na URL e não emite refresh token.' },
+        {
+          text: 'Client credentials grant.',
+          isCorrect: false,
+          explanation: 'É para máquina a máquina e exige um client secret, que uma SPA não pode guardar.',
+        },
+        {
+          text: 'Authorization code grant com o client secret embutido no JavaScript.',
+          isCorrect: false,
+          explanation: 'Qualquer pessoa leria o secret no código do navegador.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Um microsserviço em contêiner recebe access tokens de um Cognito User Pool e precisa validá-los por conta própria, sem API Gateway. Qual validação é a correta?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'HARD',
+      explanation:
+        'O token é um JWT assinado com RS256. O serviço baixa as chaves públicas do User Pool em /.well-known/jwks.json, verifica a assinatura com a chave do kid do header, e confere exp, iss (a URL do User Pool), client_id (access token; no ID token é aud) e token_use. Apenas decodificar o payload não prova nada, porque qualquer um pode montar um JWT.',
+      officialReferences:
+        'https://docs.aws.amazon.com/cognito/latest/developerguide/amazon-cognito-user-pools-using-tokens-verifying-a-jwt.html',
+      options: [
+        {
+          text: 'Verificar a assinatura com as chaves públicas do JWKS do User Pool e conferir exp, iss, client_id e token_use.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        {
+          text: 'Decodificar o payload em Base64 e conferir se o campo sub existe.',
+          isCorrect: false,
+          explanation: 'Não verifica a assinatura: um token forjado passaria.',
+        },
+        {
+          text: 'Verificar a assinatura com o client secret do app client.',
+          isCorrect: false,
+          explanation: 'Os tokens são assinados com a chave privada do User Pool (RS256), não com o client secret.',
+        },
+        {
+          text: 'Chamar sts:GetCallerIdentity com o token.',
+          isCorrect: false,
+          explanation: 'O STS não aceita tokens do User Pool como credencial.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Uma API no API Gateway precisa aceitar tokens emitidos por um provedor OAuth de terceiros (não Cognito) e decidir o acesso com base num header customizado e no path. Qual tipo de autorização usar?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Um Lambda authorizer roda código próprio: valida o token de qualquer provedor e devolve uma IAM policy (Allow/Deny), que pode ser cacheada. O tipo REQUEST recebe headers, query strings, path e stage variables. O Cognito authorizer só valida tokens de User Pools, e a autorização IAM exige requisições assinadas com SigV4.',
+      officialReferences:
+        'https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-use-lambda-authorizer.html',
+      options: [
+        { text: 'Um Lambda authorizer do tipo REQUEST.', isCorrect: true, explanation: 'Correto.' },
+        { text: 'Um Cognito User Pool authorizer.', isCorrect: false, explanation: 'Só valida tokens emitidos por User Pools.' },
+        {
+          text: 'Autorização IAM (AWS_IAM).',
+          isCorrect: false,
+          explanation: 'Exige que o cliente assine as requisições com credenciais da AWS.',
+        },
+        {
+          text: 'API keys com usage plan.',
+          isCorrect: false,
+          explanation: 'API keys servem para identificar clientes e aplicar cotas, não para autorização.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Uma função Lambda na conta A precisa ler e gravar em vários serviços da conta B. Qual é a abordagem recomendada?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Cria-se uma role na conta B com as permissões necessárias e uma trust policy que confia na execution role da conta A. A execution role da conta A precisa de permissão sts:AssumeRole nessa role. A função chama AssumeRole e usa as credenciais temporárias para acessar a conta B. Os dois lados precisam permitir: a trust policy em B e a permissão de identidade em A.',
+      officialReferences:
+        'https://docs.aws.amazon.com/IAM/latest/UserGuide/tutorial_cross-account-with-roles.html',
+      options: [
+        {
+          text: 'Criar na conta B uma role que confia na execution role da conta A, e a função chama sts:AssumeRole nela.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        {
+          text: 'Criar um usuário IAM na conta B e guardar a access key numa variável de ambiente da função.',
+          isCorrect: false,
+          explanation: 'Credenciais de longo prazo são o que roles existem para evitar.',
+        },
+        {
+          text: 'Adicionar à execution role da conta A as permissões sobre os recursos da conta B.',
+          isCorrect: false,
+          explanation: 'Uma policy da conta A sozinha não concede acesso a recursos de outra conta.',
+        },
+        {
+          text: 'Usar o mesmo nome de role nas duas contas.',
+          isCorrect: false,
+          explanation: 'Nomes iguais não estabelecem nenhuma relação de confiança.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Num app com Cognito User Pool e Identity Pool, usuários do grupo "admin" devem receber credenciais da AWS com mais permissões que os demais usuários autenticados. Como configurar?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'HARD',
+      explanation:
+        'Cada grupo do User Pool pode ter uma IAM role associada, e os tokens trazem as claims cognito:groups e cognito:preferred_role. No Identity Pool, o provedor do User Pool é configurado para escolher a role a partir do token ("Choose role from token"). Assim cada usuário recebe credenciais da role do seu grupo, sem código adicional.',
+      officialReferences: 'https://docs.aws.amazon.com/cognito/latest/developerguide/role-based-access-control.html',
+      options: [
+        {
+          text: 'Associar uma IAM role ao grupo admin no User Pool e configurar o Identity Pool para escolher a role pelo token.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        {
+          text: 'Criar um segundo Identity Pool só para administradores.',
+          isCorrect: false,
+          explanation: 'Duplica a configuração; role-based access control resolve num pool só.',
+        },
+        {
+          text: 'Dar à role de autenticados as permissões de admin e checar o grupo no front-end.',
+          isCorrect: false,
+          explanation: 'Todo usuário autenticado teria as credenciais de admin; o front-end não é barreira de segurança.',
+        },
+        {
+          text: 'Guardar a role desejada num atributo customizado editável pelo usuário.',
+          isCorrect: false,
+          explanation: 'O próprio usuário poderia se promover.',
+        },
+      ],
+    },
+  ];
+
+  await seedQuestions(authTopic.id, authReinforcementQuestions);
+
+  await seedFlashcards(authTopic.id, [
+    {
+      conceptName: 'Lambda triggers do User Pool',
+      conceptDescription: 'Funções Lambda que o Cognito invoca em pontos do fluxo de cadastro, login e emissão de tokens.',
+      serviceId: cognitoService.id,
+      front: 'Cite 4 Lambda triggers de um Cognito User Pool e para que servem.',
+      back: 'Pre sign-up (validar/auto-confirmar cadastro), Post confirmation (ex.: criar perfil no banco), Pre token generation (adicionar/remover claims) e Migrate user (migrar usuário de um sistema antigo no primeiro login).',
+    },
+    {
+      conceptName: 'Authorization code com PKCE',
+      conceptDescription: 'Fluxo OAuth 2.0 recomendado para clientes públicos, que não conseguem guardar um client secret.',
+      serviceId: cognitoService.id,
+      front: 'Qual fluxo OAuth uma SPA ou app mobile deve usar com o Cognito?',
+      back: 'Authorization code grant com PKCE. O implicit grant expõe tokens na URL e não é mais recomendado; client credentials é para máquina a máquina.',
+    },
+    {
+      conceptName: 'Validação de JWT do Cognito',
+      conceptDescription: 'Verificação que um backend faz de um token do User Pool sem depender do API Gateway.',
+      serviceId: cognitoService.id,
+      front: 'Como um backend valida por conta própria um token de um Cognito User Pool?',
+      back: 'Verifica a assinatura RS256 com as chaves públicas em /.well-known/jwks.json do User Pool e confere exp, iss, aud (ID token) ou client_id (access token) e token_use.',
+    },
+    {
+      conceptName: 'Tipos de autorização no API Gateway',
+      conceptDescription: 'As opções de autorização de um método: IAM, Cognito User Pool authorizer e Lambda authorizer.',
+      serviceId: cognitoService.id,
+      front: 'Quando usar IAM, Cognito authorizer ou Lambda authorizer no API Gateway?',
+      back: 'IAM: chamadores com credenciais da AWS (SigV4). Cognito authorizer: tokens de um User Pool. Lambda authorizer: qualquer outra lógica, como tokens de terceiros ou headers customizados (TOKEN ou REQUEST).',
+    },
+    {
+      conceptName: 'Acesso entre contas com AssumeRole',
+      conceptDescription: 'Padrão em que uma role numa conta confia num principal de outra conta, que a assume via STS.',
+      serviceId: iamService.id,
+      front: 'O que é preciso para uma função na conta A assumir uma role na conta B?',
+      back: 'Na conta B, uma trust policy na role permitindo o principal da conta A. Na conta A, permissão sts:AssumeRole para essa role na identidade da função. Os dois lados precisam permitir.',
+    },
+  ]);
+
   // ---------------------------------------------------------------------
   // Content-authoring push, topic 2 of 12: Domain 1 "Padrões de arquitetura
   // e tolerância a falhas" -- same shape as the Cognito topic above.
@@ -1672,6 +2218,265 @@ Espere questões de cenário pedindo para desacoplar componentes com SQS, escolh
   ];
 
   await seedFlashcards(architectureTopic.id, architectureFlashcardsToSeed);
+
+  // Reinforcement (Session 31): brings this pre-readiness-bar topic up to
+  // the bar -- FIFO queues, visibility timeout, EventBridge vs. SNS, Step
+  // Functions workflow types and error handling, Kinesis vs. SQS.
+  const kinesisServiceData = {
+    shortName: 'Kinesis Data Streams',
+    category: 'Analytics',
+    description:
+      'Stream de dados em tempo real dividido em shards, com ordem por partition key, retenção configurável e vários consumidores lendo os mesmos registros.',
+  };
+  const kinesisService = await prisma.aWSService.upsert({
+    where: { name: 'Amazon Kinesis Data Streams' },
+    update: kinesisServiceData,
+    create: { name: 'Amazon Kinesis Data Streams', ...kinesisServiceData },
+  });
+
+  const architectureReinforcementQuestions: QuestionSeed[] = [
+    {
+      prompt:
+        'Uma fila SQS FIFO recebe eventos de pedidos de muitos clientes. Os eventos de um mesmo pedido precisam ser processados em ordem, mas pedidos diferentes podem ser processados em paralelo. Como enviar as mensagens?',
+      type: 'APPLICATION',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Numa fila FIFO, a ordem é garantida dentro de cada message group. Usar o ID do pedido como MessageGroupId mantém a ordem por pedido e permite que grupos diferentes sejam consumidos em paralelo. Um MessageGroupId único para tudo serializaria a fila inteira.',
+      officialReferences:
+        'https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/FIFO-key-terms.html',
+      options: [
+        { text: 'Usar o ID do pedido como MessageGroupId.', isCorrect: true, explanation: 'Correto.' },
+        {
+          text: 'Usar o mesmo MessageGroupId em todas as mensagens.',
+          isCorrect: false,
+          explanation: 'Garante ordem, mas só um consumidor processa por vez: perde o paralelismo.',
+        },
+        {
+          text: 'Usar o ID do pedido como MessageDeduplicationId.',
+          isCorrect: false,
+          explanation: 'Descartaria como duplicados todos os eventos seguintes do mesmo pedido (janela de 5 minutos).',
+        },
+        {
+          text: 'Usar uma fila Standard com DelaySeconds.',
+          isCorrect: false,
+          explanation: 'Filas Standard não garantem ordem.',
+        },
+      ],
+    },
+    {
+      prompt: 'Como uma fila SQS FIFO evita mensagens duplicadas enviadas pelo produtor?',
+      type: 'KNOWLEDGE',
+      difficulty: 'EASY',
+      explanation:
+        'Mensagens com o mesmo MessageDeduplicationId, enviadas dentro de uma janela de 5 minutos, são aceitas mas entregues só uma vez. Com content-based deduplication habilitada, o SQS usa um hash SHA-256 do corpo como ID.',
+      options: [
+        {
+          text: 'Descarta mensagens com o mesmo MessageDeduplicationId dentro de uma janela de 5 minutos.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        {
+          text: 'Compara cada mensagem com todas as já enviadas desde a criação da fila.',
+          isCorrect: false,
+          explanation: 'A janela de deduplicação é de 5 minutos.',
+        },
+        { text: 'Pelo MessageGroupId.', isCorrect: false, explanation: 'O MessageGroupId define a ordem, não a deduplicação.' },
+        { text: 'Não evita; o consumidor precisa tratar.', isCorrect: false, explanation: 'Isso vale para filas Standard.' },
+      ],
+    },
+    {
+      prompt:
+        'Uma função Lambda com timeout de 5 minutos consome uma fila SQS cujo visibility timeout é 30 segundos. Mensagens estão sendo processadas mais de uma vez, mesmo sem erros. Qual é a correção?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Se o processamento passa do visibility timeout, a mensagem volta a ficar visível e outro consumidor a recebe. A AWS recomenda que o visibility timeout da fila seja de pelo menos 6 vezes o timeout da função quando ela é consumida por um event source mapping.',
+      officialReferences: 'https://docs.aws.amazon.com/lambda/latest/dg/with-sqs.html',
+      options: [
+        {
+          text: 'Aumentar o visibility timeout da fila para pelo menos 6 vezes o timeout da função (30 minutos).',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        {
+          text: 'Reduzir o visibility timeout para 5 segundos.',
+          isCorrect: false,
+          explanation: 'As mensagens voltariam a ficar visíveis ainda mais cedo.',
+        },
+        {
+          text: 'Aumentar o maxReceiveCount da redrive policy.',
+          isCorrect: false,
+          explanation: 'Controla quando a mensagem vai para a DLQ, não a duplicação.',
+        },
+        {
+          text: 'Habilitar long polling na fila.',
+          isCorrect: false,
+          explanation: 'Reduz respostas vazias, mas não impede que a mensagem reapareça.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Uma aplicação precisa reagir a eventos de mudança de estado de instâncias EC2 e a eventos de um parceiro SaaS, roteando para alvos diferentes conforme campos do conteúdo do evento, e poder reprocessar eventos antigos. Qual serviço atende?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'O Amazon EventBridge recebe eventos de serviços da AWS e de parceiros SaaS, roteia com regras que filtram qualquer campo do evento (event patterns) e oferece archive e replay. O SNS tem filter policies, mas não recebe eventos de parceiros SaaS nem tem replay de eventos arquivados.',
+      officialReferences: 'https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-what-is.html',
+      options: [
+        {
+          text: 'Amazon EventBridge, com regras por event pattern e archive/replay.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        {
+          text: 'Amazon SNS com filter policies.',
+          isCorrect: false,
+          explanation: 'Não recebe eventos de parceiros SaaS e não tem archive/replay.',
+        },
+        {
+          text: 'Amazon SQS com várias filas.',
+          isCorrect: false,
+          explanation: 'Filas não roteiam por conteúdo nem recebem esses eventos diretamente.',
+        },
+        {
+          text: 'AWS Step Functions.',
+          isCorrect: false,
+          explanation: 'Orquestra workflows; não é um roteador de eventos.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Um workflow do Step Functions processa milhares de eventos de IoT por segundo, cada execução dura menos de 1 minuto e pode ser repetida sem problema. Qual tipo de workflow é o mais adequado e barato?',
+      type: 'KNOWLEDGE',
+      difficulty: 'MEDIUM',
+      explanation:
+        'Express workflows são feitos para alto volume e execuções curtas (até 5 minutos), cobrados por número de requisições e duração, com semântica at-least-once (assíncrono). Standard workflows duram até 1 ano, têm execução exactly-once e histórico completo, e são cobrados por transição de estado — caros nesse volume.',
+      officialReferences:
+        'https://docs.aws.amazon.com/step-functions/latest/dg/choosing-workflow-type.html',
+      options: [
+        { text: 'Express workflow.', isCorrect: true, explanation: 'Correto.' },
+        {
+          text: 'Standard workflow.',
+          isCorrect: false,
+          explanation: 'Cobrado por transição de estado; indicado para processos longos ou que exigem exactly-once.',
+        },
+        {
+          text: 'Um Standard workflow com uma execução por hora processando todos os eventos.',
+          isCorrect: false,
+          explanation: 'Troca tempo real por lotes sem necessidade.',
+        },
+        {
+          text: 'Step Functions não suporta esse volume; usar só Lambda.',
+          isCorrect: false,
+          explanation: 'Express workflows suportam taxas muito altas de início de execução.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Num estado Task do Step Functions, o time quer repetir falhas transitórias algumas vezes e, se ainda falhar, seguir para um estado de notificação levando o input original junto com os detalhes do erro. Qual configuração atende?',
+      type: 'EXAM_LEVEL',
+      difficulty: 'HARD',
+      explanation:
+        'Retry é avaliado primeiro; só depois de esgotadas as tentativas o Catch direciona para o estado de fallback. Com ResultPath: "$.error" no Catch, o erro é adicionado ao input original em vez de substituí-lo (sem ResultPath, o output do Catch é só o objeto de erro).',
+      officialReferences: 'https://docs.aws.amazon.com/step-functions/latest/dg/concepts-error-handling.html',
+      options: [
+        {
+          text: 'Retry para os erros transitórios e Catch com Next para o estado de notificação e ResultPath "$.error".',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        {
+          text: 'Só Catch com ResultPath "$".',
+          isCorrect: false,
+          explanation: 'Não repete, e "$" substitui o input original pelo erro.',
+        },
+        {
+          text: 'Só Retry com MaxAttempts alto.',
+          isCorrect: false,
+          explanation: 'Sem Catch, depois das tentativas a execução inteira falha.',
+        },
+        {
+          text: 'Catch antes do Retry, para notificar a cada falha.',
+          isCorrect: false,
+          explanation: 'A ordem de avaliação é sempre Retry primeiro; e notificar a cada tentativa não é o pedido.',
+        },
+      ],
+    },
+    {
+      prompt:
+        'Cliques de um site precisam ser consumidos por três aplicações independentes (analytics, detecção de fraude e arquivamento), cada uma lendo todos os eventos em ordem por usuário, com possibilidade de reprocessar os últimos dias. Qual serviço atende?',
+      type: 'SCENARIO',
+      difficulty: 'MEDIUM',
+      explanation:
+        'O Kinesis Data Streams mantém os registros pelo período de retenção (24 horas por padrão, até 365 dias), preserva a ordem por partition key dentro de cada shard, e permite que vários consumidores leiam os mesmos dados de forma independente e reprocessem a partir de um ponto. No SQS, uma mensagem excluída por um consumidor some para todos.',
+      officialReferences: 'https://docs.aws.amazon.com/streams/latest/dev/key-concepts.html',
+      options: [
+        {
+          text: 'Amazon Kinesis Data Streams, usando o ID do usuário como partition key.',
+          isCorrect: true,
+          explanation: 'Correto.',
+        },
+        {
+          text: 'Uma fila SQS Standard compartilhada pelas três aplicações.',
+          isCorrect: false,
+          explanation: 'Cada mensagem seria processada por um só consumidor, sem ordem e sem replay.',
+        },
+        {
+          text: 'Uma fila SQS FIFO compartilhada pelas três aplicações.',
+          isCorrect: false,
+          explanation: 'Tem ordem, mas cada mensagem ainda vai para um só consumidor e não há replay.',
+        },
+        {
+          text: 'Um tópico SNS Standard com três assinantes.',
+          isCorrect: false,
+          explanation: 'Entrega a todos, mas sem ordem garantida e sem reter eventos para replay.',
+        },
+      ],
+    },
+  ];
+
+  await seedQuestions(architectureTopic.id, architectureReinforcementQuestions);
+
+  await seedFlashcards(architectureTopic.id, [
+    {
+      conceptName: 'SQS FIFO',
+      conceptDescription: 'Fila com ordem garantida por message group e deduplicação de mensagens numa janela de 5 minutos.',
+      serviceId: sqsService.id,
+      front: 'Para que servem o MessageGroupId e o MessageDeduplicationId numa fila SQS FIFO?',
+      back: 'MessageGroupId: define a ordem (garantida dentro de cada grupo; grupos diferentes são processados em paralelo). MessageDeduplicationId: descarta repetições dentro de 5 minutos (ou content-based deduplication, pelo hash do corpo).',
+    },
+    {
+      conceptName: 'Visibility timeout',
+      conceptDescription: 'Tempo em que uma mensagem recebida fica invisível para outros consumidores antes de voltar à fila.',
+      serviceId: sqsService.id,
+      front: 'Qual deve ser o visibility timeout de uma fila SQS consumida por uma função Lambda?',
+      back: 'Pelo menos 6 vezes o timeout da função. Se o processamento passa do visibility timeout, a mensagem volta a ficar visível e é processada de novo.',
+    },
+    {
+      conceptName: 'Standard vs. Express workflows',
+      conceptDescription: 'Os dois tipos de workflow do Step Functions, com duração, semântica de execução e cobrança diferentes.',
+      serviceId: stepFunctionsService.id,
+      front: 'Qual a diferença entre workflows Standard e Express no Step Functions?',
+      back: 'Standard: até 1 ano, exactly-once, cobrado por transição de estado. Express: até 5 minutos, at-least-once (assíncrono), alto volume, cobrado por requisição e duração.',
+    },
+    {
+      conceptName: 'EventBridge vs. SNS',
+      conceptDescription: 'Barramento de eventos com roteamento por conteúdo vs. pub/sub de alto throughput.',
+      serviceId: snsService.id,
+      front: 'Quando escolher EventBridge em vez de SNS?',
+      back: 'Quando precisa de eventos de serviços da AWS ou parceiros SaaS, regras que filtram qualquer campo do evento, schema registry, agendamento ou archive/replay. SNS: fanout simples de alto throughput e notificações (e-mail, SMS, push).',
+    },
+    {
+      conceptName: 'Kinesis Data Streams vs. SQS',
+      conceptDescription: 'Stream com retenção e múltiplos consumidores vs. fila em que cada mensagem é processada e excluída.',
+      serviceId: kinesisService.id,
+      front: 'Quando usar Kinesis Data Streams em vez de SQS?',
+      back: 'Quando vários consumidores precisam ler os mesmos dados, em ordem por partition key, com possibilidade de replay (retenção de 24 h a 365 dias). No SQS cada mensagem é processada por um consumidor e some ao ser excluída.',
+    },
+  ]);
 
   // ---------------------------------------------------------------------
   // Content-authoring push, topic 3 of 12: Domain 1 "Armazenamento de dados

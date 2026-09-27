@@ -628,3 +628,24 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 **Decisions:** none architectural.
 
 **Next steps (agreed with Pedro in Session 29):** reinforce Lambda/Cognito/Architecture to ~10-14 questions each; then Phase 8 (Analytics — weak spots per domain/topic, history, study recommendations).
+
+---
+
+## 2026-09-27 — Session 31: reinforcement of the 3 pre-readiness-bar topics
+
+**Goal:** Pedro merged #40 and asked to continue with the agreed next step: bring Lambda, Cognito and Architecture up to the exam-readiness bar.
+
+**Changes:**
+
+- `packages/database/prisma/seed.ts` — a reinforcement block appended to each of the three topics, using the shared `seedQuestions`/`seedFlashcards` helpers (the legacy Lambda block still has its own inline loops; left as-is):
+  - **Fundamentos do AWS Lambda**: 7 questions (sync/async/event source mapping, destinations vs. DLQ, VPC + NAT Gateway, `/tmp` size, `AWS::Lambda::Permission` for S3 triggers, Kinesis poison record with `BisectBatchOnFunctionError`/on-failure destination, function URLs) and 5 flashcards.
+  - **Autenticação e autorização de aplicações**: 9 questions (access vs. ID token with OAuth scopes, Post confirmation and Migrate user triggers, guest identities, authorization code + PKCE, JWT validation via JWKS, Lambda REQUEST authorizer, cross-account AssumeRole, group-based role selection in the Identity Pool) and 5 flashcards; new `AWSService` row AWS Identity and Access Management.
+  - **Padrões de arquitetura e tolerância a falhas**: 7 questions (FIFO message group and deduplication, visibility timeout ≥ 6× function timeout, EventBridge vs. SNS, Standard vs. Express, Retry/Catch with `ResultPath`, Kinesis vs. SQS) and 5 flashcards; new `AWSService` row Amazon Kinesis Data Streams.
+  - Before writing, grepped the existing bank so the new questions don't repeat what later topics already cover (layers, aliases, concurrency, cold starts, SnapStart, `ReportBatchItemFailures`).
+- Docs: checklist (all 13 topics at the bar; 177 questions, 128 flashcards), Pendências (reinforcement item closed).
+- Verified: typecheck clean; seed twice with no duplicates (13/14/14 questions, 10/10/10 flashcards, no question without options); unit 28/28, e2e 39/39. Prettier `--check` on `seed.ts` fails identically on `main` (pre-existing).
+
+**Decisions:** the three topics keep 1 lesson and 1 lab each — the new subjects live in questions and flashcards (several already have lesson coverage in later topics). No architectural decisions.
+
+**Next steps:** Phase 8 (Analytics — weak spots per domain/topic, history, study recommendations); domain-level badges are unblocked.
+
