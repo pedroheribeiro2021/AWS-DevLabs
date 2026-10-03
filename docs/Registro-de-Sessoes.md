@@ -682,3 +682,20 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 
 **Next steps:** Pedro's manual testing session; fix whatever it finds; then learning-loop items 1-3.
 
+---
+
+## 2026-10-03 — Session 34: learning loop item 1 (end-of-lesson checkpoint)
+
+**Goal:** Pedro asked to start the learning-loop round, with the explicit constraint that it is an *addition*: the current way of learning (read the lesson, "Marcar como concluída") must stay.
+
+**Changes:**
+
+- New `<LessonCheckpoint>` server component (`apps/web/src/components/lesson-checkpoint.tsx`), rendered on `/learn/[lessonId]` between the lesson/resources and the unchanged completion button. Picks 3 of the topic's questions — unanswered first, then those whose latest answer was wrong, then right — and answers them inline with the same option/feedback UI as the question page.
+- New `submitCheckpointAnswer` server action: posts through the existing `POST /questions/:id/answer`, so XP, badges, history and analytics count checkpoint answers with no API change. It redirects back with `?checkpoint=id1,id2,id3#checkpoint` so the chosen set stays stable while each question flips from unanswered to answered.
+- No API, schema or seed change.
+
+**Decisions:** deviated from the plan in Pendencias (checkpoint *gating* completion) because Pedro wants it additive — completion stays self-reported; the checkpoint is practice, not a gate. Not an ADR: no architectural surface.
+
+**Pending:** not exercised in a browser this session (typecheck + lint only) — check in Pedro's manual testing. Answered questions still can't be re-answered from the UI, which item 2 ("redo my mistakes") needs to solve.
+
+**Next steps:** learning-loop item 2, then 3 and 4.
