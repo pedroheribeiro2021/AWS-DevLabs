@@ -8,7 +8,6 @@ New entries from Session 2 onward are in English (see `Registro-de-Sessoes.md`).
 
 Comparison with Duolingo's dynamics: the motivation layer (XP, levels, streak, badges, skill tree) is close; the learning loop (active recall, spaced repetition, error review) is far — lessons are passive 9-12 min reads marked complete by self-report, and flashcards change state but have no review schedule. The loop is where the retention gain is, so it comes first, in this order (effort in parentheses):
 
-1. **End-of-lesson checkpoint** (low): 2-3 of the topic's existing questions after the lesson text; the lesson only counts as completed once they're answered correctly, replacing the "Marcar como concluída" self-report. No new content needed.
 1. **"Redo my mistakes" mode** (low): a shortcut to the questions whose latest answer was wrong (the same "latest answer per question" rule as ADR 0007).
 2. **Spaced repetition for flashcards** (medium): store the next review date (Leitner-style boxes, e.g. 1/3/7/14 days) and show a "revisão do dia" on the dashboard. Needs a small migration. Also unblocks the flashcard-XP item and the "forgotten flashcards" part of analytics phase 2 below.
 3. **Step-by-step lessons** (medium): split each lesson by its existing `##` sections, with a question between steps — automatic, no rewriting of the 23 lessons.
@@ -27,6 +26,9 @@ Explicitly **not** planned: hearts/lives, leagues, push notifications, mascot �
 - **Bilingual product support (PT-BR + English)**: product ships in Portuguese only for now (ADR 0003). Real bilingual support needs a UI i18n library (e.g. `next-intl`) and a schema decision for per-locale lesson/topic/resource content — deserves its own design pass, not a quick add.
 
 ## Done
+
+### Session 34 (2026-10-03) — learning loop item 1: end-of-lesson checkpoint
+- Lesson page now ends with a "Teste rápido": 3 of the topic's existing questions (unanswered first, then latest-wrong, then latest-right), answered inline through the normal answer endpoint, so XP, history and analytics count them. Additive per Pedro: "Marcar como concluída" stays as-is and completion does not depend on the checkpoint.
 
 ### Session 32 (2026-09-27) — Phase 8: analytics (performance, weak spots, recommendations, history)
 - New `GET /analytics/me`: overall and per-domain/per-topic accuracy (latest answer per question, practice + completed simulations), lesson/lab/flashcard completion, weak topics (≥3 answered, <70%), weekly answers for the last 8 weeks (Brasília-time weeks), completed simulations, and up to 5 deterministic recommendations. Logic in pure, unit-tested functions; decisions in ADR 0007.
