@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { FlashcardState } from '@aws-devlab/database';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { computeNextReviewAt, isDue } from './spaced-repetition.js';
 
 const STATE_ORDER: FlashcardState[] = [
   FlashcardState.NEW,
@@ -21,16 +22,22 @@ export class FlashcardsService {
 
     const progress = await this.prisma.client.userFlashcardProgress.findMany({
       where: { userId, flashcardId: { in: flashcards.map((card) => card.id) } },
-      select: { flashcardId: true, state: true },
+      select: { flashcardId: true, state: true, nextReviewAt: true },
     });
-    const stateByFlashcardId = new Map(progress.map((entry) => [entry.flashcardId, entry.state]));
+    const progressByFlashcardId = new Map(progress.map((entry) => [entry.flashcardId, entry]));
+    const now = new Date();
 
-    return flashcards.map((card) => ({
-      id: card.id,
-      front: card.front,
-      topic: card.concept.topic,
-      state: stateByFlashcardId.get(card.id) ?? FlashcardState.NEW,
-    }));
+    return flashcards.map((card) => {
+      const entry = progressByFlashcardId.get(card.id);
+      return {
+        id: card.id,
+        front: card.front,
+        topic: card.concept.topic,
+        state: entry?.state ?? FlashcardState.NEW,
+        nextReviewAt: entry?.nextReviewAt ?? null,
+        due: isDue(entry, now),
+      };
+    });
   }
 
   async findOne(flashcardId: string, userId: string) {
@@ -74,10 +81,13 @@ export class FlashcardsService {
       ? STATE_ORDER[Math.min(STATE_ORDER.indexOf(currentState) + 1, STATE_ORDER.length - 1)]
       : FlashcardState.LEARNING;
 
+    const now = new Date();
+    const nextReviewAt = computeNextReviewAt(currentState, nextState, now);
+
     return this.prisma.client.userFlashcardProgress.upsert({
       where: { userId_flashcardId: { userId, flashcardId } },
-      update: { state: nextState, lastReviewedAt: new Date() },
-      create: { userId, flashcardId, state: nextState, lastReviewedAt: new Date() },
+      update: { state: nextState, lastReviewedAt: now, nextReviewAt },
+      create: { userId, flashcardId, state: nextState, lastReviewedAt: now, nextReviewAt },
     });
   }
 }

@@ -92,5 +92,8 @@ describe('Flashcards (e2e)', () => {
       .expect(200);
     const card = listRes.body.find((item: { id: string }) => item.id === flashcardId);
     expect(card.state).toBe('LEARNING');
+    // Just reviewed: scheduled for tomorrow, so not due yet.
+    expect(card.due).toBe(false);
+    expect(new Date(card.nextReviewAt).getTime()).toBeGreaterThan(Date.now());
   });
 });

@@ -9,6 +9,8 @@ export interface FlashcardSummary {
   front: string;
   topic: { id: string; name: string };
   state: FlashcardState;
+  nextReviewAt: string | null;
+  due: boolean;
 }
 
 export interface FlashcardDetail {

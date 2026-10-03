@@ -8,8 +8,7 @@ New entries from Session 2 onward are in English (see `Registro-de-Sessoes.md`).
 
 Comparison with Duolingo's dynamics: the motivation layer (XP, levels, streak, badges, skill tree) is close; the learning loop (active recall, spaced repetition, error review) is far — lessons are passive 9-12 min reads marked complete by self-report, and flashcards change state but have no review schedule. The loop is where the retention gain is, so it comes first, in this order (effort in parentheses):
 
-1. **Spaced repetition for flashcards** (medium): store the next review date (Leitner-style boxes, e.g. 1/3/7/14 days) and show a "revisão do dia" on the dashboard. Needs a small migration. Also unblocks the flashcard-XP item and the "forgotten flashcards" part of analytics phase 2 below.
-2. **Step-by-step lessons** (medium): split each lesson by its existing `##` sections, with a question between steps — automatic, no rewriting of the 23 lessons.
+1. **Step-by-step lessons** (medium): split each lesson by its existing `##` sections, with a question between steps — automatic, no rewriting of the 23 lessons.
 
 Explicitly **not** planned: hearts/lives, leagues, push notifications, mascot — little value for a single-user study app. Keep lessons as reference material: DVA-C02 scenario questions need longer context than bite-sized cards.
 
@@ -18,13 +17,17 @@ Explicitly **not** planned: hearts/lives, leagues, push notifications, mascot �
 - **Analytics phase 2 (the rest of Planejamento section 15)**: the Session 32 analytics cover accuracy by domain/topic, weak topics, weekly history and deterministic recommendations (ADR 0007). Still missing, each needing new data first: recurring *concepts* in errors (questions aren't linked to `Concept` rows), slow questions (no per-question answer time is recorded), and forgotten flashcards (flashcard progress keeps only the current state, no review history).
 - **Seed script still doesn't sync nested relations on reseed**: Session 18 generalized scalar-field syncing to every model (Certification, ExamVersion, Domain, AWSService, Topic, Lesson, Lab, Question, Concept, Flashcard), but content seeded via a nested `create` block — Lab steps, Question options, Lesson resources — still only ever gets created once. Editing an existing step's instructions or an option's text in `seed.ts` won't reach the database on reseed. Only worth fixing if it causes real pain during the content-authoring push (diffing/upserting child collections by stable identity is a bigger problem than the scalar-field fix was).
 - **Domain-level badges**: deferred in ADR 0006 until more than one domain had real content — all 4 domains have content as of Session 30, so this is now unblocked.
-- **Flashcards excluded from XP-awarding**: the spaced-repetition review flow is repeatable by design, which doesn't fit the "award once on first completion" gating used for lessons/labs/questions/simulations. Needs its own design pass (award per state transition? only on reaching MASTERED? every review, capped?) — best decided together with item 1 of the learning-loop round above (a due-review schedule gives a natural "award per due review" rule).
+- **Flashcards excluded from XP-awarding**: the spaced-repetition review flow is repeatable by design, which doesn't fit the "award once on first completion" gating used for lessons/labs/questions/simulations. Needs its own design pass (award per state transition? only on reaching MASTERED? every review, capped?) — the due-review schedule now exists (ADR 0008), which gives a natural "award per due review" rule.
 - **Isolated test database**: auth e2e tests run against the real Neon dev database with manual cleanup in `afterAll` (interim decision, see ADR 0001 and Session 2 log). CI uses an ephemeral Postgres service container instead (see Session 2 log). Fine for now; revisit (Neon branch per test run, or local Postgres via Docker for local dev too) once the integration test suite grows.
 - **Password reset / email verification**: not implemented yet — out of scope for the auth MVP, revisit if needed before real users sign up.
 - **Visual identity / logo**: two AI-generated logo candidates parked in `docs/design/`, not decided yet. Revisit at Phase 10 (Refinement) or whenever real UI design work starts.
 - **Bilingual product support (PT-BR + English)**: product ships in Portuguese only for now (ADR 0003). Real bilingual support needs a UI i18n library (e.g. `next-intl`) and a schema decision for per-locale lesson/topic/resource content — deserves its own design pass, not a quick add.
 
 ## Done
+
+### Session 34 (2026-10-03) — learning loop item 3: flashcard spaced repetition
+- New nullable `nextReviewAt` on `user_flashcard_progress` (migration `add_flashcard_next_review`). Each review schedules the card 1/3/7 days out by the state it lands on (14 for mastered-again); `GET /flashcards` returns `due` and `nextReviewAt`. Pure functions + unit tests, ADR 0008.
+- Web: "Revisão do dia" card on the dashboard and button on the flashcards page, walking through due cards one after another; the list shows each card's next review date. Free review unchanged.
 
 ### Session 34 (2026-10-03) — learning loop item 2: "redo my mistakes"
 - Questions page shows "Refazer meus erros (N)" when any latest answer is wrong (same rule as ADR 0007) and filters to those questions, respecting the topic filter. Every answered question now has "Tentar de novo" (`?retry=1`), which records a new answer; the latest one is what analytics and the list use. Web only, no API change.

@@ -713,3 +713,18 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 **Pending:** typecheck + lint only, not exercised in a browser. Checkpoint questions (item 1) don't have "Tentar de novo" inline — they can be retried from the questions page.
 
 **Next steps:** learning-loop item 3 (spaced repetition, needs a migration), then 4.
+---
+
+## 2026-10-03 — Session 34 (cont.): learning loop item 3 (flashcard spaced repetition)
+
+**Changes:**
+
+- Schema: nullable `nextReviewAt` on `UserFlashcardProgress`; migration `add_flashcard_next_review` created and applied with `prisma migrate dev` on the Neon database (shared with production per ADR 0004 — nullable, so the deployed API keeps working before this ships).
+- API: `spaced-repetition.ts` (`computeNextReviewAt`, `isDue`) with 6 unit tests; `FlashcardsService.review` stores the next date, `findAll` returns `due` and `nextReviewAt`. Flashcards e2e extended (just-reviewed card is not due, date in the future) — passes against the dev DB.
+- Web: dashboard "Revisão do dia: N flashcards" card and flashcards-page "Começar revisão do dia (N)" button; `?review=1` walks through due cards one after another (the review action redirects to the next due card), with an empty state when done. The list shows "revisar hoje" or the next review date (Brasília time). Free review outside the daily review is unchanged.
+
+**Decisions:** ADR 0008 (one nullable column, interval keyed by the landing state 1/3/7/14 days, never-reviewed cards aren't due, pre-existing reviews count as due once, computed on read).
+
+**Pending:** not exercised in a browser (unit + e2e + typecheck + lint only). Flashcard XP still undecided (backlog).
+
+**Next steps:** learning-loop item 4 (step-by-step lessons), the last one.

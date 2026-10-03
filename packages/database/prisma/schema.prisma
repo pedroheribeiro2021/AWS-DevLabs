@@ -338,6 +338,9 @@ model UserFlashcardProgress {
   flashcardId  String
   state        FlashcardState @default(NEW)
   lastReviewedAt DateTime?
+  // Spaced repetition: when the card is due again. Null on rows reviewed before
+  // the schedule existed — those count as due now.
+  nextReviewAt DateTime?
   updatedAt    DateTime       @updatedAt
 
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)

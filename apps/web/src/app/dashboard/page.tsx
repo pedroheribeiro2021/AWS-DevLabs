@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { AppNav } from '@/components/app-nav';
 import { BadgesSection } from '@/components/badges-section';
@@ -6,6 +7,7 @@ import { RecommendationsSection } from '@/components/recommendations-section';
 import { SkillTree } from '@/components/skill-tree';
 import { getAnalytics } from '@/lib/analytics';
 import { getCurrentUser } from '@/lib/auth-server';
+import { getFlashcards } from '@/lib/flashcards';
 import { getGamificationStats } from '@/lib/gamification';
 import { getTrack } from '@/lib/learning';
 
@@ -18,11 +20,13 @@ export default async function DashboardPage() {
     redirect('/login');
   }
 
-  const [track, gamificationStats, analytics] = await Promise.all([
+  const [track, gamificationStats, analytics, flashcards] = await Promise.all([
     getTrack(DEFAULT_CERTIFICATION_SLUG),
     getGamificationStats(),
     getAnalytics(),
+    getFlashcards(),
   ]);
+  const dueFlashcards = flashcards.filter((card) => card.due);
   const lessons = track.examVersions.flatMap((ev) => ev.domains).flatMap((d) => d.topics).flatMap((t) => t.lessons);
   const completedCount = lessons.filter((lesson) => lesson.status === 'COMPLETED').length;
 
@@ -31,6 +35,18 @@ export default async function DashboardPage() {
       <AppNav title={`Olá, ${user.name}`} />
 
       <GamificationHeader stats={gamificationStats} />
+
+      {dueFlashcards.length > 0 && (
+        <Link
+          href={`/flashcards/${dueFlashcards[0].id}?review=1`}
+          className="flex items-center justify-between rounded-lg border border-orange-200 bg-orange-50 p-4 hover:border-orange-300"
+        >
+          <span className="text-sm font-semibold text-orange-800">
+            Revisão do dia: {dueFlashcards.length} flashcard{dueFlashcards.length > 1 ? 's' : ''}
+          </span>
+          <span className="text-sm font-medium text-orange-700">Começar →</span>
+        </Link>
+      )}
 
       <RecommendationsSection recommendations={analytics.recommendations} limit={3} />
 
