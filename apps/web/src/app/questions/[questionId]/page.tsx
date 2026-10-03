@@ -7,7 +7,13 @@ import { submitQuestionAnswer } from './actions';
 
 interface QuestionPageProps {
   params: Promise<{ questionId: string }>;
-  searchParams: Promise<{ xp?: string; level?: string; streak?: string; badges?: string }>;
+  searchParams: Promise<{
+    xp?: string;
+    level?: string;
+    streak?: string;
+    badges?: string;
+    retry?: string;
+  }>;
 }
 
 const DIFFICULTY_LABEL: Record<string, string> = {
@@ -24,14 +30,19 @@ export default async function QuestionPage({ params, searchParams }: QuestionPag
   }
 
   const { questionId } = await params;
-  const { xp, level, streak, badges } = await searchParams;
+  const { xp, level, streak, badges, retry } = await searchParams;
   const question = await getQuestion(questionId);
   const action = submitQuestionAnswer.bind(null, questionId);
   const inputType = question.multipleCorrect ? 'checkbox' : 'radio';
+  // Re-answering records a new answer; the latest one is what counts everywhere.
+  const showForm = !question.answered || retry === '1';
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-4 py-10 sm:py-16">
-      <Link href="/questions" className="text-sm text-slate-500 hover:underline">
+      <Link
+        href={retry === '1' ? '/questions?mistakes=1' : '/questions'}
+        className="text-sm text-slate-500 hover:underline"
+      >
         ← Voltar às questões
       </Link>
 
@@ -44,7 +55,7 @@ export default async function QuestionPage({ params, searchParams }: QuestionPag
         <h1 className="text-xl font-bold">{question.prompt}</h1>
       </div>
 
-      {!question.answered ? (
+      {showForm ? (
         <form action={action} className="flex flex-col gap-3">
           {question.options.map((option) => (
             <label
@@ -117,6 +128,13 @@ export default async function QuestionPage({ params, searchParams }: QuestionPag
               </a>
             )}
           </div>
+
+          <Link
+            href={`/questions/${question.id}?retry=1`}
+            className="self-start rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400"
+          >
+            Tentar de novo
+          </Link>
         </div>
       )}
     </main>
