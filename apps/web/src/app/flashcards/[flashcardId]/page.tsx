@@ -6,9 +6,10 @@ import { reviewFlashcardAction } from './actions';
 
 interface FlashcardPageProps {
   params: Promise<{ flashcardId: string }>;
+  searchParams: Promise<{ review?: string }>;
 }
 
-export default async function FlashcardPage({ params }: FlashcardPageProps) {
+export default async function FlashcardPage({ params, searchParams }: FlashcardPageProps) {
   const user = await getCurrentUser();
 
   if (!user) {
@@ -16,17 +17,24 @@ export default async function FlashcardPage({ params }: FlashcardPageProps) {
   }
 
   const { flashcardId } = await params;
+  const reviewSession = (await searchParams).review === '1';
   const card = await getFlashcard(flashcardId);
-  const markWrong = reviewFlashcardAction.bind(null, flashcardId, false);
-  const markRight = reviewFlashcardAction.bind(null, flashcardId, true);
+  const markWrong = reviewFlashcardAction.bind(null, flashcardId, false, reviewSession);
+  const markRight = reviewFlashcardAction.bind(null, flashcardId, true, reviewSession);
 
   return (
     <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-6 px-4 py-10 sm:py-16">
-      <Link href="/flashcards" className="text-sm text-slate-500 hover:underline">
+      <Link
+        href={reviewSession ? '/flashcards?review=1' : '/flashcards'}
+        className="text-sm text-slate-500 hover:underline"
+      >
         ← Voltar aos flashcards
       </Link>
 
-      <p className="text-sm text-slate-500">{card.topic.name}</p>
+      <p className="text-sm text-slate-500">
+        {reviewSession && 'Revisão do dia · '}
+        {card.topic.name}
+      </p>
 
       <div className="rounded-lg border border-slate-200 bg-white p-6">
         <p className="text-lg font-medium text-slate-800">{card.front}</p>
