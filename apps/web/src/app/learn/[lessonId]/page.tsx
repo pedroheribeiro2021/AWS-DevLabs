@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { LessonCheckpoint } from '@/components/lesson-checkpoint';
 import { MarkdownContent } from '@/components/markdown-content';
 import { XpBanner } from '@/components/xp-banner';
 import { getCurrentUser } from '@/lib/auth-server';
@@ -8,7 +9,13 @@ import { markLessonComplete } from './actions';
 
 interface LessonPageProps {
   params: Promise<{ lessonId: string }>;
-  searchParams: Promise<{ xp?: string; level?: string; streak?: string; badges?: string }>;
+  searchParams: Promise<{
+    xp?: string;
+    level?: string;
+    streak?: string;
+    badges?: string;
+    checkpoint?: string;
+  }>;
 }
 
 export default async function LessonPage({ params, searchParams }: LessonPageProps) {
@@ -19,7 +26,7 @@ export default async function LessonPage({ params, searchParams }: LessonPagePro
   }
 
   const { lessonId } = await params;
-  const { xp, level, streak, badges } = await searchParams;
+  const { xp, level, streak, badges, checkpoint } = await searchParams;
   const lesson = await getLesson(lessonId);
   const completeAction = markLessonComplete.bind(null, lessonId);
 
@@ -62,6 +69,12 @@ export default async function LessonPage({ params, searchParams }: LessonPagePro
           </ul>
         </section>
       )}
+
+      <LessonCheckpoint
+        lessonId={lessonId}
+        topicId={lesson.topic.id}
+        pinnedQuestionIds={checkpoint?.split(',').filter(Boolean)}
+      />
 
       <form action={completeAction}>
         <button
