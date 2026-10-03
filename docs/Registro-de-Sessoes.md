@@ -699,3 +699,17 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 **Pending:** not exercised in a browser this session (typecheck + lint only) — check in Pedro's manual testing. Answered questions still can't be re-answered from the UI, which item 2 ("redo my mistakes") needs to solve.
 
 **Next steps:** learning-loop item 2, then 3 and 4.
+
+---
+
+## 2026-10-03 — Session 34 (cont.): learning loop item 2 ("redo my mistakes")
+
+**Changes:**
+
+- `apps/web/src/app/questions/page.tsx`: "Refazer meus erros (N)" button when any question's latest answer is wrong; `?mistakes=1` filters the list to those (keeps `?topicId=`), with an empty state once none are left. Links from that mode open the question straight in retry mode.
+- `apps/web/src/app/questions/[questionId]/page.tsx`: answered questions get "Tentar de novo" (`?retry=1`), which shows the answer form again. The existing endpoint already accepted repeat answers; the UI just never offered it. A new answer becomes the latest one, so a fixed mistake drops out of the list and analytics; XP still only on the first correct answer.
+- No API change.
+
+**Pending:** typecheck + lint only, not exercised in a browser. Checkpoint questions (item 1) don't have "Tentar de novo" inline — they can be retried from the questions page.
+
+**Next steps:** learning-loop item 3 (spaced repetition, needs a migration), then 4.
