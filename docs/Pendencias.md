@@ -4,13 +4,9 @@ New entries from Session 2 onward are in English (see `Registro-de-Sessoes.md`).
 
 ## Open
 
-### Next round: learning loop (agreed with Pedro on 2026-09-27, after his manual testing session)
+### Learning-loop round: all 4 items shipped (Session 34, PRs #44-#47)
 
-Comparison with Duolingo's dynamics: the motivation layer (XP, levels, streak, badges, skill tree) is close; the learning loop (active recall, spaced repetition, error review) is far — lessons are passive 9-12 min reads marked complete by self-report, and flashcards change state but have no review schedule. The loop is where the retention gain is, so it comes first, in this order (effort in parentheses):
-
-1. **Step-by-step lessons** (medium): split each lesson by its existing `##` sections, with a question between steps — automatic, no rewriting of the 23 lessons.
-
-Explicitly **not** planned: hearts/lives, leagues, push notifications, mascot — little value for a single-user study app. Keep lessons as reference material: DVA-C02 scenario questions need longer context than bite-sized cards.
+Everything was added alongside the existing flow, per Pedro: lessons still read as one page with "Marcar como concluída". Still to do: **exercise all four in a browser** (each PR was verified by typecheck/lint/tests only). Explicitly **not** planned: hearts/lives, leagues, push notifications, mascot — little value for a single-user study app.
 
 ### Backlog
 
@@ -24,6 +20,9 @@ Explicitly **not** planned: hearts/lives, leagues, push notifications, mascot �
 - **Bilingual product support (PT-BR + English)**: product ships in Portuguese only for now (ADR 0003). Real bilingual support needs a UI i18n library (e.g. `next-intl`) and a schema decision for per-locale lesson/topic/resource content — deserves its own design pass, not a quick add.
 
 ## Done
+
+### Session 34 (2026-10-04) — learning loop item 4: step-by-step lessons
+- Opt-in "Estudar em etapas" link on each lesson (`?step=N`): the lesson is split at its `##` headings (intro kept with the first step, headings inside code fences ignored) — 4 to 9 steps for each of the 23 lessons, no content rewritten. Progress bar, previous/next, and one topic question between steps (picked by step position); the last step offers "Marcar como concluída" and the checkpoint. The checkpoint and step questions now share an `<InlineQuestion>` component.
 
 ### Session 34 (2026-10-03) — learning loop item 3: flashcard spaced repetition
 - New nullable `nextReviewAt` on `user_flashcard_progress` (migration `add_flashcard_next_review`). Each review schedules the card 1/3/7 days out by the state it lands on (14 for mastered-again); `GET /flashcards` returns `due` and `nextReviewAt`. Pure functions + unit tests, ADR 0008.

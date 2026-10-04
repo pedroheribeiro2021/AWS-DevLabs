@@ -728,3 +728,21 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 **Pending:** not exercised in a browser (unit + e2e + typecheck + lint only). Flashcard XP still undecided (backlog).
 
 **Next steps:** learning-loop item 4 (step-by-step lessons), the last one.
+---
+
+## 2026-10-04 — Session 34 (cont.): learning loop item 4 (step-by-step lessons) — round complete
+
+**Changes:**
+
+- `apps/web/src/lib/lesson-steps.ts`: `splitLessonIntoSteps` splits lesson markdown at `## ` headings; text before the first heading stays with the first step; headings inside fenced code are ignored. Checked against all 23 lessons in the database with a throwaway script: 4-9 steps each, smallest step ~170 chars.
+- `apps/web/src/components/lesson-steps-view.tsx`: the step view — "Etapa N de M" with a progress bar, the step's markdown, one topic question between steps (topic questions in API order, indexed by step position so it stays stable across the answer redirect), previous/next links, and on the last step "Marcar como concluída" plus a link to the checkpoint.
+- `/learn/[lessonId]`: `?step=N` switches to the step view; without it the page is unchanged apart from an "Estudar em etapas" link next to the reading time. New `submitStepAnswer` server action redirects back to the same step.
+- Extracted `<InlineQuestion>` from `<LessonCheckpoint>`; both use it.
+
+**Process note:** running `prettier` from the repo root has no web config and switched files to double quotes; reformatted with the repo style (single quotes, trailing commas, width 100 — `apps/api/.prettierrc` plus the existing web line width).
+
+**Decisions:** none architectural (web-only rendering over existing data).
+
+**Pending:** all four learning-loop items still need a browser pass (each verified by typecheck/lint/tests only).
+
+**Next steps:** Pedro's manual test of the learning loop; then the backlog in Pendencias.
