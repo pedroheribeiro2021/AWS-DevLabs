@@ -3,8 +3,8 @@ import { redirect } from 'next/navigation';
 import { AppNav } from '@/components/app-nav';
 import { BadgesSection } from '@/components/badges-section';
 import { GamificationHeader } from '@/components/gamification-header';
+import { LearningPath } from '@/components/learning-path';
 import { RecommendationsSection } from '@/components/recommendations-section';
-import { SkillTree } from '@/components/skill-tree';
 import { getAnalytics } from '@/lib/analytics';
 import { getCurrentUser } from '@/lib/auth-server';
 import { getFlashcards } from '@/lib/flashcards';
@@ -27,7 +27,10 @@ export default async function DashboardPage() {
     getFlashcards(),
   ]);
   const dueFlashcards = flashcards.filter((card) => card.due);
-  const lessons = track.examVersions.flatMap((ev) => ev.domains).flatMap((d) => d.topics).flatMap((t) => t.lessons);
+  const lessons = track.examVersions
+    .flatMap((ev) => ev.domains)
+    .flatMap((d) => d.topics)
+    .flatMap((t) => t.lessons);
   const completedCount = lessons.filter((lesson) => lesson.status === 'COMPLETED').length;
 
   return (
@@ -65,16 +68,7 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      {track.examVersions.map((examVersion) =>
-        examVersion.domains.map((domain) => (
-          <section key={domain.id} className="rounded-lg border border-slate-200 bg-white p-5">
-            <h3 className="mb-4 text-base font-semibold text-slate-800">
-              {domain.name} <span className="font-normal text-slate-500">({domain.weightPercent}%)</span>
-            </h3>
-            <SkillTree topics={domain.topics} />
-          </section>
-        )),
-      )}
+      <LearningPath domains={track.examVersions.flatMap((examVersion) => examVersion.domains)} />
     </main>
   );
 }
