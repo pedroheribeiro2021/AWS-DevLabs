@@ -746,3 +746,20 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 **Pending:** all four learning-loop items still need a browser pass (each verified by typecheck/lint/tests only).
 
 **Next steps:** Pedro's manual test of the learning loop; then the backlog in Pendencias.
+---
+
+## 2026-10-04 — Session 34 (cont.): Duolingo-style learning path
+
+**Goal:** the session opened with Pedro asking why the Duolingo-style path wasn't implemented. I answered that Session 17's vertical timeline already covered it and steered into the learning-loop plan; Pedro had to repeat the request mid-way through the browser test. The path is what he meant from the start.
+
+**Changes:**
+
+- New `<LearningPath>` (`apps/web/src/components/learning-path.tsx`), replacing `<SkillTree>` (deleted) on the dashboard. Each lesson is a 72px node placed on a zigzag (`ZIGZAG` offsets, continuous across units), with its title beside it on the side the path leans away from. Each exam domain is a colored "Unidade N · X% da prova" banner with its lesson progress, closed by a trophy (gray until the unit is done). The first unfinished lesson in the whole track gets the orange ring and a "Começar" bubble; done lessons are orange with ✓; upcoming ones are gray but clickable (no locking, so studying out of order still works). Nodes link to `/learn/:id?step=0`.
+- Session 17 dropped the serpentine because expandable `<details>` panels inside the path broke the line. That problem is gone: no panels, no connecting line, fixed-size nodes.
+- A first version with a topic divider before each topic was checked in the browser and dropped: most topics have 1-2 lessons, so the dividers broke the zigzag.
+
+**Browser test of the learning loop (same session, local servers, throwaway test account):** step mode, step question (+XP, stays on step), last step actions, checkpoint (unanswered-first selection, stable set after answering), redo-my-mistakes (list, retry, XP on first correct, empty state), and flashcard scheduling (+3 days after two "Lembrei", +1 after "Não lembrei"; dates shown in the list) all worked. The daily-review walk-through was not finished: the test user's cards were made due through a script, but the test stopped there to build the path.
+
+**Found along the way:** a long-running `next dev` (started 2026-09-26) had broken workers and returned 500 on any new page — restarted with Pedro's OK. When the access token expires, the refresh redirect drops the query string (`/learn/:id?step=0` came back as `/learn/:id`) — pre-existing, logged in Pendencias.
+
+**Next steps:** Pedro's look at the path; finish the daily-review browser check.

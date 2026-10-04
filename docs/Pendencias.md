@@ -10,6 +10,8 @@ Everything was added alongside the existing flow, per Pedro: lessons still read 
 
 ### Backlog
 
+- **Token-refresh redirect drops the query string**: seen once in Session 34 — after the access token expired, `/learn/:id?step=0` reloaded as `/learn/:id` (full lesson instead of step mode). Probably the proxy/refresh redirect rebuilding the URL from the pathname only; not investigated yet.
+
 - **Analytics phase 2 (the rest of Planejamento section 15)**: the Session 32 analytics cover accuracy by domain/topic, weak topics, weekly history and deterministic recommendations (ADR 0007). Still missing, each needing new data first: recurring *concepts* in errors (questions aren't linked to `Concept` rows), slow questions (no per-question answer time is recorded), and forgotten flashcards (flashcard progress keeps only the current state, no review history).
 - **Seed script still doesn't sync nested relations on reseed**: Session 18 generalized scalar-field syncing to every model (Certification, ExamVersion, Domain, AWSService, Topic, Lesson, Lab, Question, Concept, Flashcard), but content seeded via a nested `create` block — Lab steps, Question options, Lesson resources — still only ever gets created once. Editing an existing step's instructions or an option's text in `seed.ts` won't reach the database on reseed. Only worth fixing if it causes real pain during the content-authoring push (diffing/upserting child collections by stable identity is a bigger problem than the scalar-field fix was).
 - **Domain-level badges**: deferred in ADR 0006 until more than one domain had real content — all 4 domains have content as of Session 30, so this is now unblocked.
@@ -20,6 +22,9 @@ Everything was added alongside the existing flow, per Pedro: lessons still read 
 - **Bilingual product support (PT-BR + English)**: product ships in Portuguese only for now (ADR 0003). Real bilingual support needs a UI i18n library (e.g. `next-intl`) and a schema decision for per-locale lesson/topic/resource content — deserves its own design pass, not a quick add.
 
 ## Done
+
+### Session 34 (2026-10-04) — Duolingo-style learning path on the dashboard
+- Replaced the vertical `<SkillTree>` (Session 17) with `<LearningPath>`: one zigzag path of lesson nodes, a colored "Unidade N" banner per exam domain with progress, the first unfinished lesson highlighted with a "Começar" bubble, completed lessons filled with ✓, upcoming ones gray but still clickable (no locking), and a trophy closing each unit. Each node opens the lesson in step-by-step mode. This is what Pedro had asked for since Session 14; Session 17 had scoped it down to a straight line.
 
 ### Session 34 (2026-10-04) — learning loop item 4: step-by-step lessons
 - Opt-in "Estudar em etapas" link on each lesson (`?step=N`): the lesson is split at its `##` headings (intro kept with the first step, headings inside code fences ignored) — 4 to 9 steps for each of the 23 lessons, no content rewritten. Progress bar, previous/next, and one topic question between steps (picked by step position); the last step offers "Marcar como concluída" and the checkpoint. The checkpoint and step questions now share an `<InlineQuestion>` component.
