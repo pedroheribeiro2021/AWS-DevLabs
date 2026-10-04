@@ -12,6 +12,22 @@ export async function markLessonComplete(lessonId: string) {
   redirect(`/learn/${lessonId}${buildGamificationQuery(gamification)}`);
 }
 
+export async function submitStepAnswer(
+  lessonId: string,
+  questionId: string,
+  stepIndex: number,
+  formData: FormData,
+) {
+  const selectedOptionIds = formData.getAll('selectedOptionIds').map(String);
+  const { gamification } = await submitAnswer(questionId, selectedOptionIds);
+  revalidatePath('/questions');
+  revalidatePath('/dashboard');
+
+  const gamificationQuery = buildGamificationQuery(gamification);
+  const separator = gamificationQuery ? '&' : '?';
+  redirect(`/learn/${lessonId}${gamificationQuery}${separator}step=${stepIndex}#question`);
+}
+
 export async function submitCheckpointAnswer(
   lessonId: string,
   questionId: string,
