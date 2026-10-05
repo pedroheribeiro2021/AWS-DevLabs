@@ -4,6 +4,7 @@ import { ProgressStatus } from '@aws-devlab/database';
 import { GamificationService } from '../gamification/gamification.service.js';
 import { XP_LESSON_COMPLETED } from '../gamification/xp-amounts.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { sliceForLesson } from './practice-slice.js';
 
 @Injectable()
 export class LearningService {
@@ -102,6 +103,64 @@ export class LearningService {
         slug: topic.domain.examVersion.certification.slug,
         name: topic.domain.examVersion.certification.name,
       },
+    };
+  }
+
+  /**
+   * Material for the Duolingo-style practice session of a lesson: this lesson's
+   * share of the topic's questions (options without answers — grading goes
+   * through POST /questions/:id/answer) and flashcards, plus the rest of the
+   * topic's flashcards to draw wrong options from.
+   */
+  async getPractice(lessonId: string, userId: string) {
+    const lesson = await this.prisma.client.lesson.findUnique({
+      where: { id: lessonId },
+      include: {
+        topic: {
+          include: {
+            lessons: { orderBy: { order: 'asc' }, select: { id: true } },
+            questions: {
+              orderBy: [{ difficulty: 'asc' }, { order: 'asc' }],
+              include: { options: { orderBy: { order: 'asc' } } },
+            },
+            concepts: { include: { flashcards: { orderBy: { order: 'asc' } } } },
+          },
+        },
+      },
+    });
+
+    if (!lesson) {
+      throw new NotFoundException('Lição não encontrada.');
+    }
+
+    const { topic } = lesson;
+    const lessonIndex = topic.lessons.findIndex((entry) => entry.id === lessonId);
+    const lessonCount = topic.lessons.length;
+    const allFlashcards = topic.concepts
+      .flatMap((concept) => concept.flashcards)
+      .map((card) => ({ id: card.id, front: card.front, back: card.back }));
+    const flashcards = sliceForLesson(allFlashcards, lessonIndex, lessonCount);
+    const lessonFlashcardIds = new Set(flashcards.map((card) => card.id));
+
+    const progress = await this.prisma.client.userProgress.findUnique({
+      where: { userId_lessonId: { userId, lessonId } },
+    });
+
+    return {
+      lesson: {
+        id: lesson.id,
+        title: lesson.title,
+        status: progress?.status ?? ProgressStatus.NOT_STARTED,
+      },
+      topic: { id: topic.id, name: topic.name },
+      questions: sliceForLesson(topic.questions, lessonIndex, lessonCount).map((question) => ({
+        id: question.id,
+        prompt: question.prompt,
+        multipleCorrect: question.multipleCorrect,
+        options: question.options.map((option) => ({ id: option.id, text: option.text })),
+      })),
+      flashcards,
+      otherFlashcards: allFlashcards.filter((card) => !lessonFlashcardIds.has(card.id)),
     };
   }
 

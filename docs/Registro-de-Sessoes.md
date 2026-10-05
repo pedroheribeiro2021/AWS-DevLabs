@@ -766,6 +766,27 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 
 ---
 
+## 2026-10-05 — Session 35: Duolingo-style practice sessions
+
+**Goal:** Pedro liked the path but asked what it's for if the *way of learning* isn't Duolingo's, which he had asked for many times. Mid-session he added: reading is important and stays — add the Duolingo format without replacing what exists. Session 33 had decided to keep lessons as reading material and only add practice around them; that missed the core of the request.
+
+**Changes:**
+
+- API: `GET /learning/lessons/:id/practice` returns the lesson's share of the topic's questions (no correct flags) and flashcards, plus the rest of the topic's flashcards for wrong options. `sliceForLesson` splits topic items between a topic's lessons (3 unit tests); learning e2e extended (material returned, no `isCorrect` leaked).
+- Web: `/learn/:id/practice` — start screen ("Começar" / "Ler a lição primeiro"), then one exercise at a time: "O que significa?" (concept → explanation, tagged "Conceito novo"), "Combine os pares", "Responda" (topic questions, graded by the existing answer endpoint), "Qual é o conceito?" (reverse). Progress bar, combo counter, green/red feedback bar with the correct answer and explanation, missed exercises re-queued at the end with reshuffled options, keys 1-4/Enter, end screen with XP, accuracy and time that marks the lesson complete. First attempt on each flashcard feeds the spaced-repetition schedule.
+- Path nodes open the practice session; the lesson page gets "Praticar com exercícios". Reading (whole page, step mode, checkpoint, "Marcar como concluída") unchanged.
+- `withSessionRefresh` (auth-server): practice actions refresh the session on a 401 and retry, since a session never navigates and can outlive the 15-minute access token — found in the browser test, where answers started failing mid-session.
+
+**Decisions:** ADR 0009 (sessions generated from existing questions/flashcards, no schema change; per-lesson slicing; server grading for questions, client grading for flashcards; client-held session state).
+
+**Process notes:** the long-running `next dev` didn't pick up the new route (404) until restarted. Running prettier without the repo flags switched files to double quotes again; reformatted with `--single-quote --trailing-comma all --print-width 100`. A Neon connection timeout produced one transient 500 on the dashboard.
+
+**Browser test (local servers, throwaway test account):** path node → practice start screen; "Ler a lição" ↔ "Praticar com exercícios" links; concept, question (graded by the API, +XP), match and reverse exercises; green/red feedback with the right option highlighted; keys 1-4/Enter; missed exercises returning as "Erro anterior" and the session ending only after all were right; end screen (accuracy, time, XP). Fixed during the test: "Continuar" blocked while a flashcard review was saving, retries keeping the option order, match slips repeating the whole exercise, and the completion error asking for a reload (now "Tentar de novo"). **Not verified:** the 401 → refresh → retry path and the "Tentar de novo" button — the dev servers were stopped by the system (low memory) while waiting for the access token to expire.
+
+**Next steps:** Pedro tries a practice session; verify a session that crosses the 15-minute token expiry.
+
+---
+
 ## 2026-10-05 — Session 35 (cont.): session refresh in the proxy
 
 **Goal:** Pedro asked why the login expires in 15 minutes ("não faz sentido a pessoa estar estudando e o app deslogando").
@@ -778,5 +799,4 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 
 **Decisions:** the parallel-refresh race (API rotation accepts only the latest refresh token) is left as an observed risk — see Pendencias. Making the API accept any unexpired refresh token until logout was blocked by the auto-mode security classifier; not pursued.
 
-**Also:** PR #50's CI was stuck in "queued" because of a GitHub Actions incident (degraded performance since 19:11 UTC / 16:11 Brasília), not the code.
-
+**Also:** PR #50's CI sat in "queued" for ~45 min during a GitHub Actions incident (degraded performance since 19:11 UTC / 16:11 Brasília) and was then cancelled by GitHub ("not acquired by Runner") without running any step — not the code; re-run.

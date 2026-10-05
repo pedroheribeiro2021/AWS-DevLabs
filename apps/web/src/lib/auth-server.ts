@@ -1,6 +1,11 @@
 import { cookies } from 'next/headers';
 import { ApiError, apiFetch } from './api';
-import { ACCESS_TOKEN_COOKIE, clearAuthCookies, setAuthCookies } from './auth-cookies';
+import {
+  ACCESS_TOKEN_COOKIE,
+  REFRESH_TOKEN_COOKIE,
+  clearAuthCookies,
+  setAuthCookies,
+} from './auth-cookies';
 
 export interface PublicUser {
   id: string;
@@ -58,6 +63,34 @@ export async function getCurrentUser(): Promise<PublicUser | null> {
       return null;
     }
     throw error;
+  }
+}
+
+/**
+ * For Server Actions on long-lived client pages (the practice session): if the
+ * API answers 401 (access token expired mid-session), swap the refresh token for
+ * new cookies and run the call once more.
+ */
+export async function withSessionRefresh<T>(call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 401) {
+      throw error;
+    }
+
+    const cookieStore = await cookies();
+    const refreshToken = cookieStore.get(REFRESH_TOKEN_COOKIE)?.value;
+    if (!refreshToken) {
+      throw error;
+    }
+
+    const tokens = await apiFetch<{ accessToken: string; refreshToken: string }>('/auth/refresh', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${refreshToken}` },
+    });
+    setAuthCookies(cookieStore, tokens);
+    return call();
   }
 }
 
