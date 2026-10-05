@@ -67,9 +67,9 @@ export async function getCurrentUser(): Promise<PublicUser | null> {
 }
 
 /**
- * For Server Actions on long-lived client pages (the practice session) that
- * never navigate, so the proxy never gets a chance to refresh the session: on a
- * 401, swap the refresh token for new cookies and run the call once more.
+ * For Server Actions on long-lived client pages (the practice session): if the
+ * API answers 401 (access token expired mid-session), swap the refresh token for
+ * new cookies and run the call once more.
  */
 export async function withSessionRefresh<T>(call: () => Promise<T>): Promise<T> {
   try {
