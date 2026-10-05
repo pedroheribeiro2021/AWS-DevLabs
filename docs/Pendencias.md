@@ -6,7 +6,7 @@ New entries from Session 2 onward are in English (see `Registro-de-Sessoes.md`).
 
 ### Learning-loop round: all 4 items shipped (Session 34, PRs #44-#47)
 
-Everything was added alongside the existing flow, per Pedro: lessons still read as one page with "Marcar como concluída". Still to do: **exercise all four in a browser** (each PR was verified by typecheck/lint/tests only). Explicitly **not** planned: hearts/lives, leagues, push notifications, mascot — little value for a single-user study app.
+Everything was added alongside the existing flow, per Pedro: lessons still read as one page with "Marcar como concluída". All four were exercised in a browser in Session 34 (local servers, throwaway test account) except one flow: **the daily-review walk-through** (dashboard "Revisão do dia" → card → next due card → "Revisão do dia concluída"). The test account's two flashcards were already made due for that check. Explicitly **not** planned: hearts/lives, leagues, push notifications, mascot — little value for a single-user study app.
 
 ### Backlog
 
