@@ -10,6 +10,8 @@ Everything was added alongside the existing flow, per Pedro: lessons still read 
 
 ### Backlog
 
+- **Practice session: verify session refresh in the browser** (Session 35): practice server actions refresh the session on a 401 and retry (`withSessionRefresh`), and a failed completion offers "Tentar de novo". Both were typecheck/lint only — the browser test was cut short when the dev servers were stopped for low memory. Check by leaving a session open past the 15-minute access token.
+
 - **Token-refresh redirect drops the query string**: seen once in Session 34 — after the access token expired, `/learn/:id?step=0` reloaded as `/learn/:id` (full lesson instead of step mode). Probably the proxy/refresh redirect rebuilding the URL from the pathname only; not investigated yet.
 
 - **Analytics phase 2 (the rest of Planejamento section 15)**: the Session 32 analytics cover accuracy by domain/topic, weak topics, weekly history and deterministic recommendations (ADR 0007). Still missing, each needing new data first: recurring *concepts* in errors (questions aren't linked to `Concept` rows), slow questions (no per-question answer time is recorded), and forgotten flashcards (flashcard progress keeps only the current state, no review history).
@@ -22,6 +24,9 @@ Everything was added alongside the existing flow, per Pedro: lessons still read 
 - **Bilingual product support (PT-BR + English)**: product ships in Portuguese only for now (ADR 0003). Real bilingual support needs a UI i18n library (e.g. `next-intl`) and a schema decision for per-locale lesson/topic/resource content — deserves its own design pass, not a quick add.
 
 ## Done
+
+### Session 35 (2026-10-05) — Duolingo-style practice sessions
+- New `/learn/:id/practice`: short exercises one at a time built from the topic's existing flashcards and questions ("O que significa?", "Combine os pares", "Responda", "Qual é o conceito?"), progress bar, instant green/red feedback with the explanation, missed exercises re-queued at the end with reshuffled options until everything is right, keyboard (1-4, Enter), and an end screen with XP, accuracy and time that marks the lesson complete. The path nodes now open it; reading (whole page and step mode) is unchanged and linked from both sides. New `GET /learning/lessons/:id/practice`, ADR 0009.
 
 ### Session 34 (2026-10-04) — Duolingo-style learning path on the dashboard
 - Replaced the vertical `<SkillTree>` (Session 17) with `<LearningPath>`: one zigzag path of lesson nodes, a colored "Unidade N" banner per exam domain with progress, the first unfinished lesson highlighted with a "Começar" bubble, completed lessons filled with ✓, upcoming ones gray but still clickable (no locking), and a trophy closing each unit. Each node opens the lesson in step-by-step mode. This is what Pedro had asked for since Session 14; Session 17 had scoped it down to a straight line.

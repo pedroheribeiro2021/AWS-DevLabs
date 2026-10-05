@@ -69,6 +69,20 @@ describe('Learning (e2e)', () => {
     expect(res.body.status).toBe('NOT_STARTED');
   });
 
+  it('returns practice material without revealing the correct options', async () => {
+    const res = await request(app.getHttpServer())
+      .get(`/learning/lessons/${lessonId}/practice`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+
+    expect(res.body.lesson.id).toBe(lessonId);
+    expect(res.body.questions.length).toBeGreaterThan(0);
+    expect(res.body.flashcards.length).toBeGreaterThan(0);
+    for (const option of res.body.questions[0].options) {
+      expect(option.isCorrect).toBeUndefined();
+    }
+  });
+
   it('marks a lesson as completed and reflects it on the track', async () => {
     await request(app.getHttpServer())
       .post(`/learning/lessons/${lessonId}/complete`)
