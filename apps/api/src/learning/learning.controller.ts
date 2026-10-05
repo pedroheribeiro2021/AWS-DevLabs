@@ -22,6 +22,11 @@ export class LearningController {
     return this.learningService.getLesson(id, user.id);
   }
 
+  @Get('lessons/:id/practice')
+  getPractice(@Param('id') id: string, @CurrentUser() user: RequestUser) {
+    return this.learningService.getPractice(id, user.id);
+  }
+
   @Post('lessons/:id/complete')
   completeLesson(@Param('id') id: string, @CurrentUser() user: RequestUser) {
     return this.learningService.completeLesson(id, user.id);

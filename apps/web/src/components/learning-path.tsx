@@ -37,7 +37,7 @@ function PathNode({ lesson, state, offset }: PathNodeProps) {
         </div>
       )}
       <Link
-        href={`/learn/${lesson.id}?step=0`}
+        href={`/learn/${lesson.id}/practice`}
         title={lesson.title}
         aria-label={`${lesson.title} — ${
           state === 'done' ? 'concluída' : state === 'current' ? 'próxima lição' : 'não iniciada'

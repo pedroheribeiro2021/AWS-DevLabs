@@ -50,6 +50,13 @@ export default async function LessonPage({ params, searchParams }: LessonPagePro
         <h1 className="text-2xl font-bold">{lesson.title}</h1>
         <p className="mt-1 text-sm text-slate-500">
           {lesson.estimatedMinutes} min de leitura
+          {' · '}
+          <Link
+            href={`/learn/${lessonId}/practice`}
+            className="font-semibold text-orange-600 hover:underline"
+          >
+            Praticar com exercícios
+          </Link>
           {!stepMode && (
             <>
               {' · '}
