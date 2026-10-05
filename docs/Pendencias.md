@@ -10,7 +10,7 @@ Everything was added alongside the existing flow, per Pedro: lessons still read 
 
 ### Backlog
 
-- **Token-refresh redirect drops the query string**: seen once in Session 34 — after the access token expired, `/learn/:id?step=0` reloaded as `/learn/:id` (full lesson instead of step mode). Probably the proxy/refresh redirect rebuilding the URL from the pathname only; not investigated yet.
+- **Parallel refreshes can still race** (Session 35): the API rotates the refresh token on every refresh and accepts only the latest, so two requests that hit the proxy at the same moment right after the access token expires can't both refresh — the second is sent to /login. Unlikely in practice (the page request refreshes first and the requests after it carry the new cookie), so it's being observed. If it shows up: a short grace window for the previous refresh token in the API (two nullable columns). Accepting any unexpired refresh token until logout was tried and blocked by the auto-mode security classifier as a weakening — needs Pedro's explicit call.
 
 - **Analytics phase 2 (the rest of Planejamento section 15)**: the Session 32 analytics cover accuracy by domain/topic, weak topics, weekly history and deterministic recommendations (ADR 0007). Still missing, each needing new data first: recurring *concepts* in errors (questions aren't linked to `Concept` rows), slow questions (no per-question answer time is recorded), and forgotten flashcards (flashcard progress keeps only the current state, no review history).
 - **Seed script still doesn't sync nested relations on reseed**: Session 18 generalized scalar-field syncing to every model (Certification, ExamVersion, Domain, AWSService, Topic, Lesson, Lab, Question, Concept, Flashcard), but content seeded via a nested `create` block — Lab steps, Question options, Lesson resources — still only ever gets created once. Editing an existing step's instructions or an option's text in `seed.ts` won't reach the database on reseed. Only worth fixing if it causes real pain during the content-authoring push (diffing/upserting child collections by stable identity is a bigger problem than the scalar-field fix was).
@@ -22,6 +22,9 @@ Everything was added alongside the existing flow, per Pedro: lessons still read 
 - **Bilingual product support (PT-BR + English)**: product ships in Portuguese only for now (ADR 0003). Real bilingual support needs a UI i18n library (e.g. `next-intl`) and a schema decision for per-locale lesson/topic/resource content — deserves its own design pass, not a quick add.
 
 ## Done
+
+### Session 35 (2026-10-05) — session refresh in the proxy
+- Users were sent to /login 15 minutes after logging in: nothing ever used the refresh token (the `/api/auth/refresh` route existed but had no caller). `proxy.ts` now trades the refresh token for new cookies when the access cookie is gone, before the page renders, and forwards them to the same request — the user stays on the page with the URL intact (this also fixes the "refresh drops the query string" item). An invalid or expired refresh token still ends at /login.
 
 ### Session 34 (2026-10-04) — Duolingo-style learning path on the dashboard
 - Replaced the vertical `<SkillTree>` (Session 17) with `<LearningPath>`: one zigzag path of lesson nodes, a colored "Unidade N" banner per exam domain with progress, the first unfinished lesson highlighted with a "Começar" bubble, completed lessons filled with ✓, upcoming ones gray but still clickable (no locking), and a trophy closing each unit. Each node opens the lesson in step-by-step mode. This is what Pedro had asked for since Session 14; Session 17 had scoped it down to a straight line.
