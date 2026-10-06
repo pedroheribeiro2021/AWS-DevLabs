@@ -763,6 +763,7 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 **Found along the way:** a long-running `next dev` (started 2026-09-26) had broken workers and returned 500 on any new page — restarted with Pedro's OK. When the access token expires, the refresh redirect drops the query string (`/learn/:id?step=0` came back as `/learn/:id`) — pre-existing, logged in Pendencias.
 
 **Next steps:** Pedro's look at the path; finish the daily-review browser check.
+
 ---
 
 ## 2026-10-05 — Session 35: Duolingo-style practice sessions
@@ -783,3 +784,19 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 **Browser test (local servers, throwaway test account):** path node → practice start screen; "Ler a lição" ↔ "Praticar com exercícios" links; concept, question (graded by the API, +XP), match and reverse exercises; green/red feedback with the right option highlighted; keys 1-4/Enter; missed exercises returning as "Erro anterior" and the session ending only after all were right; end screen (accuracy, time, XP). Fixed during the test: "Continuar" blocked while a flashcard review was saving, retries keeping the option order, match slips repeating the whole exercise, and the completion error asking for a reload (now "Tentar de novo"). **Not verified:** the 401 → refresh → retry path and the "Tentar de novo" button — the dev servers were stopped by the system (low memory) while waiting for the access token to expire.
 
 **Next steps:** Pedro tries a practice session; verify a session that crosses the 15-minute token expiry.
+
+---
+
+## 2026-10-05 — Session 35 (cont.): session refresh in the proxy
+
+**Goal:** Pedro asked why the login expires in 15 minutes ("não faz sentido a pessoa estar estudando e o app deslogando").
+
+**Cause:** access token and cookie live 15 minutes by design (ADR 0002), with a 7-day refresh token meant to renew them silently — but nothing called the refresh. `proxy.ts` only checked that some session cookie existed, and pages with no access cookie redirected to /login.
+
+**Changes:** `proxy.ts` refreshes when the access cookie is missing and a refresh cookie exists: calls `/auth/refresh`, sets the new tokens on the forwarded request (so Server Components/Actions of the same request see them) and on the response. On a failed refresh it leaves cookies untouched (a parallel request may have refreshed successfully) and lets the page redirect to /login.
+
+**Verified (local servers, curl):** only a refresh cookie → `/learn/:id?step=2` renders "Etapa 3 de 6" with new 15-min/7-day cookies; invalid refresh cookie or no cookies → 307 to /login. Typecheck and lint clean.
+
+**Decisions:** the parallel-refresh race (API rotation accepts only the latest refresh token) is left as an observed risk — see Pendencias. Making the API accept any unexpired refresh token until logout was blocked by the auto-mode security classifier; not pursued.
+
+**Also:** PR #50's CI sat in "queued" for ~45 min during a GitHub Actions incident (degraded performance since 19:11 UTC / 16:11 Brasília) and was then cancelled by GitHub ("not acquired by Runner") without running any step — not the code; re-run.
