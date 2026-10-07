@@ -8,7 +8,7 @@ import {
   recordFlashcardPractice,
 } from '@/app/learn/[lessonId]/practice/actions';
 import type { GamificationResult } from '@/lib/gamification';
-import { shuffle, type Exercise } from '@/lib/practice-exercises';
+import { JUDGE_WRONG, shuffle, type Exercise } from '@/lib/practice-exercises';
 
 interface PracticeSessionProps {
   lessonId: string;
@@ -32,7 +32,7 @@ type Phase = 'intro' | 'exercise' | 'done';
 
 const KIND_LABEL: Record<Exercise['kind'], string> = {
   definition: 'O que significa?',
-  term: 'Qual é o conceito?',
+  judge: 'Certo ou errado?',
   match: 'Combine os pares',
   question: 'Responda',
 };
@@ -87,7 +87,7 @@ export function PracticeSession({
       // Duolingo-style: a missed exercise comes back at the end of the session.
       // Options are reshuffled so the retry can't be answered by position.
       const retry = { ...exercise, key: `${exercise.key}:retry` } as Exercise;
-      if (retry.kind === 'definition' || retry.kind === 'term') {
+      if (retry.kind === 'definition') {
         retry.options = shuffle(retry.options);
       } else if (retry.kind === 'question') {
         retry.options = shuffle(retry.options);
@@ -101,14 +101,21 @@ export function PracticeSession({
     if (!exercise || feedback || selected.length === 0 || isPending) return;
     setError(null);
 
-    if (exercise.kind === 'definition' || exercise.kind === 'term') {
+    if (exercise.kind === 'definition' || exercise.kind === 'judge') {
       const correct = selected[0] === exercise.answer;
       if (!reviewedFlashcards.current.has(exercise.flashcardId)) {
         reviewedFlashcards.current.add(exercise.flashcardId);
         // Fire-and-forget: the schedule update must not hold up "Continuar".
         recordFlashcardPractice(exercise.flashcardId, correct).catch(() => {});
       }
-      settle(correct, correct ? null : exercise.answer, null, [exercise.answer]);
+      if (exercise.kind === 'judge') {
+        // After a near miss, always show the real answer — that's the point of the exercise.
+        const realAnswer =
+          exercise.answer === JUDGE_WRONG ? `Resposta certa: ${exercise.correctText}` : null;
+        settle(correct, correct ? null : exercise.answer, realAnswer, [exercise.answer]);
+      } else {
+        settle(correct, correct ? null : exercise.answer, null, [exercise.answer]);
+      }
       return;
     }
 
@@ -208,8 +215,8 @@ export function PracticeSession({
         {initialCount > 0 ? (
           <>
             <p className="max-w-md text-sm text-slate-600">
-              {initialCount} exercícios curtos: conceitos novos, combinação de pares e questões. O
-              que você errar volta no fim, até acertar tudo.
+              {initialCount} exercícios curtos: conceitos novos, questões, combinação de pares e
+              &quot;certo ou errado&quot;. O que você errar volta no fim, até acertar tudo.
             </p>
             <button
               type="button"
@@ -357,6 +364,11 @@ export function PracticeSession({
           <p className="rounded-2xl border-2 border-slate-200 bg-white p-4 text-base text-slate-800">
             {exercise.prompt}
           </p>
+          {exercise.kind === 'judge' && (
+            <blockquote className="rounded-2xl border-2 border-dashed border-sky-300 bg-sky-50 p-4 text-sm text-slate-800">
+              {exercise.statement}
+            </blockquote>
+          )}
           <div className="flex flex-col gap-2">
             {optionValues(exercise).map((value, index) => {
               const label = exercise.kind === 'question' ? exercise.options[index].text : value;

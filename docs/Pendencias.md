@@ -10,6 +10,10 @@ Everything was added alongside the existing flow, per Pedro: lessons still read 
 
 ### Backlog
 
+- **Thin practice in a few lesson parts** (Session 36): after splitting lessons into parts (ADR 0010), "Classes de armazenamento e ciclo de vida no S3", "CodePipeline: como um pipeline é organizado" and "SAM CLI local e integração mock do API Gateway" got only 1 question and 1 flashcard each, because the question bank barely covers those subjects. Write 3-4 questions and 2 flashcards (with distractors) for each.
+
+- **Local e2e tests hit the production database** (Session 36): `apps/api` e2e tests (and the seed) use `DATABASE_URL`, which locally is the Neon branch production uses — there is no separate dev database. Session 36 wiped that database by accident (see the log) and stopped running e2e locally; CI runs them against its own Postgres. A Neon dev branch for local work would remove the risk — raised in priority from the "Isolated test database" item below.
+
 - **Parallel refreshes can still race** (Session 35): the API rotates the refresh token on every refresh and accepts only the latest, so two requests that hit the proxy at the same moment right after the access token expires can't both refresh — the second is sent to /login. Unlikely in practice (the page request refreshes first and the requests after it carry the new cookie), so it's being observed. If it shows up: a short grace window for the previous refresh token in the API (two nullable columns). Accepting any unexpired refresh token until logout was tried and blocked by the auto-mode security classifier as a weakening — needs Pedro's explicit call.
 
 - **Practice session: verify session refresh in the browser** (Session 35): practice server actions refresh the session on a 401 and retry (`withSessionRefresh`), and a failed completion offers "Tentar de novo". Both were typecheck/lint only — the browser test was cut short when the dev servers were stopped for low memory. Check by leaving a session open past the 15-minute access token.
@@ -24,6 +28,9 @@ Everything was added alongside the existing flow, per Pedro: lessons still read 
 - **Bilingual product support (PT-BR + English)**: product ships in Portuguese only for now (ADR 0003). Real bilingual support needs a UI i18n library (e.g. `next-intl`) and a schema decision for per-locale lesson/topic/resource content — deserves its own design pass, not a quick add.
 
 ## Done
+
+### Session 36 (2026-10-06) — harder options and shorter lessons
+- Flashcard exercises use three hand-written near-miss wrong answers per card (128 cards) instead of other cards' answers; "Qual é o conceito?" became "Certo ou errado?". The 20 long lessons are split into 2 parts each (43 lessons), each part with its own path node and practice; questions/flashcards are assigned to the part whose content they match. ADR 0010.
 
 ### Session 35 (2026-10-05) — session refresh in the proxy
 - Users were sent to /login 15 minutes after logging in: nothing ever used the refresh token (the `/api/auth/refresh` route existed but had no caller). `proxy.ts` now trades the refresh token for new cookies when the access cookie is gone, before the page renders, and forwards them to the same request — the user stays on the page with the URL intact (this also fixes the "refresh drops the query string" item). An invalid or expired refresh token still ends at /login.

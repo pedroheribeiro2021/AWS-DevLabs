@@ -4,7 +4,8 @@ import { MarkdownContent } from '@/components/markdown-content';
 import { markLessonComplete, submitStepAnswer } from '@/app/learn/[lessonId]/actions';
 import type { LessonDetail } from '@/lib/learning';
 import { splitLessonIntoSteps } from '@/lib/lesson-steps';
-import { getQuestion, getQuestions } from '@/lib/questions';
+import { getPractice } from '@/lib/practice';
+import { getQuestion } from '@/lib/questions';
 
 interface LessonStepsViewProps {
   lessonId: string;
@@ -17,13 +18,13 @@ export async function LessonStepsView({ lessonId, lesson, stepIndex }: LessonSte
   const index = Math.min(Math.max(stepIndex, 0), steps.length - 1);
   const isLast = index === steps.length - 1;
 
-  // One topic question between steps, picked by step position so it stays the
-  // same across the answer round trip.
+  // One of this lesson's questions between steps, picked by step position so it
+  // stays the same across the answer round trip.
   let question = null;
   if (!isLast) {
-    const topicQuestions = await getQuestions(lesson.topic.id);
-    if (topicQuestions.length > 0) {
-      question = await getQuestion(topicQuestions[index % topicQuestions.length].id);
+    const { questions: lessonQuestions } = await getPractice(lessonId);
+    if (lessonQuestions.length > 0) {
+      question = await getQuestion(lessonQuestions[index % lessonQuestions.length].id);
     }
   }
 

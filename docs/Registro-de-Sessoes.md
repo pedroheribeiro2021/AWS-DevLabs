@@ -800,3 +800,27 @@ Confirmed the hang was real and server-side (not a local network artifact) by te
 **Decisions:** the parallel-refresh race (API rotation accepts only the latest refresh token) is left as an observed risk — see Pendencias. Making the API accept any unexpired refresh token until logout was blocked by the auto-mode security classifier; not pursued.
 
 **Also:** PR #50's CI sat in "queued" for ~45 min during a GitHub Actions incident (degraded performance since 19:11 UTC / 16:11 Brasília) and was then cancelled by GitHub ("not acquired by Runner") without running any step — not the code; re-run.
+
+---
+
+## 2026-10-06 — Session 36: harder options, shorter lessons (and a wiped production database)
+
+**Goal:** Pedro, happy with the Duolingo-style path, asked for two adjustments: (1) many answer options repeat, which removes the need to think — make them more elaborate; (2) lessons are too long — break them into parts.
+
+**Diagnosis:** flashcard exercises took wrong options from other flashcards' backs — answers to a different question, easy to rule out, and with ~5 cards per session the same texts kept reappearing. Question options were fine (11 repeated texts across 177 questions). 20 of 23 lessons were 2,900-4,800 characters.
+
+**Changes:**
+
+- Schema: `Flashcard.distractors String[]` (migration `20261006120000_add_flashcard_distractors`).
+- Content: `prisma/flashcard-distractors.ts` — 3 near-miss wrong answers for each of the 128 flashcards, applied by `seedFlashcardDistractors` (warns about missing ones). `prisma/lesson-parts.ts` — where each of the 20 long lessons is split, with part titles, reading times and new objectives; `seedLessons` expands them (throws on a missing heading) and keeps the original row for part 1 through the old title. The Architecture lesson moved from a custom block to `seedLessons`.
+- API: `assignToLessons` (content-based, 3 unit tests) replaces `sliceForLesson`; the practice endpoint returns `distractors`. e2e asserts 3 distractors per card.
+- Web: "O que significa?" uses the card's distractors; "Qual é o conceito?" replaced by "Certo ou errado?"; one match round of up to 4 pairs; caps 5 concepts / 5 questions. Step view and checkpoint use the lesson's questions instead of the topic's.
+- Checked offline against the real content: all 20 splits found their headings and reproduce the original text; every lesson part gets ≥1 question and ≥1 flashcard (three get exactly 1 of each — Pendencias).
+
+**Decisions:** ADR 0010.
+
+**Incident — production database wiped and restored:** to check the new migration I ran `prisma migrate diff --from-migrations ... --shadow-database-url <DATABASE_URL>`. That URL is the Neon branch production uses, and Prisma resets a shadow database: every row and `_prisma_migrations` were deleted (~00:10 UTC 07/10, 21:10 Brasília). Pedro authorized the Neon CLI and the branch was restored with `neonctl branches restore production ^self@2026-10-07T00:08:00Z` (2 minutes before; no writes in between). Verified after: 16 users, 23 lessons, 177 questions, 128 flashcards, 38 answers, progress and badges back, migration history intact, production API serving data. The empty backup branch the restore created was deleted at Pedro's request. Downtime: ~27 min (login failed while empty). Migrations are now checked with `--from-schema-datamodel`/`--to-schema-datamodel` (no database), and local e2e tests are no longer run because they also use that URL (Pendencias).
+
+**Not verified:** API e2e tests (left to CI, which has its own Postgres); browser test of the new exercises — needs the migration and seed applied to the database first.
+
+**Next steps:** with Pedro's go-ahead, `migrate deploy` + `db:seed` against production, then a browser pass on a split lesson's practice session.

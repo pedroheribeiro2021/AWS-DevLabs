@@ -1,4 +1,5 @@
 import { InlineQuestion } from '@/components/inline-question';
+import { getPractice } from '@/lib/practice';
 import { getQuestion, getQuestions, type QuestionSummary } from '@/lib/questions';
 import { submitCheckpointAnswer } from '@/app/learn/[lessonId]/actions';
 
@@ -7,12 +8,22 @@ const CHECKPOINT_SIZE = 3;
 // Unanswered questions first, then the ones whose latest answer was wrong, then
 // the ones already right — so each visit practices something new when it can.
 function pickCheckpointQuestions(questions: QuestionSummary[]): string[] {
-  const rank = (question: QuestionSummary) =>
-    !question.answered ? 0 : question.isCorrect ? 2 : 1;
+  const rank = (question: QuestionSummary) => (!question.answered ? 0 : question.isCorrect ? 2 : 1);
   return [...questions]
     .sort((a, b) => rank(a) - rank(b))
     .slice(0, CHECKPOINT_SIZE)
     .map((question) => question.id);
+}
+
+// The topic's questions that belong to this lesson (the practice endpoint does
+// the per-lesson split), with this user's answer status.
+async function getLessonQuestions(lessonId: string, topicId: string) {
+  const [practice, topicQuestions] = await Promise.all([
+    getPractice(lessonId),
+    getQuestions(topicId),
+  ]);
+  const lessonQuestionIds = new Set(practice.questions.map((question) => question.id));
+  return topicQuestions.filter((question) => lessonQuestionIds.has(question.id));
 }
 
 interface LessonCheckpointProps {
@@ -30,7 +41,7 @@ export async function LessonCheckpoint({
 }: LessonCheckpointProps) {
   const questionIds = pinnedQuestionIds?.length
     ? pinnedQuestionIds.slice(0, CHECKPOINT_SIZE)
-    : pickCheckpointQuestions(await getQuestions(topicId));
+    : pickCheckpointQuestions(await getLessonQuestions(lessonId, topicId));
 
   if (questionIds.length === 0) {
     return null;

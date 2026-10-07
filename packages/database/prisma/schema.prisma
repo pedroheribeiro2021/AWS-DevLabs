@@ -320,11 +320,14 @@ enum FlashcardState {
 }
 
 model Flashcard {
-  id        String @id @default(cuid())
-  conceptId String
-  front     String
-  back      String
-  order     Int    @default(0)
+  id          String   @id @default(cuid())
+  conceptId   String
+  front       String
+  back        String
+  // Plausible wrong answers to the same front (near misses), used as options in
+  // practice sessions instead of other cards' backs.
+  distractors String[] @default([])
+  order       Int      @default(0)
 
   concept  Concept                 @relation(fields: [conceptId], references: [id], onDelete: Cascade)
   progress UserFlashcardProgress[]
