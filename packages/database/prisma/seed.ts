@@ -1,5 +1,7 @@
 import 'dotenv/config';
 import { prisma } from '../src/index.js';
+import { flashcardDistractors } from './flashcard-distractors.js';
+import { splitIntoParts } from './lesson-parts.js';
 
 /**
  * Creates a topic (with its single learning objective) if it doesn't exist yet,
@@ -137,20 +139,33 @@ type LessonSeed = {
   title: string;
   content: string;
   resources: { title: string; url: string }[];
+  // The title this lesson had before it was split into parts, so its existing
+  // row (and everyone's progress on it) is kept instead of duplicated.
+  previousTitle?: string;
 };
 
 /**
  * Seeds a topic's lessons with the update-or-create pattern (matched by
- * title); resources are only created once, like question options.
+ * title, or by the title it had before being split into parts); resources are
+ * only created once, like question options. Lessons are numbered in the order
+ * given, after splitting.
  */
 async function seedLessons(topicId: string, lessons: LessonSeed[]) {
-  for (const lessonDef of lessons) {
-    const existingLesson = await prisma.lesson.findFirst({ where: { topicId, title: lessonDef.title } });
+  const expanded = lessons.flatMap(splitIntoParts).map((lesson, index) => ({ ...lesson, order: index + 1 }));
+
+  for (const lessonDef of expanded) {
+    const titles = lessonDef.previousTitle ? [lessonDef.title, lessonDef.previousTitle] : [lessonDef.title];
+    const existingLesson = await prisma.lesson.findFirst({ where: { topicId, title: { in: titles } } });
 
     if (existingLesson) {
       await prisma.lesson.update({
         where: { id: existingLesson.id },
-        data: { order: lessonDef.order, estimatedMinutes: lessonDef.estimatedMinutes, content: lessonDef.content },
+        data: {
+          order: lessonDef.order,
+          estimatedMinutes: lessonDef.estimatedMinutes,
+          title: lessonDef.title,
+          content: lessonDef.content,
+        },
       });
     } else {
       await prisma.lesson.create({
@@ -201,6 +216,28 @@ async function seedLabs(topicId: string, labs: LabSeed[]) {
         data: { topicId, title: labDef.title, ...labDef.data, steps: { create: labDef.steps } },
       });
     }
+  }
+}
+
+/**
+ * Applies the hand-written wrong answers to every flashcard, matched by front.
+ * A separate pass (rather than a field on each FlashcardSeed) because the
+ * Lambda topic seeds its first cards with its own loop.
+ */
+async function seedFlashcardDistractors() {
+  for (const [front, distractors] of Object.entries(flashcardDistractors)) {
+    const { count } = await prisma.flashcard.updateMany({ where: { front }, data: { distractors } });
+    if (count === 0) {
+      console.warn(`Distractors for a flashcard that doesn't exist: "${front}"`);
+    }
+  }
+
+  const withoutDistractors = await prisma.flashcard.findMany({
+    where: { distractors: { isEmpty: true } },
+    select: { front: true },
+  });
+  for (const card of withoutDistractors) {
+    console.warn(`Flashcard without distractors: "${card.front}"`);
   }
 }
 
@@ -1846,42 +1883,24 @@ Filas SQS Standard garantem entrega pelo menos uma vez (at-least-once), e qualqu
 
 Espere questões de cenário pedindo para desacoplar componentes com SQS, escolher SNS + SQS para fanout, decidir entre Step Functions e coreografia por eventos, configurar uma DLQ com \`maxReceiveCount\`, e reconhecer backoff exponencial com jitter como a resposta certa para erros de throttling.`;
 
-  const existingArchitectureLesson = await prisma.lesson.findFirst({
-    where: { topicId: architectureTopic.id, title: 'Arquiteturas desacopladas e tolerantes a falhas' },
-  });
-
-  if (existingArchitectureLesson) {
-    await prisma.lesson.update({
-      where: { id: existingArchitectureLesson.id },
-      data: { content: architectureLessonContent },
-    });
-  } else {
-    await prisma.lesson.create({
-      data: {
-        topicId: architectureTopic.id,
-        order: 1,
-        estimatedMinutes: 10,
-        title: 'Arquiteturas desacopladas e tolerantes a falhas',
-        content: architectureLessonContent,
-        resources: {
-          create: [
-            {
-              title: 'Amazon SQS dead-letter queues — documentação oficial',
-              url: 'https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-dead-letter-queues.html',
-              type: 'documentation',
-              order: 1,
-            },
-            {
-              title: 'Retry behavior nos AWS SDKs — documentação oficial',
-              url: 'https://docs.aws.amazon.com/sdkref/latest/guide/feature-retry-behavior.html',
-              type: 'documentation',
-              order: 2,
-            },
-          ],
+  await seedLessons(architectureTopic.id, [
+    {
+      order: 1,
+      estimatedMinutes: 10,
+      title: 'Arquiteturas desacopladas e tolerantes a falhas',
+      content: architectureLessonContent,
+      resources: [
+        {
+          title: 'Amazon SQS dead-letter queues — documentação oficial',
+          url: 'https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-dead-letter-queues.html',
         },
-      },
-    });
-  }
+        {
+          title: 'Retry behavior nos AWS SDKs — documentação oficial',
+          url: 'https://docs.aws.amazon.com/sdkref/latest/guide/feature-retry-behavior.html',
+        },
+      ],
+    },
+  ]);
 
   const architectureLabData = {
     level: 1,
@@ -9130,6 +9149,8 @@ time aws sqs receive-message --queue-url $URL
   ];
 
   await seedFlashcards(optimizationTopic.id, optimizationFlashcardsToSeed);
+
+  await seedFlashcardDistractors();
 
   const domainCount = await prisma.domain.count({ where: { examVersionId: examVersion.id } });
   const topicCount = await prisma.topic.count({ where: { domain: { examVersionId: examVersion.id } } });
