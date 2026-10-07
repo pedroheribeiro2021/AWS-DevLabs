@@ -1,13 +1,19 @@
 import type { PracticeFlashcard, PracticeMaterial } from './practice';
 
-// Limits that keep a session around Duolingo's size (~15 exercises, a few minutes).
-const MAX_FLASHCARDS = 6;
-const MAX_QUESTIONS = 6;
-const MATCH_PAIRS = 3;
+// Limits that keep a session short (a lesson part is a few minutes of reading,
+// its practice should be too).
+const MAX_FLASHCARDS = 5;
+const MAX_QUESTIONS = 5;
+const MAX_MATCH_PAIRS = 4;
+const OPTION_COUNT = 4;
+
+export const JUDGE_RIGHT = 'Certo';
+export const JUDGE_WRONG = 'Errado';
 
 export type Exercise =
-  // Concept front shown, pick its explanation. The first exercise for each
-  // flashcard is marked `isNew` (Duolingo's "new word").
+  // Concept front shown, pick its answer among near misses written for that
+  // card. The first exercise for each flashcard is marked `isNew`
+  // (Duolingo's "new word").
   | {
       kind: 'definition';
       key: string;
@@ -17,14 +23,17 @@ export type Exercise =
       options: string[];
       answer: string;
     }
-  // The reverse: explanation shown, pick the concept.
+  // Front plus one candidate answer — the real one or a near miss — to judge.
   | {
-      kind: 'term';
+      kind: 'judge';
       key: string;
       flashcardId: string;
       prompt: string;
+      statement: string;
       options: string[];
       answer: string;
+      // The real answer, shown after a "this is wrong" statement.
+      correctText: string;
     }
   | {
       kind: 'match';
@@ -50,23 +59,31 @@ export function shuffle<T>(items: T[]): T[] {
   return copy;
 }
 
-function pickOptions(answer: string, pool: string[]): string[] {
-  const distractors = shuffle([...new Set(pool)].filter((text) => text !== answer)).slice(0, 3);
-  return shuffle([answer, ...distractors]);
+/**
+ * Wrong options for a card: its own near misses first. Cards seeded before
+ * distractors existed fall back to other cards' answers, skipping any text
+ * already used in this session so the same wrong option doesn't keep coming
+ * back (and an answer learned earlier can't be ruled out by elimination).
+ */
+function wrongOptions(card: PracticeFlashcard, pool: string[], used: Set<string>): string[] {
+  const own = card.distractors.filter((text) => text !== card.back);
+  const borrowed = shuffle(pool.filter((text) => text !== card.back && !used.has(text)));
+  const picked = [...shuffle(own), ...borrowed].slice(0, OPTION_COUNT - 1);
+  picked.forEach((text) => used.add(text));
+  return picked;
 }
 
 /**
  * Builds a Duolingo-style session from a lesson's practice material: each
- * concept is introduced by picking its explanation, interleaved with the
- * topic's questions, with "match the pairs" rounds and reverse exercises
- * revisiting the same concepts later in the session.
+ * concept is introduced by picking its answer among near misses, interleaved
+ * with the lesson's questions, then reviewed with a "match the pairs" round
+ * and a "right or wrong?" judgement per concept.
  */
 export function buildExercises(material: PracticeMaterial): Exercise[] {
   const flashcards = material.flashcards.slice(0, MAX_FLASHCARDS);
   const questions = material.questions.slice(0, MAX_QUESTIONS);
-  const allCards: PracticeFlashcard[] = [...material.flashcards, ...material.otherFlashcards];
-  const backs = allCards.map((card) => card.back);
-  const fronts = allCards.map((card) => card.front);
+  const pool = [...material.flashcards, ...material.otherFlashcards].map((card) => card.back);
+  const used = new Set(flashcards.map((card) => card.back));
 
   const exercises: Exercise[] = [];
   const questionExercise = (index: number): Exercise => {
@@ -80,15 +97,6 @@ export function buildExercises(material: PracticeMaterial): Exercise[] {
       options: question.options,
     };
   };
-  const matchExercise = (cards: PracticeFlashcard[], key: string): Exercise => ({
-    kind: 'match',
-    key,
-    pairs: cards.map((card) => ({
-      id: card.id,
-      left: card.front,
-      right: card.back,
-    })),
-  });
 
   flashcards.forEach((card, index) => {
     exercises.push({
@@ -97,15 +105,11 @@ export function buildExercises(material: PracticeMaterial): Exercise[] {
       flashcardId: card.id,
       isNew: true,
       prompt: card.front,
-      options: pickOptions(card.back, backs),
+      options: shuffle([card.back, ...wrongOptions(card, pool, used)]),
       answer: card.back,
     });
     if (index < questions.length) {
       exercises.push(questionExercise(index));
-    }
-    // Review the first concepts together once they've all been introduced.
-    if (index === MATCH_PAIRS - 1) {
-      exercises.push(matchExercise(flashcards.slice(0, MATCH_PAIRS), 'm-1'));
     }
   });
 
@@ -113,19 +117,30 @@ export function buildExercises(material: PracticeMaterial): Exercise[] {
     exercises.push(questionExercise(index));
   }
 
-  const laterCards = flashcards.slice(MATCH_PAIRS);
-  if (laterCards.length >= 2) {
-    exercises.push(matchExercise(laterCards.slice(0, MATCH_PAIRS), 'm-2'));
+  if (flashcards.length >= 3) {
+    exercises.push({
+      kind: 'match',
+      key: 'm-1',
+      pairs: shuffle(flashcards)
+        .slice(0, MAX_MATCH_PAIRS)
+        .map((card) => ({ id: card.id, left: card.front, right: card.back })),
+    });
   }
 
-  for (const card of shuffle(flashcards).slice(0, 2)) {
+  for (const card of shuffle(flashcards)) {
+    const nearMisses = card.distractors.filter((text) => text !== card.back);
+    // Without near misses a "wrong" statement would be another card's answer,
+    // which gives itself away.
+    const isRight = nearMisses.length === 0 || Math.random() < 0.5;
     exercises.push({
-      kind: 'term',
-      key: `t-${card.id}`,
+      kind: 'judge',
+      key: `j-${card.id}`,
       flashcardId: card.id,
-      prompt: card.back,
-      options: pickOptions(card.front, fronts),
-      answer: card.front,
+      prompt: card.front,
+      statement: isRight ? card.back : shuffle(nearMisses)[0],
+      options: [JUDGE_RIGHT, JUDGE_WRONG],
+      answer: isRight ? JUDGE_RIGHT : JUDGE_WRONG,
+      correctText: card.back,
     });
   }
 

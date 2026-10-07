@@ -14,6 +14,8 @@ export interface PracticeFlashcard {
   id: string;
   front: string;
   back: string;
+  // Near-miss wrong answers to the same front (empty for older cards).
+  distractors: string[];
 }
 
 export interface PracticeMaterial {
@@ -21,7 +23,7 @@ export interface PracticeMaterial {
   topic: { id: string; name: string };
   questions: PracticeQuestion[];
   flashcards: PracticeFlashcard[];
-  // The rest of the topic's flashcards, used only as wrong options.
+  // The rest of the topic's flashcards, used only as fallback wrong options.
   otherFlashcards: PracticeFlashcard[];
 }
 

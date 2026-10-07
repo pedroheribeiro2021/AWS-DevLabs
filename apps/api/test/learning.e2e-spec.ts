@@ -78,6 +78,11 @@ describe('Learning (e2e)', () => {
     expect(res.body.lesson.id).toBe(lessonId);
     expect(res.body.questions.length).toBeGreaterThan(0);
     expect(res.body.flashcards.length).toBeGreaterThan(0);
+    // Every seeded flashcard has three near-miss wrong answers.
+    for (const card of res.body.flashcards) {
+      expect(card.distractors).toHaveLength(3);
+      expect(card.distractors).not.toContain(card.back);
+    }
     for (const option of res.body.questions[0].options) {
       expect(option.isCorrect).toBeUndefined();
     }
